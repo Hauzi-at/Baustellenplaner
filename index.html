@@ -893,8 +893,13 @@
 
     function updatePendingBadge() {
       idbAll("outbox").then(function (items) {
+        // Nur bei einer tatsächlichen Änderung die Anzeige (und damit ein render()) anstoßen —
+        // sonst würde der Hintergrund-Sync-Check (alle 20 Sek., siehe setInterval unten) beim
+        // Tippen ständig einen komplett neuen Bildschirmaufbau auslösen und den Eingabefokus
+        // aus dem Feld reißen, obwohl sich gar nichts geändert hat.
+        var changed = items.length !== pendingCount;
         pendingCount = items.length;
-        if (typeof onPendingChange === "function") onPendingChange(pendingCount);
+        if (changed && typeof onPendingChange === "function") onPendingChange(pendingCount);
       });
     }
 
@@ -1204,7 +1209,17 @@
     TABS.forEach(function (t) {
       var btn = el("button", {
         class: "navlink" + (currentTab === t.id ? " active" : ""),
-        onclick: function () { currentTab = t.id; if (t.id === "report" && !reportDraft) startNewReport(); render(); }
+        onclick: function () {
+          // Beim Wechsel AUF "Neuer Auftrag" (von einem anderen Reiter aus) immer ein leeres
+          // Formular zeigen — sonst blieben z. B. Mitarbeiter-Zuweisung oder Ankunft/Abfahrt-
+          // Uhrzeit von einem vorher bearbeiteten Auftrag stehen, obwohl man einen neuen
+          // Auftrag beginnen wollte. Bleibt man auf dem Reiter (z. B. erneuter Klick), wird
+          // nichts zurückgesetzt, damit man laufende Eingaben nicht versehentlich verwirft.
+          var enteringFresh = (t.id === "report" && currentTab !== "report");
+          currentTab = t.id;
+          if (enteringFresh) startNewReport();
+          render();
+        }
       }, []);
       btn.innerHTML = icon(t.icon, cls === "bottomnav" ? 20 : 18) + "<span>" + t.label + "</span>";
       nav.appendChild(btn);
