@@ -15,7 +15,7 @@
    aufgeräumt (siehe "activate" weiter unten).
    ========================================================================== */
 
-var CACHE_VERSION = "thbp-shell-v1";
+var CACHE_VERSION = "thbp-shell-v4";
 
 // Relativ zum Ort dieser Datei, damit es unabhängig davon funktioniert, ob
 // die App im Hauptverzeichnis oder in einem Unterordner liegt.
@@ -24,6 +24,11 @@ var PRECACHE_URLS = [
   "./index.html",
   "./konfigurator.html",
   "./config.js",
+  "./manifest.json",
+  "./favicon-32.png",
+  "./icon-192.png",
+  "./icon-512.png",
+  "./apple-touch-icon.png",
   "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2",
   "https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&display=swap"
 ];
