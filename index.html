@@ -1422,7 +1422,7 @@
   function newCustomerButton() {
     var btn = el("button", { class: "btn btn-primary btn-sm" }, []);
     btn.innerHTML = icon("plus", 15) + "<span>Kunde</span>";
-    btn.addEventListener("click", function () { customerEditing = "new"; render(); });
+    btn.addEventListener("click", function () { customerEditing = { name: "", street: "", city: "", phone: "", email: "", isBusiness: false, uid: "" }; render(); });
     return btn;
   }
 
@@ -1438,38 +1438,71 @@
     var row = el("div", { class: "customer-row" });
     row.appendChild(el("div", { class: "initials" }, [initials(c.name)]));
     var info = el("div", { class: "info" });
-    info.appendChild(el("div", { class: "name" }, [c.name || "(ohne Namen)"]));
+    var nameLine = el("div", { class: "name", style: "display:flex;align-items:center;gap:7px;flex-wrap:wrap;" }, [c.name || "(ohne Namen)"]);
+    if (c.isBusiness) nameLine.appendChild(el("span", { class: "tag success" }, ["Geschäftskunde"]));
+    info.appendChild(nameLine);
     var addrParts = [c.street, c.city].filter(Boolean).join(", ");
-    var line2 = [addrParts, c.phone].filter(Boolean).join(" · ");
+    var line2 = [addrParts, c.phone, c.email].filter(Boolean).join(" · ");
     info.appendChild(el("div", { class: "addr" }, [line2 || "—"]));
+    if (c.isBusiness && c.uid) info.appendChild(el("div", { class: "addr" }, ["UID: " + c.uid]));
     row.appendChild(info);
     var actions = el("div", { class: "actions" });
     var editBtn = el("button", { class: "btn btn-icon btn-sm", title: "Bearbeiten" }, []);
     editBtn.innerHTML = icon("edit", 15);
-    editBtn.addEventListener("click", function () { customerEditing = c; render(); });
+    editBtn.addEventListener("click", function () { customerEditing = Object.assign({}, c); render(); });
     actions.appendChild(editBtn);
     row.appendChild(actions);
     return row;
   }
 
   function renderCustomerEditor() {
-    var isNew = customerEditing === "new";
-    var c = isNew ? { name: "", street: "", zip: "", city: "", phone: "" } : customerEditing;
+    var c = customerEditing;
+    var isNew = !c.id;
     var card = el("div", { class: "card" });
     card.appendChild(el("h3", { style: "margin:0 0 4px;" }, [isNew ? "Neuer Kunde" : "Kunde bearbeiten"]));
 
+    // Jedes Feld schreibt laufend in "c" (den Entwurf) zurück, nicht erst beim Speichern —
+    // so gehen Eingaben nicht verloren, falls zwischendurch neu gerendert wird (z. B. weil im
+    // Hintergrund Daten synchronisiert werden, während man gerade tippt).
     var nameField = fieldInput("Name / Auftraggeber", "name", c.name, "Vor- und Nachname oder Firma");
+    nameField.input.addEventListener("input", function (e) { c.name = e.target.value; });
     card.appendChild(nameField.wrap);
 
     var row1 = el("div", { class: "field-row cols-2" });
     var streetField = fieldInput("Straße", "street", c.street, "Musterstraße 12");
+    streetField.input.addEventListener("input", function (e) { c.street = e.target.value; });
     var cityField = fieldInput("Ort / PLZ", "city", c.city, "4770 Andorf");
+    cityField.input.addEventListener("input", function (e) { c.city = e.target.value; });
     row1.appendChild(streetField.wrap);
     row1.appendChild(cityField.wrap);
     card.appendChild(row1);
 
+    var row2 = el("div", { class: "field-row cols-2" });
     var phoneField = fieldInput("Telefon", "phone", c.phone, "0664 1234567");
-    card.appendChild(phoneField.wrap);
+    phoneField.input.addEventListener("input", function (e) { c.phone = e.target.value; });
+    var emailField = fieldInput("E-Mail", "email", c.email, "kunde@beispiel.at");
+    emailField.input.type = "email";
+    emailField.input.addEventListener("input", function (e) { c.email = e.target.value; });
+    row2.appendChild(phoneField.wrap);
+    row2.appendChild(emailField.wrap);
+    card.appendChild(row2);
+
+    var bizField = el("div", { class: "field", style: "margin-top:2px;" });
+    var bizLabel = el("label", { style: "display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500;" }, []);
+    var bizCheckbox = el("input", { type: "checkbox" });
+    bizCheckbox.checked = !!c.isBusiness;
+    bizCheckbox.addEventListener("change", function (e) { c.isBusiness = e.target.checked; render(); });
+    bizLabel.appendChild(bizCheckbox);
+    bizLabel.appendChild(document.createTextNode(" Geschäftskunde"));
+    bizField.appendChild(bizLabel);
+    card.appendChild(bizField);
+
+    var uidField = null;
+    if (c.isBusiness) {
+      uidField = fieldInput("UID-Nr.", "uid", c.uid, "ATU12345678");
+      uidField.input.addEventListener("input", function (e) { c.uid = e.target.value; });
+      card.appendChild(uidField.wrap);
+    }
 
     var actions = el("div", { style: "display:flex;justify-content:flex-end;gap:8px;" });
     var cancelBtn = el("button", { class: "btn" }, ["Abbrechen"]);
@@ -1487,7 +1520,15 @@
     saveBtn.addEventListener("click", function () {
       var name = nameField.input.value.trim();
       if (!name) { nameField.input.focus(); return; }
-      var payload = { name: name, street: streetField.input.value.trim(), city: cityField.input.value.trim(), phone: phoneField.input.value.trim() };
+      var payload = {
+        name: name,
+        street: streetField.input.value.trim(),
+        city: cityField.input.value.trim(),
+        phone: phoneField.input.value.trim(),
+        email: emailField.input.value.trim(),
+        isBusiness: !!bizCheckbox.checked,
+        uid: bizCheckbox.checked && uidField ? uidField.input.value.trim() : ""
+      };
       if (!db) { alert("Keine Verbindung zur Datenbank."); return; }
       var p = isNew ? db.collection("customers").add(Object.assign(payload, { createdAt: new Date().toISOString() }))
                     : db.doc("customers/" + c.id).update(payload);
@@ -1534,7 +1575,10 @@
     var view = el("div", { class: "view" });
     var addBtn = el("button", { class: "btn btn-primary btn-sm" }, []);
     addBtn.innerHTML = icon("plus", 15) + "<span>Erfassen</span>";
-    addBtn.addEventListener("click", function () { hoursEditing = "new"; render(); });
+    addBtn.addEventListener("click", function () {
+      hoursEditing = { date: todayIso(), employeeName: currentUser || "", site: "", start: "", ende: "", breakMinutes: 0, note: "" };
+      render();
+    });
     view.appendChild(el("div", { class: "view-head" }, [
       el("div", {}, [
         el("h1", {}, ["Stunden"]),
@@ -1614,7 +1658,7 @@
     var actions = el("div", { class: "actions" });
     var editBtn = el("button", { class: "btn btn-icon btn-sm", title: "Bearbeiten" }, []);
     editBtn.innerHTML = icon("edit", 15);
-    editBtn.addEventListener("click", function () { hoursEditing = h; render(); });
+    editBtn.addEventListener("click", function () { hoursEditing = Object.assign({}, h); render(); });
     var delBtn = el("button", { class: "btn btn-icon btn-sm btn-danger", title: "Löschen" }, []);
     delBtn.innerHTML = icon("trash", 15);
     delBtn.addEventListener("click", function () {
@@ -1628,14 +1672,18 @@
   }
 
   function renderHoursEditor() {
-    var isNew = hoursEditing === "new";
-    var h = isNew ? { date: todayIso(), employeeName: currentUser || "", site: "", start: "", ende: "", breakMinutes: 0, note: "" } : hoursEditing;
+    var h = hoursEditing;
+    var isNew = !h.id;
     var card = el("div", { class: "card" });
     card.appendChild(el("h3", { style: "margin:0 0 4px;" }, [isNew ? "Stunden erfassen" : "Eintrag bearbeiten"]));
 
+    // Jedes Feld schreibt laufend in "h" (den Entwurf) zurück, nicht erst beim Speichern —
+    // so gehen Eingaben nicht verloren, falls zwischendurch neu gerendert wird (z. B. weil im
+    // Hintergrund Daten synchronisiert werden, während man gerade tippt).
     var row1 = el("div", { class: "field-row cols-2" });
     var dateField = el("div", { class: "field" }, [el("label", {}, ["Datum"])]);
     var dateInput = el("input", { type: "date", value: h.date || todayIso() });
+    dateInput.addEventListener("input", function (e) { h.date = e.target.value; });
     dateField.appendChild(dateInput);
     row1.appendChild(dateField);
 
@@ -1649,34 +1697,40 @@
       if (h.employeeName === n) opt.setAttribute("selected", "selected");
       empSelect.appendChild(opt);
     });
+    empSelect.addEventListener("change", function (e) { h.employeeName = e.target.value; });
     empField.appendChild(empSelect);
     row1.appendChild(empField);
     card.appendChild(row1);
 
     var siteField = el("div", { class: "field" }, [el("label", {}, ["Baustelle / Auftrag (optional)"])]);
     var siteInput = el("input", { type: "text", value: h.site || "", placeholder: "z. B. Fam. Gruber" });
+    siteInput.addEventListener("input", function (e) { h.site = e.target.value; });
     siteField.appendChild(siteInput);
     card.appendChild(siteField);
 
     var row2 = el("div", { class: "field-row cols-3" });
     var startField = el("div", { class: "field" }, [el("label", {}, ["Beginn"])]);
     var startInput = el("input", { type: "time", value: h.start || "" });
+    startInput.addEventListener("input", function (e) { h.start = e.target.value; });
     startField.appendChild(startInput);
     row2.appendChild(startField);
 
     var endField = el("div", { class: "field" }, [el("label", {}, ["Ende"])]);
     var endInput = el("input", { type: "time", value: h.ende || "" });
+    endInput.addEventListener("input", function (e) { h.ende = e.target.value; });
     endField.appendChild(endInput);
     row2.appendChild(endField);
 
     var breakField = el("div", { class: "field" }, [el("label", {}, ["Pause (Min.)"])]);
     var breakInput = el("input", { type: "number", min: "0", step: "5", value: h.breakMinutes != null ? h.breakMinutes : 0 });
+    breakInput.addEventListener("input", function (e) { h.breakMinutes = e.target.value; });
     breakField.appendChild(breakInput);
     row2.appendChild(breakField);
     card.appendChild(row2);
 
     var noteField = el("div", { class: "field" }, [el("label", {}, ["Notiz (optional)"])]);
     var noteInput = el("input", { type: "text", value: h.note || "" });
+    noteInput.addEventListener("input", function (e) { h.note = e.target.value; });
     noteField.appendChild(noteInput);
     card.appendChild(noteField);
 
