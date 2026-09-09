@@ -2328,6 +2328,15 @@ function loadKunden(setKunden) {
         setKunden(names);
     }).catch(() => setKunden([]));
 }
+// Lädt E-Mail/Geschäftskunde/UID-Nr. des aktiven Kunden (im Baustellenplaner unter "Kunden"
+// gepflegt) zur reinen Anzeige im Konfigurator — z. B. damit man beim Erstellen einer
+// Kalkulation gleich sieht, ob und mit welcher UID-Nr. an einen Geschäftskunden fakturiert wird.
+function loadKundeDetails(name, cb) {
+    if (!__thbpClient || !name) { cb(null); return; }
+    __thbpClient.from("customers").select("email,isBusiness,uid").eq("name", name).maybeSingle().then((res) => {
+        cb((res && res.data) || null);
+    }).catch(() => cb(null));
+}
 // Legt bei Bedarf einen neuen Kunden in der gemeinsamen Kundendatenbank an (nur mit Namen —
 // Adresse/Telefon können später jederzeit im Baustellenplaner unter "Kunden" ergänzt werden).
 function kundeInDbAnlegen(name) {
@@ -5005,7 +5014,7 @@ const PRODUKTE = [
     { id: "lichtschacht", label: "Lichtschachtabdeckung", beschreibung: "heroal IS Lichtschachtabdeckung", verfuegbar: true },
     { id: "kis", label: "IS KIS", beschreibung: "Insektengitter Rollo (heroal IS Katalog S. 218-219)", verfuegbar: true },
 ];
-function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, onKundeSetzen, onKundeFertig }) {
+function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, kundeDetails, onKundeSetzen, onKundeFertig }) {
     return (React.createElement("div", { className: "min-h-screen w-full overflow-x-hidden", style: { background: "#F5F4EF" } },
         React.createElement("style", null, `* { font-family: 'Inter', -apple-system, sans-serif; } .font-oswald { font-family: 'Oswald', sans-serif; }`),
         React.createElement("div", { className: "max-w-5xl mx-auto px-4 py-8 md:py-14" },
@@ -5017,8 +5026,13 @@ function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, onKunde
             aktiverKunde ? (React.createElement("div", { className: "border-2 border-[#E8963B] rounded-xl bg-[#FFF8EF] p-5 mb-6" },
                 React.createElement("div", { className: "text-[11px] uppercase tracking-wide text-[#B96A16] font-semibold mb-1" }, "Aktueller Kunde"),
                 React.createElement("div", { className: "flex items-center justify-between gap-3 mb-2" },
-                    React.createElement("span", { className: "text-[20px] font-oswald font-semibold text-[#1B1F24]" }, aktiverKunde),
+                    React.createElement("div", { className: "flex items-center gap-2 flex-wrap" },
+                        React.createElement("span", { className: "text-[20px] font-oswald font-semibold text-[#1B1F24]" }, aktiverKunde),
+                        kundeDetails && kundeDetails.isBusiness && React.createElement("span", { className: "text-[10px] uppercase tracking-wide bg-[#1B1F24] text-white px-2 py-0.5 rounded-full" }, "Gesch\u00E4ftskunde")),
                     React.createElement("button", { onClick: onKundeFertig, className: "shrink-0 px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[#5B6472] text-[12.5px] font-medium hover:border-[#E8963B]" }, "Fertig \u2014 neuer Kunde")),
+                (kundeDetails && (kundeDetails.email || (kundeDetails.isBusiness && kundeDetails.uid))) ? React.createElement("div", { className: "flex flex-wrap gap-x-4 gap-y-0.5 mb-2 text-[12.5px] text-[#8A6438]" },
+                    kundeDetails.email && React.createElement("span", null, "\u2709 ", kundeDetails.email),
+                    kundeDetails.isBusiness && kundeDetails.uid && React.createElement("span", null, "UID: ", kundeDetails.uid)) : null,
                 React.createElement("p", { className: "text-[13px] text-[#8A6438]" },
                     "W\u00E4hle unten ein Produkt \u2014 es wird automatisch ",
                     aktiverKunde,
@@ -5042,6 +5056,8 @@ function App() {
     const [editZiel, setEditZiel] = useState(null); // { produkt, id } — von Kundenübersicht ausgelöste Bearbeitung
     const [aktiverKunde, setAktiverKunde] = useState("");
     useEffect(() => { loadAktiverKunde(setAktiverKunde); }, []);
+    const [kundeDetails, setKundeDetails] = useState(null);
+    useEffect(() => { loadKundeDetails(aktiverKunde, setKundeDetails); }, [aktiverKunde]);
     const kundeSetzen = (name) => { setAktiverKunde(name); saveAktiverKunde(name); };
     const kundeFertig = () => { setAktiverKunde(""); saveAktiverKunde(""); };
     const [einstellungen, setEinstellungen] = useState(DEFAULT_EINSTELLUNGEN);
@@ -5065,7 +5081,7 @@ function App() {
         return React.createElement(LichtschachtKonfigurator, { onZurueck: () => setProdukt(null), editRequest: editRequestFuer("lichtschacht"), onEditConsumed, defaultKunde: aktiverKunde, einstellungen });
     if (produkt === "kis")
         return React.createElement(KisKonfigurator, { onZurueck: () => setProdukt(null), editRequest: editRequestFuer("kis"), onEditConsumed, defaultKunde: aktiverKunde, einstellungen });
-    return React.createElement(Hauptseite, { onSelect: setProdukt, onKunden: () => setProdukt("kunden"), onEinstellungen: () => setProdukt("einstellungen"), aktiverKunde, onKundeSetzen: kundeSetzen, onKundeFertig: kundeFertig });
+    return React.createElement(Hauptseite, { onSelect: setProdukt, onKunden: () => setProdukt("kunden"), onEinstellungen: () => setProdukt("einstellungen"), aktiverKunde, kundeDetails, onKundeSetzen: kundeSetzen, onKundeFertig: kundeFertig });
 }
 
 ReactDOM.render(React.createElement(App), document.getElementById("root"));
