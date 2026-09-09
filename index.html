@@ -308,8 +308,11 @@
     border-radius: 9px; padding: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer;
   }
   .add-assign-btn:hover { border-color: var(--slate); color: var(--slate-deep); }
-  .assign-form { display: flex; flex-direction: column; gap: 7px; background: var(--card-raised); border: 1px solid var(--line); border-radius: 9px; padding: 9px; }
-  .assign-form .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+  .assign-form { display: flex; flex-direction: column; gap: 7px; background: var(--card-raised); border: 1px solid var(--line); border-radius: 9px; padding: 9px; min-width: 0; }
+  /* flex-wrap: Bei einer schmalen Tages-Spalte passen "Abbrechen" + "Zuweisen" nicht in eine Zeile —
+     sie rutschen dann untereinander (voller, lesbarer Text) statt seitlich über den Rand hinaus
+     abgeschnitten zu werden. */
+  .assign-form .row-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; min-width: 0; }
 
   /* ---------- Customers ---------- */
   .search-input-wrap { position: relative; }
@@ -362,6 +365,10 @@
   .suggest-item.add-new { color: var(--slate-deep); font-weight: 700; }
 
   .sig-block { display: flex; flex-direction: column; gap: 8px; }
+  /* Fest definiert (statt von einem umgebenden .field abhängig) — sonst wirkt "Unterschrift
+     Monteur" (steht direkt in der Zeile, nicht in einem .field-Wrapper wie "Unterschrift
+     Kunde") als großes Standard-Label, während "Unterschrift Kunde" klein/dezent bleibt. */
+  .sig-block > label { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
   .sig-pad-wrap { border: 1.5px dashed var(--line); border-radius: 10px; background: var(--card-raised); position: relative; touch-action: none; }
   .sig-pad-wrap canvas { display: block; width: 100%; height: 140px; touch-action: none; cursor: crosshair; }
   .sig-pad-wrap .sig-placeholder { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12.5px; pointer-events: none; }
@@ -374,6 +381,7 @@
   }
 
   /* ---------- Archive ---------- */
+  .picker-banner { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; background: var(--card-raised); border: 1.5px solid var(--slate); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
   .archive-filters { display: flex; gap: 8px; flex-wrap: wrap; }
   .archive-filters select, .archive-filters input { font-size: 13px; padding: 7px 10px; }
   .report-list { display: flex; flex-direction: column; gap: 8px; }
@@ -1236,6 +1244,15 @@
      ===================================================================== */
   var planningOpenDate = null; // date (iso) with the add-form open
   var planningEditId = null;
+  // Aktiv, während im Archiv ein Auftrag für einen bestimmten Tag ausgewählt wird
+  // (ausgelöst über "+ Zuweisen" in der Planung) — { date: iso, employeeName }.
+  var archivePicker = null;
+
+  function teamMemberNames() {
+    var names = Array.from(new Set(state.team.map(function (m) { return m.name; }).concat(currentUser ? [currentUser] : []).filter(Boolean)));
+    names.sort(function (a, b) { return a.localeCompare(b, "de"); });
+    return names;
+  }
 
   function renderPlanning() {
     var view = el("div", { class: "view" });
@@ -1328,13 +1345,17 @@
       card.appendChild(item);
     });
 
-    if (planningOpenDate === iso) {
-      card.appendChild(renderAssignForm(iso, null));
-    } else {
-      var addBtn = el("button", { class: "add-assign-btn" }, ["+ Zuweisen"]);
-      addBtn.addEventListener("click", function () { planningOpenDate = iso; planningEditId = null; render(); });
-      card.appendChild(addBtn);
-    }
+    // "+ Zuweisen" führt direkt ins Archiv, wo ein bestehender Auftrag ausgewählt und diesem
+    // Tag zugewiesen wird — Zuweisungen entstehen dadurch immer aus einem echten Auftrag
+    // (nicht mehr aus frei eingetippten, nicht verknüpften Notizen).
+    var addBtn = el("button", { class: "add-assign-btn" }, ["+ Zuweisen"]);
+    addBtn.addEventListener("click", function () {
+      archivePicker = { date: iso, employeeName: "" };
+      planningEditId = null;
+      currentTab = "archive";
+      render();
+    });
+    card.appendChild(addBtn);
     return card;
   }
 
@@ -2347,9 +2368,7 @@
     doc.appendChild(el("h3", { class: "section-title" }, ["Einteilung (optional — für Chef/Planung)"]));
     var assignRow = el("div", { class: "field-row cols-2" });
     var empOptions = [{ value: "", label: "— nicht zugewiesen —" }];
-    Array.from(new Set(state.team.map(function (m) { return m.name; }).concat(currentUser ? [currentUser] : []).filter(Boolean)))
-      .sort(function (a, b) { return a.localeCompare(b, "de"); })
-      .forEach(function (n) { empOptions.push({ value: n, label: n }); });
+    teamMemberNames().forEach(function (n) { empOptions.push({ value: n, label: n }); });
     assignRow.appendChild(draftSelectField("Für Mitarbeiter einteilen", "assignedTo", empOptions));
     assignRow.appendChild(draftDateField("Geplant für (Datum)", "scheduledDate"));
     doc.appendChild(assignRow);
@@ -2710,6 +2729,47 @@
   /* =====================================================================
      Archiv
      ===================================================================== */
+
+  // Banner am Kopf des Archivs, solange über "+ Zuweisen" in der Planung ein Auftrag für
+  // einen bestimmten Tag gesucht wird — Mitarbeiter hier wählen, dann bei einem Auftrag in
+  // der Liste unten auf "→ Diesem Tag zuweisen" klicken.
+  function renderArchivePickerBanner() {
+    var banner = el("div", { class: "picker-banner" });
+    banner.appendChild(el("div", {}, [
+      el("strong", {}, ["Auftrag einteilen für " + deDateFromIso(archivePicker.date) + ":"]),
+      el("span", { style: "display:block;font-size:12.5px;color:var(--muted);margin-top:2px;" },
+        ["Mitarbeiter wählen, dann unten bei einem Auftrag auf „Diesem Tag zuweisen“ klicken."])
+    ]));
+    var controls = el("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap;" });
+    var empSelect = el("select", {});
+    empSelect.appendChild(el("option", { value: "" }, ["— Mitarbeiter wählen —"]));
+    teamMemberNames().forEach(function (n) {
+      var o = el("option", { value: n }, [n]);
+      if (archivePicker.employeeName === n) o.setAttribute("selected", "selected");
+      empSelect.appendChild(o);
+    });
+    empSelect.addEventListener("change", function (e) { archivePicker.employeeName = e.target.value; render(); });
+    var cancelBtn = el("button", { class: "btn btn-sm" }, ["Abbrechen"]);
+    cancelBtn.addEventListener("click", function () { archivePicker = null; currentTab = "planning"; render(); });
+    controls.appendChild(empSelect);
+    controls.appendChild(cancelBtn);
+    banner.appendChild(controls);
+    return banner;
+  }
+
+  function assignReportToEmployee(r) {
+    if (!archivePicker) return;
+    if (!archivePicker.employeeName) { alert("Bitte zuerst oben einen Mitarbeiter auswählen."); return; }
+    if (!db) { alert("Keine Verbindung zur Datenbank."); return; }
+    var payload = { assignedTo: archivePicker.employeeName, scheduledDate: archivePicker.date };
+    db.doc("reports/" + r.id).update(payload).then(function () {
+      syncAssignmentForReport(r.id, Object.assign({}, r, payload));
+      archivePicker = null;
+      currentTab = "planning";
+      render();
+    }).catch(function () { alert("Zuweisen nicht möglich. Bitte erneut versuchen."); });
+  }
+
   function renderArchive() {
     var view = el("div", { class: "view" });
     view.appendChild(el("div", { class: "view-head" }, [
@@ -2718,6 +2778,8 @@
         el("p", {}, ["Alle Aufträge — offen, zurückgestellt und abgeschlossen. Ansehen, bearbeiten, drucken / als PDF speichern."])
       ])
     ]));
+
+    if (archivePicker) view.appendChild(renderArchivePickerBanner());
 
     var filters = el("div", { class: "archive-filters" });
     var searchInput = el("input", { type: "search", placeholder: "Suche (Kunde, Baustelle) …", value: archiveFilter.q, style: "flex:1;min-width:160px;" });
@@ -2783,7 +2845,13 @@
     if (r.assignedTo) metaText += " · zugewiesen: " + r.assignedTo + (r.scheduledDate ? " (" + deDateFromIso(r.scheduledDate) + ")" : "");
     info.appendChild(el("div", { class: "m" }, [metaText]));
     row.appendChild(info);
-    row.appendChild(el("div", { class: "date" }, [r.datum || ""]));
+    if (archivePicker) {
+      var pickBtn = el("button", { class: "btn btn-sm btn-primary" }, ["→ Diesem Tag zuweisen"]);
+      pickBtn.addEventListener("click", function (e) { e.stopPropagation(); assignReportToEmployee(r); });
+      row.appendChild(pickBtn);
+    } else {
+      row.appendChild(el("div", { class: "date" }, [r.datum || ""]));
+    }
     return row;
   }
 
