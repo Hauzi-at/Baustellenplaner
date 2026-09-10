@@ -372,7 +372,16 @@
   .sig-pad-wrap { border: 1.5px dashed var(--line); border-radius: 10px; background: var(--card-raised); position: relative; touch-action: none; }
   .sig-pad-wrap canvas { display: block; width: 100%; height: 140px; touch-action: none; cursor: crosshair; }
   .sig-pad-wrap .sig-placeholder { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12.5px; pointer-events: none; }
-  .sig-actions { display: flex; justify-content: space-between; align-items: center; }
+  .sig-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+
+  /* Vollbild-Unterschrift — nutzt fast das ganze Display, damit auf dem Handy mehr Platz zum
+     Unterschreiben da ist als im kleinen Feld im Formular. */
+  .sig-fullscreen { position: fixed; inset: 0; z-index: 80; background: var(--paper); display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+  .sig-fullscreen-head { display: flex; justify-content: space-between; align-items: center; }
+  .sig-fullscreen-head strong { font-size: 16px; }
+  .sig-fullscreen-pad { flex: 1; min-height: 0; }
+  .sig-fullscreen-pad canvas { height: 100%; }
+  .sig-fullscreen-actions { flex-shrink: 0; }
   .sig-caption { font-size: 11.5px; color: var(--muted); text-align: center; border-top: 1px solid var(--line); padding-top: 6px; }
 
   .prefill-chip {
@@ -460,6 +469,7 @@
 
 <div id="app"></div>
 <div id="modal-root"></div>
+<div id="sig-fullscreen-root"></div>
 <div id="print-area"></div>
 <iframe id="konfigurator-frame" src="konfigurator.html" title="Konfigurator"></iframe>
 
@@ -497,6 +507,7 @@
 
   var reportDraft = null; // in-progress report object
   var reportSig = { kunde: null, monteur: null }; // signature dataURLs, survive re-renders
+  var sigFullscreenKey = null; // "kunde" | "monteur" | null — Vollbild-Unterschrift gerade offen
   var reportSuggestOpen = false;
   var reportPrefillDismissed = false;
   var reportPauseUiOpen = false; // "Nicht abschließbar" Panel (Zurückstellen / Folgeauftrag) sichtbar?
@@ -644,7 +655,8 @@
       lock: '<rect x="5" y="10.5" width="14" height="9.5" rx="1.8"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>',
       upload: '<path d="M12 15V4m0 0L8 8m4-4 4 4"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/>',
       clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
-      grid: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.4"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.4"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.4"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.4"/>'
+      grid: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.4"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.4"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.4"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.4"/>',
+      expand: '<path d="M9 3H4v5M15 3h5v5M4 15v5h5M20 15v5h-5"/>'
     };
     return '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (paths[name] || "") + "</svg>";
   }
@@ -1051,6 +1063,7 @@
     app.innerHTML = "";
     app.appendChild(renderShell());
     renderPrintArea();
+    renderSigFullscreen();
     syncKonfiguratorFrame();
   }
 
@@ -2528,6 +2541,54 @@
 
     var actionsRow = el("div", { class: "sig-actions" });
     var status = el("span", { style: "font-size:11.5px;color:var(--muted);" }, [reportSig[key] ? "✓ Unterschrieben" : "Noch keine Unterschrift"]);
+    var expandBtn = el("button", { class: "btn btn-sm btn-ghost", title: "Größer / auf ganzem Display unterschreiben" }, []);
+    expandBtn.innerHTML = icon("expand", 14) + "<span>Vollbild</span>";
+    expandBtn.addEventListener("click", function () { sigFullscreenKey = key; renderSigFullscreen(); });
+    var clearBtn = el("button", { class: "btn btn-sm btn-ghost" }, ["Löschen"]);
+    clearBtn.addEventListener("click", function () {
+      reportSig[key] = null;
+      var ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      placeholder.style.display = "flex";
+      status.textContent = "Noch keine Unterschrift";
+    });
+    actionsRow.appendChild(status);
+    actionsRow.appendChild(expandBtn);
+    actionsRow.appendChild(clearBtn);
+    block.appendChild(actionsRow);
+
+    attachSignaturePad(canvas, key, placeholder, status);
+    return block;
+  }
+
+  // Vollbild-Unterschrift: derselbe Signatur-Pad-Mechanismus, nur mit deutlich mehr Platz —
+  // v.a. auf dem Handy ist die kleine Fläche im Formular zum Unterschreiben oft zu knapp.
+  function renderSigFullscreen() {
+    var root = $("#sig-fullscreen-root");
+    if (!root) return;
+    if (!sigFullscreenKey) { root.innerHTML = ""; return; }
+    var key = sigFullscreenKey;
+    var title = key === "kunde" ? "Unterschrift Kunde" : "Unterschrift Monteur";
+    root.innerHTML = "";
+
+    var overlay = el("div", { class: "sig-fullscreen" });
+    var head = el("div", { class: "sig-fullscreen-head" });
+    head.appendChild(el("strong", {}, [title]));
+    var doneBtn = el("button", { class: "btn btn-primary" }, []);
+    doneBtn.innerHTML = icon("check", 18) + "<span>Fertig</span>";
+    doneBtn.addEventListener("click", function () { sigFullscreenKey = null; render(); });
+    head.appendChild(doneBtn);
+    overlay.appendChild(head);
+
+    var wrap = el("div", { class: "sig-pad-wrap sig-fullscreen-pad" });
+    var canvas = el("canvas", {});
+    var placeholder = el("div", { class: "sig-placeholder" }, ["Mit Finger / Maus hier unterschreiben"]);
+    wrap.appendChild(canvas);
+    wrap.appendChild(placeholder);
+    overlay.appendChild(wrap);
+
+    var actionsRow = el("div", { class: "sig-actions sig-fullscreen-actions" });
+    var status = el("span", { style: "font-size:12.5px;color:var(--muted);" }, [reportSig[key] ? "✓ Unterschrieben" : "Noch keine Unterschrift"]);
     var clearBtn = el("button", { class: "btn btn-sm btn-ghost" }, ["Löschen"]);
     clearBtn.addEventListener("click", function () {
       reportSig[key] = null;
@@ -2538,17 +2599,20 @@
     });
     actionsRow.appendChild(status);
     actionsRow.appendChild(clearBtn);
-    block.appendChild(actionsRow);
+    overlay.appendChild(actionsRow);
 
+    root.appendChild(overlay);
     attachSignaturePad(canvas, key, placeholder, status);
-    return block;
   }
 
   function attachSignaturePad(canvas, key, placeholder, status) {
     requestAnimationFrame(function () {
       var ratio = window.devicePixelRatio || 1;
       var cssWidth = canvas.clientWidth || (canvas.parentElement && canvas.parentElement.clientWidth) || 280;
-      var cssHeight = 140;
+      // Richtet sich nach der tatsächlich gerenderten CSS-Höhe des jeweiligen Canvas — dadurch
+      // funktioniert dieselbe Funktion unverändert sowohl für das kleine Unterschriftsfeld
+      // (feste Höhe per CSS) als auch für die Vollbild-Variante (füllt den verfügbaren Platz).
+      var cssHeight = canvas.clientHeight || 140;
       canvas.width = Math.max(1, Math.round(cssWidth * ratio));
       canvas.height = Math.max(1, Math.round(cssHeight * ratio));
       var ctx = canvas.getContext("2d");
