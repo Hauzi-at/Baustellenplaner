@@ -1244,6 +1244,7 @@ function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, default
     const [notentriegelung, setNotentriegelung] = useState(false);
     const [kunde, setKunde] = useState(defaultKunde || "");
     const [menge, setMenge] = useState(1);
+    const [positionEingabe, setPositionEingabe] = useState("");
     useEffect(() => { loadParams(setParams); loadList(setList); loadProduktPreise(setProduktPreise); }, []);
     const zuruecksetzen = () => {
         setAusfuehrung("einteilig");
@@ -1284,6 +1285,7 @@ function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, default
         setInsektenschutz(false);
         setNotentriegelung(false);
         setMenge(1);
+        setPositionEingabe("");
         setBearbeitungsId(null);
     };
     // Beim Wechsel auf einen anderen (oder neu angelegten) Kunden wird die komplette
@@ -1338,6 +1340,7 @@ function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, default
         setInsektenschutz(c.insektenschutz);
         setNotentriegelung(c.notentriegelung);
         setMenge((_a = item.menge) !== null && _a !== void 0 ? _a : 1);
+        setPositionEingabe(item.position || "");
         setKunde(item.kunde === "—" ? "" : item.kunde);
         setBearbeitungsId(item.id);
         setTab("konfiguration");
@@ -1650,7 +1653,7 @@ function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, default
             welleAutomatik, welleManuell, bedienung, motorHersteller, austrittSeite, austrittPos, insektenschutz, notentriegelung,
         };
         const item = {
-            id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), kunde: kunde || "—", breite: eb, hoehe, system, ausfuehrung,
+            id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), position: positionEingabe, kunde: kunde || "—", breite: eb, hoehe, system, ausfuehrung,
             heroalNr, colorLabel: behangColor.label, kastenColorLabel: displayLabel,
             bedienung: bed.art === "motor" ? `${bed.label} (${(_c = MOTOR_HERSTELLER.find(m => m.id === motorHersteller)) === null || _c === void 0 ? void 0 : _c.label} ${empfohleneMotorKlasse}Nm)` : bed.label,
             austrittCode, austrittLabel, menge,
@@ -1972,6 +1975,9 @@ function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, default
                                 React.createElement("input", { type: "checkbox", checked: notentriegelung, onChange: (e) => setNotentriegelung(e.target.checked), className: "accent-[#E8963B] w-4 h-4" }),
                                 "Notentriegelung")),
                         React.createElement("div", { className: "border-t border-[#E2DFD3] pt-4 flex flex-col sm:flex-row items-stretch sm:items-end gap-3" },
+                            React.createElement("label", { className: "flex flex-col gap-1 flex-1" },
+                                React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Position (optional)"),
+                                React.createElement("input", { type: "text", value: positionEingabe, onChange: (e) => setPositionEingabe(e.target.value), placeholder: "z.B. Pos. 1", className: "border border-[#D8D4C8] rounded-md bg-white px-2.5 py-1.5 text-[15px] text-[#1B1F24] outline-none focus:border-[#E8963B] transition-colors" })),
                             React.createElement(Num, { label: "Stückzahl", value: menge, onChange: setMenge, unit: "Stk", min: 1, className: "sm:w-40" }),
                             React.createElement("button", { onClick: addToList, disabled: eingabeUnvollstaendig, className: `flex-1 flex items-center justify-center gap-1.5 px-4 py-3 rounded-md text-white text-[14px] font-semibold transition-colors ${eingabeUnvollstaendig ? "bg-[#D8D4C8] cursor-not-allowed" : "bg-[#E8963B] hover:bg-[#d6852e]"}` },
                                 React.createElement(ShoppingBag, { size: 17 }),
@@ -2786,6 +2792,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     const [customRal, setCustomRal] = useState("7016");
     const [kunde, setKunde] = useState(defaultKunde || "");
     const [menge, setMenge] = useState(1);
+    const [positionEingabe, setPositionEingabe] = useState("");
     useEffect(() => { loadSpannrahmenPreise(setPreise); loadSpannrahmenListe(setListe); }, []);
     const getPreis = (key) => { var _a; return (_a = preise[key]) !== null && _a !== void 0 ? _a : 0; };
     const setPreis = (key, val) => setPreise((p) => { const next = Object.assign(Object.assign({}, p), { [key]: val }); saveSpannrahmenPreise(next); return next; });
@@ -2796,6 +2803,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         setGewebeTyp("classic");
         setFalzmass(13);
         setMenge(1);
+        setPositionEingabe("");
         setBearbeitungsId(null);
     };
     // Beim Wechsel auf einen anderen (oder neu angelegten) Kunden wird die komplette
@@ -2818,6 +2826,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         setHeroalNr((_f = c.heroalNr) !== null && _f !== void 0 ? _f : "44");
         setCustomRal((_g = c.customRal) !== null && _g !== void 0 ? _g : "7016");
         setMenge((_h = item.menge) !== null && _h !== void 0 ? _h : 1);
+        setPositionEingabe(item.position || "");
         setKunde(item.kunde === "—" ? "" : item.kunde);
         setBearbeitungsId(item.id);
         setTab("konfiguration");
@@ -2881,7 +2890,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
             return;
         const config = { lichteBreite, lichteHoehe, profilTyp, gewebeTyp, falzmass, heroalNr, customRal };
         const item = {
-            id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), kunde: kunde || "—", lichteBreite, lichteHoehe, rahmenbreite, rahmenhoehe,
+            id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), position: positionEingabe, kunde: kunde || "—", lichteBreite, lichteHoehe, rahmenbreite, rahmenhoehe,
             profilLabel: profilObj.label, gewebeLabel: gewebeObj.label, colorLabel: displayLabel,
             befestigungLabel: befestigungObj.label, menge, positionstext, config,
             preisEinzelEk: interneKosten, preisNetto: verkaufNetto, preisBrutto: verkaufBrutto,
@@ -2946,6 +2955,9 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                             React.createElement("span", { className: "block text-[11px] text-[#8A8F98]" }, "heroal Farb\u00FCbersicht \u2014 zum \u00C4ndern tippen")),
                         React.createElement(Palette, { size: 16, className: "text-[#8A8F98]" }))))),
             tab === "konfiguration" && (React.createElement("div", { className: "border-t border-[#E2DFD3] pt-4 flex flex-col sm:flex-row items-stretch sm:items-end gap-3" },
+                React.createElement("label", { className: "flex flex-col gap-1 flex-1" },
+                    React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Position (optional)"),
+                    React.createElement("input", { type: "text", value: positionEingabe, onChange: (e) => setPositionEingabe(e.target.value), placeholder: "z.B. Pos. 1", className: "border border-[#D8D4C8] rounded-md bg-white px-2.5 py-1.5 text-[15px] text-[#1B1F24] outline-none focus:border-[#E8963B] transition-colors" })),
                 React.createElement(Num, { label: "Stückzahl", value: menge, onChange: setMenge, unit: "Stk", min: 1, className: "sm:w-40" }),
                 React.createElement("button", { onClick: addToListe, disabled: eingabeUnvollstaendig, className: `flex-1 flex items-center justify-center gap-1.5 px-4 py-3 rounded-md text-white text-[14px] font-semibold transition-colors ${eingabeUnvollstaendig ? "bg-[#D8D4C8] cursor-not-allowed" : "bg-[#E8963B] hover:bg-[#d6852e]"}` },
                     React.createElement(ShoppingBag, { size: 17 }),
@@ -3294,6 +3306,7 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
     const [customRal, setCustomRal] = useState("7016");
     const [kunde, setKunde] = useState(defaultKunde || "");
     const [menge, setMenge] = useState(1);
+    const [positionEingabe, setPositionEingabe] = useState("");
     useEffect(() => { loadDrehtuerPreise(setPreise); loadDrehtuerListe(setListe); }, []);
     const getPreis = (key) => { var _a; return (_a = preise[key]) !== null && _a !== void 0 ? _a : 0; };
     const setPreis = (key, val) => setPreise((p) => { const next = Object.assign(Object.assign({}, p), { [key]: val }); saveDrehtuerPreise(next); return next; });
@@ -3304,6 +3317,7 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
         setGewebeTyp("classic");
         setAnschlag("links");
         setMenge(1);
+        setPositionEingabe("");
         setBearbeitungsId(null);
     };
     // Beim Wechsel auf einen anderen (oder neu angelegten) Kunden wird die komplette
@@ -3325,6 +3339,7 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
         setHeroalNr((_f = c.heroalNr) !== null && _f !== void 0 ? _f : "44");
         setCustomRal((_g = c.customRal) !== null && _g !== void 0 ? _g : "7016");
         setMenge((_h = item.menge) !== null && _h !== void 0 ? _h : 1);
+        setPositionEingabe(item.position || "");
         setKunde(item.kunde === "—" ? "" : item.kunde);
         setBearbeitungsId(item.id);
         setTab("konfiguration");
@@ -3401,7 +3416,7 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
             return;
         const config = { lichteBreite, lichteHoehe, ausfuehrungTyp, gewebeTyp, heroalNr, customRal };
         const item = {
-            id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), kunde: kunde || "—", lichteBreite, lichteHoehe, rahmenbreite, rahmenhoehe, fluegelbreite, fluegelhoehe,
+            id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), position: positionEingabe, kunde: kunde || "—", lichteBreite, lichteHoehe, rahmenbreite, rahmenhoehe, fluegelbreite, fluegelhoehe,
             ausfuehrungLabel: ausfuehrungObj.label, gewebeLabel: gewebeObj.label, colorLabel: displayLabel,
             anschlag, menge, positionstext, config,
             preisEinzelEk: interneKosten, preisNetto: verkaufNetto, preisBrutto: verkaufBrutto,
@@ -3466,6 +3481,9 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                             React.createElement("span", { className: "block text-[11px] text-[#8A8F98]" }, "heroal Farb\u00FCbersicht \u2014 zum \u00C4ndern tippen")),
                         React.createElement(Palette, { size: 16, className: "text-[#8A8F98]" }))))),
             tab === "konfiguration" && (React.createElement("div", { className: "border-t border-[#E2DFD3] pt-4 flex flex-col sm:flex-row items-stretch sm:items-end gap-3" },
+                React.createElement("label", { className: "flex flex-col gap-1 flex-1" },
+                    React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Position (optional)"),
+                    React.createElement("input", { type: "text", value: positionEingabe, onChange: (e) => setPositionEingabe(e.target.value), placeholder: "z.B. Pos. 1", className: "border border-[#D8D4C8] rounded-md bg-white px-2.5 py-1.5 text-[15px] text-[#1B1F24] outline-none focus:border-[#E8963B] transition-colors" })),
                 React.createElement(Num, { label: "Stückzahl", value: menge, onChange: setMenge, unit: "Stk", min: 1, className: "sm:w-40" }),
                 React.createElement("button", { onClick: addToListe, disabled: eingabeUnvollstaendig, className: `flex-1 flex items-center justify-center gap-1.5 px-4 py-3 rounded-md text-white text-[14px] font-semibold transition-colors ${eingabeUnvollstaendig ? "bg-[#D8D4C8] cursor-not-allowed" : "bg-[#E8963B] hover:bg-[#d6852e]"}` },
                     React.createElement(ShoppingBag, { size: 17 }),
@@ -3874,6 +3892,7 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     const [customRal, setCustomRal] = useState("7016");
     const [kunde, setKunde] = useState(defaultKunde || "");
     const [menge, setMenge] = useState(1);
+    const [positionEingabe, setPositionEingabe] = useState("");
     useEffect(() => { loadSchiebetuerPreise(setPreise); loadSchiebetuerListe(setListe); }, []);
     const getPreis = (key) => { var _a; return (_a = preise[key]) !== null && _a !== void 0 ? _a : 0; };
     const setPreis = (key, val) => setPreise((p) => { const next = Object.assign(Object.assign({}, p), { [key]: val }); saveSchiebetuerPreise(next); return next; });
@@ -3884,6 +3903,7 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         setAusfuehrungTyp("sa1");
         setLaufrichtung("links");
         setMenge(1);
+        setPositionEingabe("");
         setBearbeitungsId(null);
     };
     // Beim Wechsel auf einen anderen (oder neu angelegten) Kunden wird die komplette
@@ -3905,6 +3925,7 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         setHeroalNr((_f = c.heroalNr) !== null && _f !== void 0 ? _f : "44");
         setCustomRal((_g = c.customRal) !== null && _g !== void 0 ? _g : "7016");
         setMenge((_h = item.menge) !== null && _h !== void 0 ? _h : 1);
+        setPositionEingabe(item.position || "");
         setKunde(item.kunde === "—" ? "" : item.kunde);
         setBearbeitungsId(item.id);
         setTab("konfiguration");
@@ -3970,7 +3991,7 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
             return;
         const config = { rahmenbreite, rahmenhoehe, gewebeTyp, ausfuehrungTyp, heroalNr, customRal };
         const item = {
-            id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), kunde: kunde || "—", rahmenbreite, rahmenhoehe, fluegelbreite, fluegelhoehe,
+            id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), position: positionEingabe, kunde: kunde || "—", rahmenbreite, rahmenhoehe, fluegelbreite, fluegelhoehe,
             gewebeLabel: gewebeObj.label, colorLabel: displayLabel,
             ausfuehrungLabel: ausfuehrungObj.label, laufrichtung, menge, positionstext, config,
             preisEinzelEk: interneKosten, preisNetto: verkaufNetto, preisBrutto: verkaufBrutto,
@@ -4038,6 +4059,9 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                             React.createElement("span", { className: "block text-[11px] text-[#8A8F98]" }, "heroal Farb\u00FCbersicht \u2014 zum \u00C4ndern tippen")),
                         React.createElement(Palette, { size: 16, className: "text-[#8A8F98]" }))))),
             tab === "konfiguration" && (React.createElement("div", { className: "border-t border-[#E2DFD3] pt-4 flex flex-col sm:flex-row items-stretch sm:items-end gap-3" },
+                React.createElement("label", { className: "flex flex-col gap-1 flex-1" },
+                    React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Position (optional)"),
+                    React.createElement("input", { type: "text", value: positionEingabe, onChange: (e) => setPositionEingabe(e.target.value), placeholder: "z.B. Pos. 1", className: "border border-[#D8D4C8] rounded-md bg-white px-2.5 py-1.5 text-[15px] text-[#1B1F24] outline-none focus:border-[#E8963B] transition-colors" })),
                 React.createElement(Num, { label: "Stückzahl", value: menge, onChange: setMenge, unit: "Stk", min: 1, className: "sm:w-40" }),
                 React.createElement("button", { onClick: addToListe, disabled: eingabeUnvollstaendig, className: `flex-1 flex items-center justify-center gap-1.5 px-4 py-3 rounded-md text-white text-[14px] font-semibold transition-colors ${eingabeUnvollstaendig ? "bg-[#D8D4C8] cursor-not-allowed" : "bg-[#E8963B] hover:bg-[#d6852e]"}` },
                     React.createElement(ShoppingBag, { size: 17 }),
@@ -4372,6 +4396,7 @@ function LichtschachtKonfigurator({ onZurueck, editRequest, onEditConsumed, defa
     const [materialTyp, setMaterialTyp] = useState("alu-streckmetall");
     const [kunde, setKunde] = useState(defaultKunde || "");
     const [menge, setMenge] = useState(1);
+    const [positionEingabe, setPositionEingabe] = useState("");
     useEffect(() => { loadLichtschachtPreise(setPreise); loadLichtschachtListe(setListe); }, []);
     const getPreis = (key) => { var _a; return (_a = preise[key]) !== null && _a !== void 0 ? _a : 0; };
     const setPreis = (key, val) => setPreise((p) => { const next = Object.assign(Object.assign({}, p), { [key]: val }); saveLichtschachtPreise(next); return next; });
@@ -4381,6 +4406,7 @@ function LichtschachtKonfigurator({ onZurueck, editRequest, onEditConsumed, defa
         setAusfuehrungTyp("offen");
         setMaterialTyp("alu-streckmetall");
         setMenge(1);
+        setPositionEingabe("");
         setBearbeitungsId(null);
     };
     // Beim Wechsel auf einen anderen (oder neu angelegten) Kunden wird die komplette
@@ -4397,6 +4423,7 @@ function LichtschachtKonfigurator({ onZurueck, editRequest, onEditConsumed, defa
         setAusfuehrungTyp((_c = c.ausfuehrungTyp) !== null && _c !== void 0 ? _c : "offen");
         setMaterialTyp((_d = c.materialTyp) !== null && _d !== void 0 ? _d : "alu-streckmetall");
         setMenge((_e = item.menge) !== null && _e !== void 0 ? _e : 1);
+        setPositionEingabe(item.position || "");
         setKunde(item.kunde === "—" ? "" : item.kunde);
         setBearbeitungsId(item.id);
         setTab("konfiguration");
@@ -4449,7 +4476,7 @@ function LichtschachtKonfigurator({ onZurueck, editRequest, onEditConsumed, defa
             return;
         const config = { rahmenbreite, rahmenhoehe, ausfuehrungTyp, materialTyp };
         const item = {
-            id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), kunde: kunde || "—", rahmenbreite, rahmenhoehe,
+            id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), position: positionEingabe, kunde: kunde || "—", rahmenbreite, rahmenhoehe,
             ausfuehrungLabel: ausfuehrungObj.label, materialLabel: materialObj.label, menge, positionstext, config,
             preisEinzelEk: interneKosten, preisNetto: verkaufNetto, preisBrutto: verkaufBrutto,
         };
@@ -4486,6 +4513,9 @@ function LichtschachtKonfigurator({ onZurueck, editRequest, onEditConsumed, defa
                 React.createElement("p", { className: "text-[11px] text-[#8A8F98] -mt-2" }, materialObj.info),
                 React.createElement("p", { className: "text-[11px] text-[#8A8F98]" }, ausfuehrungObj.id === "offen" ? "Einsatzbereich: Unterhalb liegende Kellerfenster." : "Einsatzbereich: Unterhalb liegende oder oberhalb überstehende Kellerfenster, mit Acrylglas-Option."))),
             tab === "konfiguration" && (React.createElement("div", { className: "border-t border-[#E2DFD3] pt-4 flex flex-col sm:flex-row items-stretch sm:items-end gap-3" },
+                React.createElement("label", { className: "flex flex-col gap-1 flex-1" },
+                    React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Position (optional)"),
+                    React.createElement("input", { type: "text", value: positionEingabe, onChange: (e) => setPositionEingabe(e.target.value), placeholder: "z.B. Pos. 1", className: "border border-[#D8D4C8] rounded-md bg-white px-2.5 py-1.5 text-[15px] text-[#1B1F24] outline-none focus:border-[#E8963B] transition-colors" })),
                 React.createElement(Num, { label: "Stückzahl", value: menge, onChange: setMenge, unit: "Stk", min: 1, className: "sm:w-40" }),
                 React.createElement("button", { onClick: addToListe, disabled: eingabeUnvollstaendig, className: `flex-1 flex items-center justify-center gap-1.5 px-4 py-3 rounded-md text-white text-[14px] font-semibold transition-colors ${eingabeUnvollstaendig ? "bg-[#D8D4C8] cursor-not-allowed" : "bg-[#E8963B] hover:bg-[#d6852e]"}` },
                     React.createElement(ShoppingBag, { size: 17 }),
@@ -4780,6 +4810,7 @@ function KisKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde,
     const [customRal, setCustomRal] = useState("7016");
     const [kunde, setKunde] = useState(defaultKunde || "");
     const [menge, setMenge] = useState(1);
+    const [positionEingabe, setPositionEingabe] = useState("");
     useEffect(() => { loadKisPreise(setPreise); loadKisListe(setListe); }, []);
     const getPreis = (key) => { var _a; return (_a = preise[key]) !== null && _a !== void 0 ? _a : 0; };
     const setPreis = (key, val) => setPreise((p) => { const next = Object.assign(Object.assign({}, p), { [key]: val }); saveKisPreise(next); return next; });
@@ -4790,6 +4821,7 @@ function KisKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde,
         setFuehrungsabschluss(false);
         setBeweglicherEinsatz(false);
         setMenge(1);
+        setPositionEingabe("");
         setBearbeitungsId(null);
     };
     // Beim Wechsel auf einen anderen (oder neu angelegten) Kunden wird die komplette
@@ -4811,6 +4843,7 @@ function KisKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde,
         setHeroalNr((_f = c.heroalNr) !== null && _f !== void 0 ? _f : "44");
         setCustomRal((_g = c.customRal) !== null && _g !== void 0 ? _g : "7016");
         setMenge((_h = item.menge) !== null && _h !== void 0 ? _h : 1);
+        setPositionEingabe(item.position || "");
         setKunde(item.kunde === "—" ? "" : item.kunde);
         setBearbeitungsId(item.id);
         setTab("konfiguration");
@@ -4877,7 +4910,7 @@ function KisKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde,
             return;
         const config = { eb, eh, mechanikTyp, fuehrungsabschluss, beweglicherEinsatz, heroalNr, customRal };
         const item = {
-            id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), kunde: kunde || "—", eb, eh, mechanikLabel: mechanikObj.label, colorLabel: displayLabel,
+            id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), position: positionEingabe, kunde: kunde || "—", eb, eh, mechanikLabel: mechanikObj.label, colorLabel: displayLabel,
             menge, positionstext, config, preisEinzelEk: interneKosten, preisNetto: verkaufNetto, preisBrutto: verkaufBrutto,
         };
         const next = bearbeitungsId ? liste.map((i) => (i.id === bearbeitungsId ? item : i)) : [...liste, item];
@@ -4925,6 +4958,9 @@ function KisKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde,
                             React.createElement("span", { className: "block text-[11px] text-[#8A8F98]" }, "heroal Farb\u00FCbersicht \u2014 zum \u00C4ndern tippen")),
                         React.createElement(Palette, { size: 16, className: "text-[#8A8F98]" }))))),
             tab === "konfiguration" && (React.createElement("div", { className: "border-t border-[#E2DFD3] pt-4 flex flex-col sm:flex-row items-stretch sm:items-end gap-3" },
+                React.createElement("label", { className: "flex flex-col gap-1 flex-1" },
+                    React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Position (optional)"),
+                    React.createElement("input", { type: "text", value: positionEingabe, onChange: (e) => setPositionEingabe(e.target.value), placeholder: "z.B. Pos. 1", className: "border border-[#D8D4C8] rounded-md bg-white px-2.5 py-1.5 text-[15px] text-[#1B1F24] outline-none focus:border-[#E8963B] transition-colors" })),
                 React.createElement(Num, { label: "Stückzahl", value: menge, onChange: setMenge, unit: "Stk", min: 1, className: "sm:w-40" }),
                 React.createElement("button", { onClick: addToListe, disabled: eingabeUnvollstaendig, className: `flex-1 flex items-center justify-center gap-1.5 px-4 py-3 rounded-md text-white text-[14px] font-semibold transition-colors ${eingabeUnvollstaendig ? "bg-[#D8D4C8] cursor-not-allowed" : "bg-[#E8963B] hover:bg-[#d6852e]"}` },
                     React.createElement(ShoppingBag, { size: 17 }),
