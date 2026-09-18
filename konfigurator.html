@@ -2549,10 +2549,10 @@ async function getChefPasswordHash() {
 // den Druckdialog. Zuverlässiger als CSS-Versteck-Tricks, funktioniert auch auf mobilen Browsern.
 function druckeUebersicht(titel, kunde, zeilen, hinweis) {
     const heute = new Date().toLocaleDateString("de-AT");
-    const zeilenHtml = zeilen.map(([label, wert]) => `
-    <tr>
-      <td style="padding:7px 4px;color:#5B6472;width:48%;border-bottom:1px solid #D8D4C8;">${label}</td>
-      <td style="padding:7px 4px;color:#1B1F24;font-weight:600;font-family:monospace;border-bottom:1px solid #D8D4C8;">${wert}</td>
+    const zeilenHtml = zeilen.map(([label, wert, hervorheben]) => `
+    <tr${hervorheben ? ' style="background:#FFF8EF;"' : ""}>
+      <td style="padding:7px 4px;color:${hervorheben ? "#B96A16" : "#5B6472"};width:48%;border-bottom:1px solid #D8D4C8;${hervorheben ? "font-weight:700;border-left:3px solid #E8963B;padding-left:8px;" : ""}">${label}</td>
+      <td style="padding:7px 4px;color:${hervorheben ? "#B96A16" : "#1B1F24"};font-weight:700;font-family:monospace;${hervorheben ? "font-size:14px;" : ""}border-bottom:1px solid #D8D4C8;">${wert}</td>
     </tr>`).join("");
     const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>${titel} — Druckübersicht</title>
     <style>
@@ -3676,13 +3676,13 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                         ["Ausführung", `${ausfuehrungObj.label} (S. ${ausfuehrungObj.seite})`],
                         [ausfuehrungObj.breiteBasis === "mass" ? "Maß B" : "Lichte Breite", `${lichteBreite} mm`],
                         [ausfuehrungObj.hoeheBasis === "mass" ? "Maß H" : "Lichte Höhe", `${lichteHoehe} mm`],
-                        ["Rahmenbreite (Zarge)", `${rahmenbreite} mm`], ["Rahmenhöhe (Zarge)", `${rahmenhoehe} mm`],
-                        ["Flügelbreite", `${fluegelbreite.toFixed(1)} mm`], ["Flügelhöhe", `${fluegelhoehe.toFixed(1)} mm`],
-                        ...(ausfuehrungObj.griffleisteOptional && griffleisteVerbaut ? [["Griffleiste (Art. 12931)", `${griffleisteLaengeMm.toFixed(0)} mm — Position: ${griffleistePosition === "mittig" ? "mittig" : `UK Rahmen–Mitte = ${griffleisteMass !== null && griffleisteMass !== void 0 ? griffleisteMass : "?"} mm`}`]] : []),
+                        ["Rahmenbreite (Zarge)", `${rahmenbreite} mm`, true], ["Rahmenhöhe (Zarge)", `${rahmenhoehe} mm`, true],
+                        ["Flügelbreite", `${fluegelbreite.toFixed(1)} mm`, true], ["Flügelhöhe", `${fluegelhoehe.toFixed(1)} mm`, true],
+                        ...(ausfuehrungObj.griffleisteOptional && griffleisteVerbaut ? [["Griffleiste (Art. 12931)", `${griffleisteLaengeMm.toFixed(0)} mm — Position: ${griffleistePosition === "mittig" ? "mittig" : `UK Rahmen–Mitte = ${griffleisteMass !== null && griffleisteMass !== void 0 ? griffleisteMass : "?"} mm`}`, true]] : []),
                         ...(ausfuehrungObj.dt3Zusatz ? [
-                            ["Trittschutzblech", `${trittschutzblechLaengeMm.toFixed(0)} mm`],
-                            ["Querprofil (Art. 12930)", `${querprofilLaengeMm.toFixed(0)} mm`],
-                            ["Bürstenprofil unten (Art. 12919)", `${buerstenprofilLaengeMm.toFixed(0)} mm`],
+                            ["Trittschutzblech", `${trittschutzblechLaengeMm.toFixed(0)} mm`, true],
+                            ["Querprofil (Art. 12930)", `${querprofilLaengeMm.toFixed(0)} mm`, true],
+                            ["Bürstenprofil unten (Art. 12919)", `${buerstenprofilLaengeMm.toFixed(0)} mm`, true],
                         ] : []),
                         ["Türanschlag", anschlag === "links" ? "Links" : "Rechts"],
                         ["Gewebe", `${gewebeObj.label} (${gewebeObj.farbe})`], ["Farbe", displayLabel],
