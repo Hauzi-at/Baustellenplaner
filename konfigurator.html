@@ -3221,22 +3221,37 @@ const DREHTUER_AUSFUEHRUNG = [
         id: "dt3", label: "DT 3-seitig", seite: "109",
         zargeArtNr: "12918", zargeLabel: "Zargenprofil 17/34",
         fluegelArtNr: "12908", fluegelLabel: "Rahmenprofil 11/35",
-        scharnierArtNr: "11001 / 11033", scharnierLabel: "Scharnier 11001/11033", scharnierAnzahl: 2,
-        hoeheBasis: "mass", zuschlagHoehe: -24,
+        scharnierArtNr: "11001 / 11033 / 11005 / 11000", scharnierLabel: "Scharnier-Set (11001 + 11033 + Stift 11005 + Beilagscheibe 11000)", scharnierAnzahl: 3,
+        scharnierTeile: [
+            { key: "scharnier_11001", artNr: "11001", label: "Scharnierteil 11001", anzahl: 3 },
+            { key: "scharnier_11033", artNr: "11033", label: "Scharnierteil 11033", anzahl: 3 },
+            { key: "stift_11005", artNr: "11005", label: "Scharnierstift 11005", anzahl: 3 },
+            { key: "beilagscheibe_11000", artNr: "11000", label: "Beilagscheibe 11000", anzahl: 3 },
+        ],
+        hoeheBasis: "mass", zuschlagHoehe: 0,
         breiteBasis: "lichte", zuschlagBreite: -2,
-        fluegelZuschlagHoehe: -23.7, fluegelZuschlagBreite: -47.4,
-        hinweis: "heroal Katalog S. 109. Ohne Wetterschenkel/Schwelle (3-seitige Zarge). Katalog nennt für Rahmenhöhe alternativ auch −34mm (2. Ausführungsvariante) — hier −24mm als Standard hinterlegt.",
+        fluegelZuschlagHoehe: -47.7, fluegelZuschlagBreite: -47.4,
+        dt3Zusatz: true,
+        griffleisteOptional: true,
+        hinweis: "heroal Katalog S. 109. Ohne Wetterschenkel/Schwelle (3-seitige Zarge). Korrektur von Thomas (18.09.2026): Rahmenhöhe = angegebenes Maß ohne Abzug, Flügelhöhe = Rahmenhöhe − 47,7mm. Querprofil 12930 & Bürstenprofil unten 12919 werden immer mitgerechnet, Trittschutzblech ist ein Fixpreis, Griffleiste 12931 nur wenn ausgewählt (dann +2× Griffleistenbreite beim Keder).",
     },
     {
         id: "dt4", label: "DT 4-seitig", seite: "111",
         zargeArtNr: "12918", zargeLabel: "Zargenprofil 17/34",
         fluegelArtNr: "12908", fluegelLabel: "Rahmenprofil 11/35",
-        scharnierArtNr: "11001 / 11033", scharnierLabel: "Scharnier 11001/11033", scharnierAnzahl: 2,
+        scharnierArtNr: "11001 / 11033 / 11005 / 11000", scharnierLabel: "Scharnier-Set (11001 + 11033 + Stift 11005 + Beilagscheibe 11000)", scharnierAnzahl: 3,
+        scharnierTeile: [
+            { key: "scharnier_11001", artNr: "11001", label: "Scharnierteil 11001", anzahl: 3 },
+            { key: "scharnier_11033", artNr: "11033", label: "Scharnierteil 11033", anzahl: 3 },
+            { key: "stift_11005", artNr: "11005", label: "Scharnierstift 11005", anzahl: 3 },
+            { key: "beilagscheibe_11000", artNr: "11000", label: "Beilagscheibe 11000", anzahl: 3 },
+        ],
         hoeheBasis: "mass", zuschlagHoehe: -2,
         breiteBasis: "lichte", zuschlagBreite: -2,
         fluegelZuschlagHoehe: -47.4, fluegelZuschlagBreite: -47.4,
-        hinweis: "heroal Katalog S. 111. Mit Schwellenprofil 12921, umlaufende 4-seitige Zarge.",
+        hinweis: "heroal Katalog S. 111. Mit Schwellenprofil 12921, umlaufende 4-seitige Zarge. Griffleiste 12931 optional (lt. Thomas, 18.09.2026 auch bei DT4 übernommen).",
         schwelleArtNr: "12921",
+        griffleisteOptional: true,
     },
     {
         id: "pendel", label: "Pendeltür", seite: "126",
@@ -3254,11 +3269,16 @@ const DREHTUER_PROFILE = DREHTUER_AUSFUEHRUNG; // Alias für Preisliste (Preis p
 // Echte EK-Preise von Thomas, Stand 04.09.2026. Zarge (12918/12919) und Scharniere (11001/11033/11019)
 // wurden nicht mitgeliefert — bleiben auf 0, bitte nachtragen. Flügelprofil 12908 (11/35) gilt für alle
 // drei Ausführungen. Neu: Griffleiste/Quersprosse/T-Verbinder/Magnetband für Pendeltür (lt. Notizzettel).
+// Neu (18.09.2026, lt. Thomas): Scharnier-Kleinteile für DT3 & DT4 als 4 Einzelposten (je 3 Stk),
+// Trittschutzblech (DT3, Fixpreis) und Bürstenprofil unten Art. 12919 (DT3, Preis pro 6m-Stange) —
+// alle noch auf 0, bitte nachtragen.
 const DEFAULT_DREHTUER_PREISE = {
     fluegel_dt3: 38.95, fluegel_dt4: 38.95, fluegel_pendel: 38.95,
     gewebe_classic: 2.30, gewebe_light: 2.30, gewebe_advantage: 3.95, gewebe_clear: 8.72, gewebe_pet: 9.67, gewebe_stainless: 7.05,
     griffleiste: 81.61, tverbinder_griffleiste: 1.08, quersprosse: 41.04, tverbinder_quersprosse: 0.22,
     magnetband: 1.31, trittblech: 6.45,
+    scharnier_11001: 0, scharnier_11033: 0, stift_11005: 0, beilagscheibe_11000: 0,
+    trittschutzblech: 0, buerstenprofil_unten: 0,
     marge: 45,
 };
 function loadDrehtuerPreise(setPreise) {
@@ -3307,6 +3327,9 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
     const [kunde, setKunde] = useState(defaultKunde || "");
     const [menge, setMenge] = useState(1);
     const [positionEingabe, setPositionEingabe] = useState("");
+    const [griffleisteVerbaut, setGriffleisteVerbaut] = useState(false);
+    const [griffleistePosition, setGriffleistePosition] = useState("mittig");
+    const [griffleisteMass, setGriffleisteMass] = useState(null);
     useEffect(() => { loadDrehtuerPreise(setPreise); loadDrehtuerListe(setListe); }, []);
     const getPreis = (key) => { var _a; return (_a = preise[key]) !== null && _a !== void 0 ? _a : 0; };
     const setPreis = (key, val) => setPreise((p) => { const next = Object.assign(Object.assign({}, p), { [key]: val }); saveDrehtuerPreise(next); return next; });
@@ -3318,6 +3341,9 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
         setAnschlag("links");
         setMenge(1);
         setPositionEingabe("");
+        setGriffleisteVerbaut(false);
+        setGriffleistePosition("mittig");
+        setGriffleisteMass(null);
         setBearbeitungsId(null);
     };
     // Beim Wechsel auf einen anderen (oder neu angelegten) Kunden wird die komplette
@@ -3329,7 +3355,7 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
         setKunde(name);
     };
     const ladeZumBearbeiten = (item) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
         const c = item.config || {};
         setLichteBreite((_a = c.lichteBreite) !== null && _a !== void 0 ? _a : item.lichteBreite);
         setLichteHoehe((_b = c.lichteHoehe) !== null && _b !== void 0 ? _b : item.lichteHoehe);
@@ -3340,6 +3366,9 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
         setCustomRal((_g = c.customRal) !== null && _g !== void 0 ? _g : "7016");
         setMenge((_h = item.menge) !== null && _h !== void 0 ? _h : 1);
         setPositionEingabe(item.position || "");
+        setGriffleisteVerbaut((_i = c.griffleisteVerbaut) !== null && _i !== void 0 ? _i : false);
+        setGriffleistePosition((_j = c.griffleistePosition) !== null && _j !== void 0 ? _j : "mittig");
+        setGriffleisteMass((_k = c.griffleisteMass) !== null && _k !== void 0 ? _k : null);
         setKunde(item.kunde === "—" ? "" : item.kunde);
         setBearbeitungsId(item.id);
         setTab("konfiguration");
@@ -3376,18 +3405,42 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
     const fluegelKosten = (fluegelUmfangM / 6) * fluegelPreisProStange;
     const gewebePreisProM2 = getPreis(`gewebe_${gewebeTyp}`);
     const gewebeKosten = gewebeflaecheM2 * gewebePreisProM2;
-    const scharnierKosten = getPreis(`scharnier_${ausfuehrungTyp}`) * ausfuehrungObj.scharnierAnzahl;
+    // Scharnier: bei DT3/DT4 4-teiliges Set (11001 + 11033 + Stift 11005 + Beilagscheibe 11000, je 3x, lt. Thomas
+    // 18.09.2026), bei der Pendeltür weiterhin ein einzelner Scharnierpreis (11019).
+    const scharnierKosten = ausfuehrungObj.scharnierTeile
+        ? ausfuehrungObj.scharnierTeile.reduce((s, t) => s + getPreis(t.key) * t.anzahl, 0)
+        : getPreis(`scharnier_${ausfuehrungTyp}`) * ausfuehrungObj.scharnierAnzahl;
     const schwelleKosten = ausfuehrungObj.schwelleArtNr ? getPreis("schwelle") : 0;
-    const kederKosten = fluegelUmfangM * getPreis("keder");
+    // DT3-Zusatzteile (lt. Thomas, 18.09.2026): Querprofil 12930 & Bürstenprofil unten 12919 werden bei jeder
+    // DT3-Tür mitgerechnet. Griffleiste 12931 nur wenn ausgewählt — dann zählt beim Keder zusätzlich
+    // 2x die Griffleistenbreite mit (Keder oberhalb + unterhalb der Griffleiste im Gewebe).
+    const querprofilLaengeMm = fluegelbreite - 70;
+    const griffleisteLaengeMm = fluegelbreite - 70;
+    const buerstenprofilLaengeMm = fluegelbreite;
+    const kederZusatzMm = (ausfuehrungObj.griffleisteOptional && griffleisteVerbaut) ? 2 * griffleisteLaengeMm : 0;
+    const kederKosten = (fluegelUmfangM + kederZusatzMm / 1000) * getPreis("keder");
     const fixkostenKleinteile = getPreis("kleinteile");
-    // Trittblech (Art. 11006) wird bei jeder Drehtür verbaut und daher immer mitgerechnet.
-    const trittblechKosten = getPreis("trittblech");
+    // Trittblech (Art. 11006) bleibt bei DT4/Pendeltür ein Fixpreis. DT3 verwendet den eigenen Fixpreis
+    // "Trittschutzblech" (Zuschnitt Flügelbreite − 44mm, aber lt. Thomas als Festpreis pro Stk kalkuliert).
+    const trittblechKosten = ausfuehrungObj.dt3Zusatz ? getPreis("trittschutzblech") : getPreis("trittblech");
+    // Bürstenprofil unten (Art. 12919, nur DT3) — Preis pro 6m-Stange, Zuschnitt = Flügelbreite.
+    const buerstenprofilKosten = ausfuehrungObj.dt3Zusatz ? (buerstenprofilLaengeMm / 1000 / 6) * getPreis("buerstenprofil_unten") : 0;
     // Pendeltür-Zusatzausstattung lt. Notizzettel: Griffleiste + Quersprosse (je 1x Rahmenbreite als 6m-Stangenanteil)
-    // + je 2 T-Verbinder, plus Magnetband umlaufend (2x Rahmenhöhe).
-    const griffleisteKosten = ausfuehrungObj.pendelZusatz ? (rahmenbreite / 1000 / 6) * getPreis("griffleiste") + 2 * getPreis("tverbinder_griffleiste") : 0;
-    const quersprosseKosten = ausfuehrungObj.pendelZusatz ? (rahmenbreite / 1000 / 6) * getPreis("quersprosse") + 2 * getPreis("tverbinder_quersprosse") : 0;
+    // + je 2 T-Verbinder, plus Magnetband umlaufend (2x Rahmenhöhe). Bei DT3 & DT4 ist die Griffleiste optional
+    // (Checkbox) und wird mit Zuschnitt Flügelbreite − 70mm kalkuliert, ohne T-Verbinder; Querprofil (immer bei
+    // DT3) ebenso.
+    const griffleisteKosten = ausfuehrungObj.pendelZusatz
+        ? (rahmenbreite / 1000 / 6) * getPreis("griffleiste") + 2 * getPreis("tverbinder_griffleiste")
+        : (ausfuehrungObj.griffleisteOptional && griffleisteVerbaut)
+            ? (griffleisteLaengeMm / 1000 / 6) * getPreis("griffleiste")
+            : 0;
+    const quersprosseKosten = ausfuehrungObj.pendelZusatz
+        ? (rahmenbreite / 1000 / 6) * getPreis("quersprosse") + 2 * getPreis("tverbinder_quersprosse")
+        : ausfuehrungObj.dt3Zusatz
+            ? (querprofilLaengeMm / 1000 / 6) * getPreis("quersprosse")
+            : 0;
     const magnetbandKosten = ausfuehrungObj.pendelZusatz ? (2 * rahmenhoehe / 1000) * getPreis("magnetband") : 0;
-    const materialkosten = zargeKosten + fluegelKosten + gewebeKosten + scharnierKosten + schwelleKosten + kederKosten + trittblechKosten + griffleisteKosten + quersprosseKosten + magnetbandKosten + fixkostenKleinteile;
+    const materialkosten = zargeKosten + fluegelKosten + gewebeKosten + scharnierKosten + schwelleKosten + kederKosten + trittblechKosten + buerstenprofilKosten + griffleisteKosten + quersprosseKosten + magnetbandKosten + fixkostenKleinteile;
     const stundensatz = getPreis("stundensatz") || 55;
     const basisStunden = getPreis("basisstunden") || 0.8;
     const stunden = basisStunden + gewebeflaecheM2 * 0.2;
@@ -3407,14 +3460,43 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
         `Zarge: ${ausfuehrungObj.zargeLabel} (Art. ${ausfuehrungObj.zargeArtNr})`,
         `Flügelprofil: ${ausfuehrungObj.fluegelLabel} (Art. ${ausfuehrungObj.fluegelArtNr})`,
         `Scharnier: ${ausfuehrungObj.scharnierLabel} (Art. ${ausfuehrungObj.scharnierArtNr}, ${ausfuehrungObj.scharnierAnzahl}x)`,
+        ausfuehrungObj.dt3Zusatz ? `Querprofil (Art. 12930): ${querprofilLaengeMm.toFixed(0)} mm` : null,
+        ausfuehrungObj.dt3Zusatz ? `Bürstenprofil unten (Art. 12919): ${buerstenprofilLaengeMm.toFixed(0)} mm` : null,
+        ausfuehrungObj.griffleisteOptional && griffleisteVerbaut ? `Griffleiste (Art. 12931): ${griffleisteLaengeMm.toFixed(0)} mm, Position: ${griffleistePosition === "mittig" ? "mittig" : `Maß UK Rahmen–Mitte Griffleiste = ${griffleisteMass !== null && griffleisteMass !== void 0 ? griffleisteMass : "?"} mm`}` : null,
         `Farbe: ${displayLabel}`,
         `Gewebe: ${gewebeObj.label} (${gewebeObj.farbe})`,
-    ].join("\n");
+    ].filter(Boolean).join("\n");
+    // Teileliste für die Produktion: alle Teile, die zu dieser Tür gehören, mit Art.-Nr. und Menge/Zuschnitt —
+    // lt. Thomas (18.09.2026) sollen in der Produktion-Ansicht ALLE Teile aufgelistet sein, nicht nur die Maße.
+    // Trittschutzblech (nur DT3): Zuschnitt Flügelbreite − 44mm — reiner Produktionswert, der Preis bleibt
+    // lt. Thomas ein Fixpreis (siehe trittblechKosten oben) und hängt NICHT von diesem Maß ab.
+    const trittschutzblechLaengeMm = fluegelbreite - 44;
+    const teileliste = [
+        { label: "Zarge", artNr: ausfuehrungObj.zargeArtNr, menge: `${zargeUmfangM.toFixed(2)} lfm` },
+        { label: "Flügelprofil", artNr: ausfuehrungObj.fluegelArtNr, menge: `${fluegelUmfangM.toFixed(2)} lfm` },
+    ]
+        .concat(ausfuehrungObj.scharnierTeile
+        ? ausfuehrungObj.scharnierTeile.map((t) => ({ label: t.label, artNr: t.artNr, menge: `${t.anzahl}×` }))
+        : [{ label: ausfuehrungObj.scharnierLabel, artNr: ausfuehrungObj.scharnierArtNr, menge: `${ausfuehrungObj.scharnierAnzahl}×` }])
+        .concat(ausfuehrungObj.schwelleArtNr ? [{ label: "Schwellenprofil", artNr: ausfuehrungObj.schwelleArtNr, menge: "1×" }] : [])
+        .concat(!ausfuehrungObj.dt3Zusatz ? [{ label: "Trittblech", artNr: "11006", menge: "1×" }] : [])
+        .concat(ausfuehrungObj.pendelZusatz ? [
+        { label: "Griffleiste", artNr: "12931", menge: `${(rahmenbreite / 1000).toFixed(2)} m` },
+        { label: "T-Verbinder Griffleiste", artNr: "11297", menge: "2×" },
+        { label: "Quersprosse", artNr: "12930", menge: `${(rahmenbreite / 1000).toFixed(2)} m` },
+        { label: "T-Verbinder Quersprosse", artNr: "11294", menge: "2×" },
+        { label: "Magnetband", artNr: "12960", menge: `${(2 * rahmenhoehe / 1000).toFixed(2)} lfm` },
+    ] : [])
+        .concat([
+        { label: "Keder", artNr: null, menge: `${(fluegelUmfangM + kederZusatzMm / 1000).toFixed(2)} lfm` },
+        { label: "Kleinteile", artNr: null, menge: "—" },
+        { label: `Gewebe ${gewebeObj.label}`, artNr: null, menge: `${gewebeflaecheM2.toFixed(2)} m²` },
+    ]);
     const eingabeUnvollstaendig = lichteBreite === null || lichteHoehe === null;
     const addToListe = () => {
         if (eingabeUnvollstaendig)
             return;
-        const config = { lichteBreite, lichteHoehe, ausfuehrungTyp, gewebeTyp, heroalNr, customRal };
+        const config = { lichteBreite, lichteHoehe, ausfuehrungTyp, gewebeTyp, heroalNr, customRal, griffleisteVerbaut, griffleistePosition, griffleisteMass };
         const item = {
             id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), position: positionEingabe, kunde: kunde || "—", lichteBreite, lichteHoehe, rahmenbreite, rahmenhoehe, fluegelbreite, fluegelhoehe,
             ausfuehrungLabel: ausfuehrungObj.label, gewebeLabel: gewebeObj.label, colorLabel: displayLabel,
@@ -3452,6 +3534,13 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                     React.createElement(Num, { label: ausfuehrungObj.hoeheBasis === "mass" ? "Maß H (direkt gemessen)" : "Lichte Höhe", value: lichteHoehe, onChange: setLichteHoehe, unit: "mm", min: 800, allowEmpty: true }),
                     React.createElement(Select, { label: "T\u00FCranschlag", value: anschlag, onChange: setAnschlag, options: [{ value: "links", label: "Links" }, { value: "rechts", label: "Rechts" }], className: "col-span-2" }),
                     React.createElement(Select, { label: "Gewebe", value: gewebeTyp, onChange: setGewebeTyp, options: GEWEBE_TYPEN.map((g) => ({ value: g.id, label: `${g.label} (${g.farbe})` })), className: "col-span-2" })),
+                ausfuehrungObj.griffleisteOptional && (React.createElement("div", { className: "border border-[#D8D4C8] rounded-md bg-white px-3 py-2.5 flex flex-col gap-2" },
+                    React.createElement("label", { className: "flex items-center gap-2 text-[13px] text-[#1B1F24]" },
+                        React.createElement("input", { type: "checkbox", checked: griffleisteVerbaut, onChange: (e) => setGriffleisteVerbaut(e.target.checked), className: "accent-[#E8963B] w-4 h-4" }),
+                        "Griffleiste (Art. 12931) verbaut"),
+                    griffleisteVerbaut && (React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6" },
+                        React.createElement(Select, { label: "Griffleiste Position", value: griffleistePosition, onChange: setGriffleistePosition, options: [{ value: "mittig", label: "Mittig" }, { value: "mass", label: "Eigenes Ma\u00DF" }] }),
+                        griffleistePosition === "mass" && React.createElement(Num, { label: "Ma\u00DF UK Rahmen \u2013 Mitte Griffleiste", value: griffleisteMass, onChange: setGriffleisteMass, unit: "mm", min: 0, allowEmpty: true }))))),
                 React.createElement("p", { className: "text-[11px] text-[#8A8F98] -mt-2" }, gewebeObj.info),
                 React.createElement("div", { className: "border border-[#D8D4C8] rounded-md bg-[#FFF8EF] px-3 py-2 text-[11.5px] text-[#8A6438]" },
                     React.createElement("b", null, ausfuehrungObj.label),
@@ -3491,30 +3580,57 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                     bearbeitungsId ? "Änderungen speichern" : "In den Warenkorb"))),
             tab === "produktion" && (React.createElement("div", { className: "flex flex-col gap-4" },
                 React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3" },
-                    React.createElement("div", { className: "border border-[#E2DFD3] rounded-lg bg-white px-3.5 py-2.5" },
+                    React.createElement("div", { className: "border-2 border-[#E8963B] rounded-lg bg-[#FFF8EF] px-3.5 py-2.5" },
                         React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "Rahmenbreite (Zarge)"),
-                        React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#1B1F24] mt-0.5" },
+                        React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#B96A16] font-semibold mt-0.5" },
                             rahmenbreite,
                             " ",
                             React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm"))),
-                    React.createElement("div", { className: "border border-[#E2DFD3] rounded-lg bg-white px-3.5 py-2.5" },
+                    React.createElement("div", { className: "border-2 border-[#E8963B] rounded-lg bg-[#FFF8EF] px-3.5 py-2.5" },
                         React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "Rahmenh\u00F6he (Zarge)"),
-                        React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#1B1F24] mt-0.5" },
+                        React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#B96A16] font-semibold mt-0.5" },
                             rahmenhoehe,
                             " ",
                             React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm"))),
-                    React.createElement("div", { className: "border border-[#E2DFD3] rounded-lg bg-white px-3.5 py-2.5" },
+                    React.createElement("div", { className: "border-2 border-[#E8963B] rounded-lg bg-[#FFF8EF] px-3.5 py-2.5" },
                         React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "Fl\u00FCgelbreite"),
-                        React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#1B1F24] mt-0.5" },
+                        React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#B96A16] font-semibold mt-0.5" },
                             fluegelbreite.toFixed(1),
                             " ",
                             React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm"))),
-                    React.createElement("div", { className: "border border-[#E2DFD3] rounded-lg bg-white px-3.5 py-2.5" },
+                    React.createElement("div", { className: "border-2 border-[#E8963B] rounded-lg bg-[#FFF8EF] px-3.5 py-2.5" },
                         React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "Fl\u00FCgelh\u00F6he"),
-                        React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#1B1F24] mt-0.5" },
+                        React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#B96A16] font-semibold mt-0.5" },
                             fluegelhoehe.toFixed(1),
                             " ",
                             React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm"))),
+                    ausfuehrungObj.griffleisteOptional && griffleisteVerbaut && (React.createElement("div", { className: "border-2 border-[#E8963B] rounded-lg bg-[#FFF8EF] px-3.5 py-2.5" },
+                        React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "Griffleiste"),
+                        React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#B96A16] font-semibold mt-0.5" },
+                            griffleisteLaengeMm.toFixed(0),
+                            " ",
+                            React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm")),
+                        React.createElement("div", { className: "text-[10px] text-[#8A8F98] mt-0.5" },
+                            "Art. 12931 \u00B7 Position: ",
+                            griffleistePosition === "mittig" ? "mittig" : `UK Rahmen\u2013Mitte = ${griffleisteMass !== null && griffleisteMass !== void 0 ? griffleisteMass : "?"} mm`))),
+                    ausfuehrungObj.dt3Zusatz && (React.createElement("div", { className: "border-2 border-[#E8963B] rounded-lg bg-[#FFF8EF] px-3.5 py-2.5" },
+                        React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "Trittschutzblech"),
+                        React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#B96A16] font-semibold mt-0.5" },
+                            trittschutzblechLaengeMm.toFixed(0),
+                            " ",
+                            React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm")))),
+                    ausfuehrungObj.dt3Zusatz && (React.createElement("div", { className: "border-2 border-[#E8963B] rounded-lg bg-[#FFF8EF] px-3.5 py-2.5" },
+                        React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "Querprofil"),
+                        React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#B96A16] font-semibold mt-0.5" },
+                            querprofilLaengeMm.toFixed(0),
+                            " ",
+                            React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm")))),
+                    ausfuehrungObj.dt3Zusatz && (React.createElement("div", { className: "border-2 border-[#E8963B] rounded-lg bg-[#FFF8EF] px-3.5 py-2.5" },
+                        React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "B\u00FCrstenprofil unten"),
+                        React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#B96A16] font-semibold mt-0.5" },
+                            buerstenprofilLaengeMm.toFixed(0),
+                            " ",
+                            React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm")))),
                     React.createElement("div", { className: "border border-[#E2DFD3] rounded-lg bg-white px-3.5 py-2.5" },
                         React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "Zargenumfang"),
                         React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#1B1F24] mt-0.5" },
@@ -3543,18 +3659,34 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                     "mm H\u00F6he) \u2014 lt. heroal IS Katalog S. ",
                     ausfuehrungObj.seite,
                     "."),
+                React.createElement("div", { className: "border border-[#E2DFD3] rounded-lg bg-white overflow-hidden overflow-x-auto" },
+                    React.createElement("table", { className: "w-full text-[12px]" },
+                        React.createElement("thead", null,
+                            React.createElement("tr", { className: "bg-[#F0EEE4] text-[10px] uppercase tracking-wide text-[#5B6472]" },
+                                React.createElement("th", { className: "text-left px-2.5 py-1.5 font-medium" }, "Teil"),
+                                React.createElement("th", { className: "text-right px-2.5 py-1.5 font-medium" }, "Maß"))),
+                        React.createElement("tbody", null, teileliste.map((t, i) => (React.createElement("tr", { key: i, className: "border-t border-[#E2DFD3]" },
+                            React.createElement("td", { className: "px-2.5 py-1.5 text-[#1B1F24]" },
+                                t.label,
+                                " ",
+                                t.artNr && React.createElement("span", { className: "text-[10px] text-[#8A8F98]" }, "Art. ", t.artNr),
+                                t.note && React.createElement("span", { className: "block text-[10px] text-[#8A8F98]" }, t.note)),
+                            React.createElement("td", { className: "px-2.5 py-1.5 text-right font-['IBM_Plex_Mono'] text-[#1B1F24] whitespace-nowrap" }, t.menge))))))),
                 React.createElement("button", { onClick: () => druckeUebersicht("Drehtür — " + ausfuehrungObj.label, kunde, [
                         ["Ausführung", `${ausfuehrungObj.label} (S. ${ausfuehrungObj.seite})`],
                         [ausfuehrungObj.breiteBasis === "mass" ? "Maß B" : "Lichte Breite", `${lichteBreite} mm`],
                         [ausfuehrungObj.hoeheBasis === "mass" ? "Maß H" : "Lichte Höhe", `${lichteHoehe} mm`],
                         ["Rahmenbreite (Zarge)", `${rahmenbreite} mm`], ["Rahmenhöhe (Zarge)", `${rahmenhoehe} mm`],
                         ["Flügelbreite", `${fluegelbreite.toFixed(1)} mm`], ["Flügelhöhe", `${fluegelhoehe.toFixed(1)} mm`],
-                        ["Zarge", `${ausfuehrungObj.zargeLabel} (Art. ${ausfuehrungObj.zargeArtNr})`],
-                        ["Flügelprofil", `${ausfuehrungObj.fluegelLabel} (Art. ${ausfuehrungObj.fluegelArtNr})`],
-                        ["Scharnier", `${ausfuehrungObj.scharnierLabel} (Art. ${ausfuehrungObj.scharnierArtNr}, ${ausfuehrungObj.scharnierAnzahl}×)`],
-                        ...(ausfuehrungObj.schwelleArtNr ? [["Schwellenprofil", `Art. ${ausfuehrungObj.schwelleArtNr}`]] : []),
+                        ...(ausfuehrungObj.griffleisteOptional && griffleisteVerbaut ? [["Griffleiste (Art. 12931)", `${griffleisteLaengeMm.toFixed(0)} mm — Position: ${griffleistePosition === "mittig" ? "mittig" : `UK Rahmen–Mitte = ${griffleisteMass !== null && griffleisteMass !== void 0 ? griffleisteMass : "?"} mm`}`]] : []),
+                        ...(ausfuehrungObj.dt3Zusatz ? [
+                            ["Trittschutzblech", `${trittschutzblechLaengeMm.toFixed(0)} mm`],
+                            ["Querprofil (Art. 12930)", `${querprofilLaengeMm.toFixed(0)} mm`],
+                            ["Bürstenprofil unten (Art. 12919)", `${buerstenprofilLaengeMm.toFixed(0)} mm`],
+                        ] : []),
                         ["Türanschlag", anschlag === "links" ? "Links" : "Rechts"],
                         ["Gewebe", `${gewebeObj.label} (${gewebeObj.farbe})`], ["Farbe", displayLabel],
+                        ...teileliste.map((t) => [t.label, `${t.menge}${t.artNr ? ` \u00B7 Art. ${t.artNr}` : ""}${t.note ? ` \u00B7 ${t.note}` : ""}`]),
                     ], ausfuehrungObj.hinweis), className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333] transition-colors" }, "Produktions\u00FCbersicht drucken"))),
             tab === "kalkulation" && (React.createElement("div", { className: "flex flex-col gap-4" },
                 React.createElement("div", { className: "flex justify-end" },
@@ -3647,17 +3779,31 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                             React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
                                 gewebeKosten.toFixed(2),
                                 " \u20AC")),
-                        React.createElement("div", { className: "flex justify-between" },
-                            React.createElement("span", null,
-                                ausfuehrungObj.scharnierLabel,
-                                " (",
-                                ausfuehrungObj.scharnierAnzahl,
-                                "\u00D7",
-                                getPreis(`scharnier_${ausfuehrungTyp}`) === 0 ? " · kein Preis hinterlegt" : "",
-                                ")"),
-                            React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
-                                scharnierKosten.toFixed(2),
-                                " \u20AC")),
+                        ausfuehrungObj.scharnierTeile
+                            ? ausfuehrungObj.scharnierTeile.map((t) => (React.createElement("div", { className: "flex justify-between", key: t.key },
+                                React.createElement("span", null,
+                                    t.label,
+                                    " (Art. ",
+                                    t.artNr,
+                                    ", ",
+                                    t.anzahl,
+                                    "\u00D7",
+                                    getPreis(t.key) === 0 ? " \u00B7 kein Preis hinterlegt" : "",
+                                    ")"),
+                                React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
+                                    (getPreis(t.key) * t.anzahl).toFixed(2),
+                                    " \u20AC"))))
+                            : React.createElement("div", { className: "flex justify-between" },
+                                React.createElement("span", null,
+                                    ausfuehrungObj.scharnierLabel,
+                                    " (",
+                                    ausfuehrungObj.scharnierAnzahl,
+                                    "\u00D7",
+                                    getPreis(`scharnier_${ausfuehrungTyp}`) === 0 ? " \u00B7 kein Preis hinterlegt" : "",
+                                    ")"),
+                                React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
+                                    scharnierKosten.toFixed(2),
+                                    " \u20AC")),
                         ausfuehrungObj.schwelleArtNr && (React.createElement("div", { className: "flex justify-between" },
                             React.createElement("span", null,
                                 "Schwellenprofil (Art. ",
@@ -3685,16 +3831,42 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                                 React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
                                     magnetbandKosten.toFixed(2),
                                     " \u20AC")))),
+                        ausfuehrungObj.dt3Zusatz && (React.createElement(React.Fragment, null,
+                            React.createElement("div", { className: "flex justify-between" },
+                                React.createElement("span", null,
+                                    "Querprofil (Art. 12930, ",
+                                    querprofilLaengeMm.toFixed(0),
+                                    " mm)"),
+                                React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
+                                    quersprosseKosten.toFixed(2),
+                                    " \u20AC")),
+                            React.createElement("div", { className: "flex justify-between" },
+                                React.createElement("span", null,
+                                    "B\u00FCrstenprofil unten (Art. 12919, ",
+                                    buerstenprofilLaengeMm.toFixed(0),
+                                    " mm)"),
+                                React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
+                                    buerstenprofilKosten.toFixed(2),
+                                    " \u20AC")))),
+                        ausfuehrungObj.griffleisteOptional && griffleisteVerbaut && React.createElement("div", { className: "flex justify-between" },
+                            React.createElement("span", null,
+                                "Griffleiste (Art. 12931, ",
+                                griffleisteLaengeMm.toFixed(0),
+                                " mm)"),
+                            React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
+                                griffleisteKosten.toFixed(2),
+                                " \u20AC")),
                         React.createElement("div", { className: "flex justify-between" },
                             React.createElement("span", null,
                                 "Keder (",
                                 fluegelUmfangM.toFixed(2),
-                                " lfm)"),
+                                kederZusatzMm > 0 ? ` lfm + ${(kederZusatzMm / 1000).toFixed(2)} lfm Griffleiste` : " lfm",
+                                ")"),
                             React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
                                 kederKosten.toFixed(2),
                                 " \u20AC")),
                         React.createElement("div", { className: "flex justify-between" },
-                            React.createElement("span", null, "Trittblech (Art. 11006)"),
+                            React.createElement("span", null, ausfuehrungObj.dt3Zusatz ? "Trittschutzblech (Fixpreis)" : "Trittblech (Art. 11006)"),
                             React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
                                 trittblechKosten.toFixed(2),
                                 " \u20AC")),
@@ -3710,7 +3882,13 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                     React.createElement("p", { className: "text-[10.5px] uppercase tracking-wide text-[#5B6472] font-medium mb-2" }, "Fl\u00FCgelprofile \u2014 Preis pro 6m-Stange"),
                     React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4" }, DREHTUER_AUSFUEHRUNG.map((a) => (React.createElement(Num, { key: a.id, label: `${a.label} — ${a.fluegelLabel} (Art. ${a.fluegelArtNr})`, value: getPreis(`fluegel_${a.id}`), onChange: (v) => setPreis(`fluegel_${a.id}`, v), unit: "\u20AC", min: 0 })))),
                     React.createElement("p", { className: "text-[10.5px] uppercase tracking-wide text-[#5B6472] font-medium mb-2" }, "Scharniere \u2014 Preis pro St\u00FCck"),
-                    React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4" }, DREHTUER_AUSFUEHRUNG.map((a) => (React.createElement(Num, { key: a.id, label: `${a.label} — ${a.scharnierLabel} (Art. ${a.scharnierArtNr})`, value: getPreis(`scharnier_${a.id}`), onChange: (v) => setPreis(`scharnier_${a.id}`, v), unit: "\u20AC/Stk", min: 0 })))),
+                    React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4" }, DREHTUER_AUSFUEHRUNG.filter((a) => !a.scharnierTeile).map((a) => (React.createElement(Num, { key: a.id, label: `${a.label} — ${a.scharnierLabel} (Art. ${a.scharnierArtNr})`, value: getPreis(`scharnier_${a.id}`), onChange: (v) => setPreis(`scharnier_${a.id}`, v), unit: "\u20AC/Stk", min: 0 })))),
+                    React.createElement("p", { className: "text-[10.5px] uppercase tracking-wide text-[#5B6472] font-medium mb-2" }, "Scharnier-Kleinteile (DT3 & DT4, je 3\u00D7 pro T\u00FCr) \u2014 Preis pro St\u00FCck"),
+                    React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4" },
+                        React.createElement(Num, { label: "Scharnierteil 11001", value: getPreis("scharnier_11001"), onChange: (v) => setPreis("scharnier_11001", v), unit: "\u20AC/Stk", min: 0 }),
+                        React.createElement(Num, { label: "Scharnierteil 11033", value: getPreis("scharnier_11033"), onChange: (v) => setPreis("scharnier_11033", v), unit: "\u20AC/Stk", min: 0 }),
+                        React.createElement(Num, { label: "Scharnierstift 11005", value: getPreis("stift_11005"), onChange: (v) => setPreis("stift_11005", v), unit: "\u20AC/Stk", min: 0 }),
+                        React.createElement(Num, { label: "Beilagscheibe 11000", value: getPreis("beilagscheibe_11000"), onChange: (v) => setPreis("beilagscheibe_11000", v), unit: "\u20AC/Stk", min: 0 })),
                     React.createElement("p", { className: "text-[10.5px] uppercase tracking-wide text-[#5B6472] font-medium mb-2" }, "Gewebe \u2014 Preis pro m\u00B2"),
                     React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4" }, GEWEBE_TYPEN.map((g) => (React.createElement(Num, { key: g.id, label: g.label, value: getPreis(`gewebe_${g.id}`), onChange: (v) => setPreis(`gewebe_${g.id}`, v), unit: "\u20AC/m\u00B2", min: 0 })))),
                     React.createElement("p", { className: "text-[10.5px] uppercase tracking-wide text-[#5B6472] font-medium mb-2" }, "Sonstiges"),
@@ -3730,6 +3908,11 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                         React.createElement(Num, { label: "Quersprosse (12930) \u2014 Preis pro 6m-Stange", value: getPreis("quersprosse"), onChange: (v) => setPreis("quersprosse", v), unit: "\u20AC", min: 0 }),
                         React.createElement(Num, { label: "T-Verbinder Quersprosse (11294) \u2014 pro Stk", value: getPreis("tverbinder_quersprosse"), onChange: (v) => setPreis("tverbinder_quersprosse", v), unit: "\u20AC", min: 0 }),
                         React.createElement(Num, { label: "Magnetband (12960)", value: getPreis("magnetband"), onChange: (v) => setPreis("magnetband", v), unit: "\u20AC/lfm", min: 0 }))),
+                    React.createElement("p", { className: "text-[10.5px] uppercase tracking-wide text-[#5B6472] font-medium mb-2" }, "DT 3-seitig \u2014 Zusatzteile (Querprofil/Trittschutzblech/B\u00FCrstenprofil/Griffleiste)"),
+                    React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4" },
+                        React.createElement(Num, { label: "Trittschutzblech (Fixpreis, wird bei DT3 immer verbaut)", value: getPreis("trittschutzblech"), onChange: (v) => setPreis("trittschutzblech", v), unit: "\u20AC/Stk", min: 0 }),
+                        React.createElement(Num, { label: "B\u00FCrstenprofil unten (12919) \u2014 Preis pro 6m-Stange", value: getPreis("buerstenprofil_unten"), onChange: (v) => setPreis("buerstenprofil_unten", v), unit: "\u20AC", min: 0 })),
+                    React.createElement("p", { className: "text-[11px] text-[#8A8F98] mb-3" }, "Querprofil (12930) und Griffleiste (12931) bei DT3 nutzen dieselben Preisfelder wie bei der Pendelt\u00FCr oben (Preis pro 6m-Stange), nur ohne T-Verbinder \u2014 die L\u00E4nge wird bei DT3 als Fl\u00FCgelbreite \u2212 70mm berechnet."),
                 React.createElement(Section, { title: "Positionstext (f\u00FCr Angebot / Auftrag)", defaultOpen: false },
                     React.createElement("textarea", { readOnly: true, value: positionstext, className: "w-full h-[160px] border border-[#D8D4C8] rounded-md px-3 py-2 text-[12.5px] font-['IBM_Plex_Mono'] text-[#1B1F24] bg-[#F5F4EF] outline-none resize-none" }),
                     React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(positionstext); }, className: "mt-2 flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[#1B1F24] text-white text-[13px] font-medium hover:bg-[#333] transition-colors" }, "Text kopieren")))),
