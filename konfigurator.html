@@ -2545,6 +2545,16 @@ async function getChefPasswordHash() {
     }
     return __chefHashCache;
 }
+// Firmen-Stammdaten für den Briefkopf im Kundenauftrag-Ausdruck (dieselben Angaben wie im
+// Baustellenplaner unter Einstellungen > Firmenadresse hinterlegt).
+const FIRMA = {
+    name: "Th-Sonnenschutz",
+    street: "Laab 10",
+    city: "4770 Andorf",
+    tel: "07766/50424",
+    mobile: "+43 664/5175730",
+    mail: "office@th-sonnenschutz.at",
+};
 // Öffnet ein eigenes, schlankes Druckfenster mit Logo/Firma/Kunde/Datum + Tabellenzeilen und startet
 // den Druckdialog. Zuverlässiger als CSS-Versteck-Tricks, funktioniert auch auf mobilen Browsern.
 function druckeUebersicht(titel, kunde, zeilen, hinweis) {
@@ -2585,6 +2595,81 @@ function druckeUebersicht(titel, kunde, zeilen, hinweis) {
     fenster.onload = () => { fenster.focus(); fenster.print(); };
     setTimeout(() => { fenster.focus(); fenster.print(); }, 400); // Fallback falls onload nicht feuert
 }
+// Eigener, repräsentativer Ausdruck für "Kompletten Kundenauftrag drucken" (Kundenübersicht) —
+// mit vollständigem Briefkopf (Logo + Firmenadresse) und der Adresse des Kunden, damit der
+// Ausdruck als richtiges Auftragsdokument taugt statt nur als interne Zuschnitt-Notiz.
+function druckeKundenauftrag(kunde, kundeAdresse, positionen, gesamtEk, gesamtBrutto) {
+    const heute = new Date().toLocaleDateString("de-AT");
+    const zeilenHtml = positionen.map((p) => {
+        var _a;
+        const ekWert = (((_a = p.item.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * p.item.menge).toFixed(2);
+        const vkWert = (p.item.preisBrutto * p.item.menge).toFixed(2);
+        return `
+    <tr>
+      <td style="padding:7px 4px;color:#1B1F24;font-weight:600;border-bottom:1px solid #D8D4C8;">${p.produktLabel}</td>
+      <td style="padding:7px 4px;color:#5B6472;border-bottom:1px solid #D8D4C8;">${positionKurzbeschreibung(p.produktKey, p.item)}</td>
+      <td style="padding:7px 4px;color:#5B6472;text-align:right;border-bottom:1px solid #D8D4C8;">${p.item.menge}×</td>
+      <td style="padding:7px 4px;color:#8A8F98;text-align:right;font-family:monospace;border-bottom:1px solid #D8D4C8;">${ekWert} €</td>
+      <td style="padding:7px 4px;color:#1B1F24;font-weight:700;text-align:right;font-family:monospace;border-bottom:1px solid #D8D4C8;">${vkWert} €</td>
+    </tr>`;
+    }).join("");
+    const adressZeile = [kundeAdresse === null || kundeAdresse === void 0 ? void 0 : kundeAdresse.street, kundeAdresse === null || kundeAdresse === void 0 ? void 0 : kundeAdresse.city].filter(Boolean).join(", ");
+    const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>Kundenauftrag — ${kunde} — Druckübersicht</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 28px; color: #1B1F24; margin: 0; }
+      .kopf { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; border-bottom: 2px solid #1B1F24; padding-bottom: 14px; margin-bottom: 18px; }
+      .kopf-links { display: flex; align-items: center; gap: 14px; }
+      .kopf img { width: 56px; height: 56px; }
+      .firma { font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: #E8963B; font-weight: 600; }
+      .titel { font-size: 20px; font-weight: 700; }
+      .firma-adresse { font-size: 11px; color: #5B6472; text-align: right; line-height: 1.5; }
+      .kunde-block { background: #F5F4EF; border: 1px solid #E2DFD3; border-radius: 6px; padding: 12px 16px; margin-bottom: 18px; }
+      .kunde-block .label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #8A8F98; margin-bottom: 3px; }
+      .kunde-block .name { font-size: 16px; font-weight: 700; }
+      .kunde-block .adresse { font-size: 12.5px; color: #5B6472; margin-top: 2px; }
+      .meta { display: flex; justify-content: flex-end; font-size: 12.5px; color: #5B6472; margin-bottom: 10px; }
+      table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+      thead th { text-align: left; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: #5B6472; border-bottom: 2px solid #1B1F24; padding: 4px; }
+      tfoot td { padding: 10px 4px 2px; font-weight: 700; }
+      .hinweis { font-size: 11px; color: #8A8F98; margin-top: 18px; }
+      @media print { body { padding: 10px; } }
+    </style></head>
+    <body>
+      <div class="kopf">
+        <div class="kopf-links">
+          <img src="${LOGO_IMAGE}" alt="Logo" />
+          <div><div class="firma">${FIRMA.name}</div><div class="titel">Kundenauftrag</div></div>
+        </div>
+        <div class="firma-adresse">${FIRMA.street}<br>${FIRMA.city}<br>Tel.: ${FIRMA.tel} · ${FIRMA.mobile}<br>${FIRMA.mail}</div>
+      </div>
+      <div class="meta"><span><b>Datum:</b>&nbsp;${heute}</span></div>
+      <div class="kunde-block">
+        <div class="label">Auftraggeber</div>
+        <div class="name">${kunde || "—"}</div>
+        ${adressZeile ? `<div class="adresse">${adressZeile}</div>` : ""}
+        ${(kundeAdresse === null || kundeAdresse === void 0 ? void 0 : kundeAdresse.phone) ? `<div class="adresse">Tel.: ${kundeAdresse.phone}</div>` : ""}
+        ${(kundeAdresse === null || kundeAdresse === void 0 ? void 0 : kundeAdresse.email) ? `<div class="adresse">${kundeAdresse.email}</div>` : ""}
+        ${(kundeAdresse === null || kundeAdresse === void 0 ? void 0 : kundeAdresse.isBusiness) && (kundeAdresse === null || kundeAdresse === void 0 ? void 0 : kundeAdresse.uid) ? `<div class="adresse">UID: ${kundeAdresse.uid}</div>` : ""}
+      </div>
+      <table>
+        <thead><tr><th>Produkt</th><th>Beschreibung</th><th style="text-align:right;">Menge</th><th style="text-align:right;">EK</th><th style="text-align:right;">VK (brutto)</th></tr></thead>
+        <tbody>${zeilenHtml}</tbody>
+        <tfoot>
+          <tr><td colspan="3"></td><td style="text-align:right;color:#8A8F98;">${gesamtEk.toFixed(2)} €</td><td style="text-align:right;font-size:15px;">${gesamtBrutto.toFixed(2)} €</td></tr>
+        </tfoot>
+      </table>
+      <p class="hinweis">${positionen.length} Position(en) über alle Produkte.</p>
+    </body></html>`;
+    const fenster = window.open("", "_blank");
+    if (!fenster) {
+        alert("Bitte Pop-ups für diese Seite erlauben, um drucken zu können.");
+        return;
+    }
+    fenster.document.write(html);
+    fenster.document.close();
+    fenster.onload = () => { fenster.focus(); fenster.print(); };
+    setTimeout(() => { fenster.focus(); fenster.print(); }, 400); // Fallback falls onload nicht feuert
+}
 // ============================================================
 // GEMEINSAME KUNDENVERWALTUNG (produktübergreifend, alle 6 Konfiguratoren teilen sich diese Liste)
 // ============================================================
@@ -2605,6 +2690,14 @@ function loadKunden(setKunden) {
 function loadKundeDetails(name, cb) {
     if (!__thbpClient || !name) { cb(null); return; }
     __thbpClient.from("customers").select("email,isBusiness,uid").eq("name", name).maybeSingle().then((res) => {
+        cb((res && res.data) || null);
+    }).catch(() => cb(null));
+}
+// Lädt zusätzlich Straße/Ort/Telefon (im Baustellenplaner unter "Kunden" gepflegt) — für den
+// Briefkopf im Kundenauftrag-Ausdruck der Kundenübersicht.
+function loadKundeVollDetails(name, cb) {
+    if (!__thbpClient || !name) { cb(null); return; }
+    __thbpClient.from("customers").select("street,city,phone,email,isBusiness,uid").eq("name", name).maybeSingle().then((res) => {
         cb((res && res.data) || null);
     }).catch(() => cb(null));
 }
@@ -5505,6 +5598,7 @@ function Einstellungen({ onZurueck }) {
 function KundenUebersicht({ onZurueck, onBearbeiten }) {
     const [kunden, setKunden] = useState([]);
     const [ausgewaehlt, setAusgewaehlt] = useState(null);
+    const [kundeAdresse, setKundeAdresse] = useState(null); // {street, city, phone, email, isBusiness, uid} — für den Briefkopf im Ausdruck
     const [positionen, setPositionen] = useState([]); // [{produktKey, produktLabel, item}]
     const [ladeStatus, setLadeStatus] = useState("idle");
     useEffect(() => { loadKunden(setKunden); }, []);
@@ -5528,21 +5622,16 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
         setPositionen(alle);
         setLadeStatus("fertig");
     };
-    const kundeWaehlen = (name) => { setAusgewaehlt(name); ladePositionen(name); };
+    const kundeWaehlen = (name) => { setAusgewaehlt(name); setKundeAdresse(null); loadKundeVollDetails(name, setKundeAdresse); ladePositionen(name); };
     const gesamtEk = positionen.reduce((s, p) => { var _a; return s + ((_a = p.item.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * p.item.menge; }, 0);
     const gesamtBrutto = positionen.reduce((s, p) => { var _a; return s + ((_a = p.item.preisBrutto) !== null && _a !== void 0 ? _a : 0) * p.item.menge; }, 0);
     const alleDrucken = () => {
-        const zeilen = positionen.map((p) => [
-            `${p.produktLabel} — ${positionKurzbeschreibung(p.produktKey, p.item)}`,
-            `${p.item.menge}× — ${(p.item.preisBrutto * p.item.menge).toFixed(2)} € brutto`,
-        ]);
-        zeilen.push(["— GESAMT —", `${gesamtBrutto.toFixed(2)} € brutto`]);
-        druckeUebersicht(`Kundenauftrag — ${ausgewaehlt}`, ausgewaehlt, zeilen, `${positionen.length} Position(en) über alle Produkte.`);
+        druckeKundenauftrag(ausgewaehlt, kundeAdresse, positionen, gesamtEk, gesamtBrutto);
     };
     return (React.createElement("div", { className: "min-h-screen w-full overflow-x-hidden", style: { background: "#F5F4EF" } },
         React.createElement("style", null, `* { font-family: 'Inter', -apple-system, sans-serif; } .font-oswald { font-family: 'Oswald', sans-serif; }`),
         React.createElement("div", { className: "max-w-5xl mx-auto px-4 py-6 md:py-10" },
-            React.createElement("button", { onClick: ausgewaehlt ? () => { setAusgewaehlt(null); setPositionen([]); } : onZurueck, className: "text-[12px] text-[#5B6472] hover:text-[#1B1F24] mb-3 flex items-center gap-1" },
+            React.createElement("button", { onClick: ausgewaehlt ? () => { setAusgewaehlt(null); setPositionen([]); setKundeAdresse(null); } : onZurueck, className: "text-[12px] text-[#5B6472] hover:text-[#1B1F24] mb-3 flex items-center gap-1" },
                 "\u2190 ",
                 ausgewaehlt ? "Alle Kunden" : "Andere Produkte"),
             React.createElement("div", { className: "mb-6 md:mb-8 flex items-center gap-3" },
@@ -5554,7 +5643,9 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
             !ausgewaehlt && (React.createElement("div", { className: "flex flex-col gap-2" }, kunden.length === 0 ? (React.createElement("div", { className: "text-center py-10 text-[13px] text-[#8A8F98] border border-dashed border-[#D8D4C8] rounded-lg" }, "Noch keine Kunden angelegt. Lege einen Kunden bei \u201EKunde\" in einem der Konfiguratoren an (+ Neuer Kunde\u2026).")) : kunden.map((k) => (React.createElement("button", { key: k, onClick: () => kundeWaehlen(k), className: "text-left border border-[#D8D4C8] rounded-lg bg-white px-4 py-3 hover:border-[#E8963B] transition-colors" },
                 React.createElement("span", { className: "text-[15px] font-medium text-[#1B1F24]" }, k)))))),
             ausgewaehlt && (React.createElement("div", { className: "flex flex-col gap-4" },
-                React.createElement("h2", { className: "text-[19px] font-oswald font-semibold text-[#1B1F24]" }, ausgewaehlt),
+                React.createElement("div", null,
+                    React.createElement("h2", { className: "text-[19px] font-oswald font-semibold text-[#1B1F24]" }, ausgewaehlt),
+                    (kundeAdresse && (kundeAdresse.street || kundeAdresse.city || kundeAdresse.phone)) && (React.createElement("p", { className: "text-[12.5px] text-[#5B6472] mt-0.5" }, [kundeAdresse.street, kundeAdresse.city].filter(Boolean).join(", "), kundeAdresse.phone ? ` \u00b7 Tel. ${kundeAdresse.phone}` : ""))),
                 ladeStatus === "laedt" && React.createElement("p", { className: "text-[13px] text-[#8A8F98]" }, "Lade Positionen\u2026"),
                 ladeStatus === "fertig" && positionen.length === 0 && (React.createElement("div", { className: "text-center py-10 text-[13px] text-[#8A8F98] border border-dashed border-[#D8D4C8] rounded-lg" }, "F\u00FCr diesen Kunden sind noch keine Positionen angelegt.")),
                 positionen.length > 0 && (React.createElement(React.Fragment, null,
