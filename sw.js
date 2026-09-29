@@ -13,6 +13,11 @@
    Bei einer neuen Version dieser Datei einfach CACHE_VERSION erhöhen —
    alte Zwischenspeicher werden dann beim nächsten Start automatisch
    aufgeräumt (siehe "activate" weiter unten).
+
+   Zusätzlich (neu): Web-Push-Benachrichtigungen für den Chef, wenn ein
+   Mitarbeiter einen Auftrag abschließt oder zurückstellt — siehe die
+   "push"- und "notificationclick"-Handler ganz unten. Das läuft komplett
+   unabhängig vom Datei-Cache oben.
    ========================================================================== */
 
 var CACHE_VERSION = "thbp-shell-v4";
@@ -94,6 +99,43 @@ self.addEventListener("fetch", function (event) {
       // Letzter Ausweg für eine Seitennavigation ohne Netz und ohne Treffer im Cache
       if (req.mode === "navigate") return caches.match("./index.html");
       return new Response("", { status: 503, statusText: "Offline" });
+    })
+  );
+});
+
+/* ==========================================================================
+   Push-Benachrichtigungen (nur für den Chef — siehe "Push aktivieren" in
+   den Einstellungen von index.html). Eine Supabase Edge Function schickt bei
+   Abschluss/Zurückstellung eines Auftrags eine Web-Push-Nachricht mit einem
+   JSON-Payload { title, body, reportId } an genau die Browser, die sich
+   zuvor über pushManager.subscribe() registriert haben.
+   ========================================================================== */
+self.addEventListener("push", function (event) {
+  var data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) {
+    data = { title: "TH Baustellenplaner", body: event.data ? event.data.text() : "" };
+  }
+  var title = data.title || "TH Baustellenplaner";
+  var options = {
+    body: data.body || "",
+    icon: "./icon-192.png",
+    badge: "./favicon-32.png",
+    data: { reportId: data.reportId || null, url: data.url || "./index.html" },
+    tag: data.reportId ? ("report-" + data.reportId) : undefined
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", function (event) {
+  event.notification.close();
+  var url = (event.notification.data && event.notification.data.url) || "./index.html";
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (windowClients) {
+      for (var i = 0; i < windowClients.length; i++) {
+        var client = windowClients[i];
+        if ("focus" in client) { client.focus(); return; }
+      }
+      if (clients.openWindow) return clients.openWindow(url);
     })
   );
 });
