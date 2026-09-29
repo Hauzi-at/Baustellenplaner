@@ -145,6 +145,21 @@
   }
   .user-chip button:hover { background: var(--line); color: var(--ink); }
 
+  /* ---------- Chef-Benachrichtigungsglocke (Aufträge abgeschlossen/zurückgestellt) ---------- */
+  .notif-badge {
+    position: absolute; top: -3px; right: -3px; min-width: 16px; height: 16px; padding: 0 3px;
+    border-radius: 999px; background: var(--danger, #c94b4b); color: #fff; font-size: 10px;
+    font-weight: 700; display: flex; align-items: center; justify-content: center; line-height: 1;
+    box-shadow: 0 0 0 2px var(--card);
+  }
+  .notif-panel { display: flex; flex-direction: column; gap: 0; }
+  .notif-panel .notif-row {
+    padding: 8px 6px; border-top: 1px solid var(--line); cursor: pointer;
+    display: flex; flex-direction: column; gap: 2px; border-radius: 6px;
+  }
+  .notif-panel .notif-row:hover { background: var(--card-raised); }
+  .notif-panel .notif-row:first-of-type { border-top: none; }
+
   /* ---------- Layout shell ---------- */
   .shell { flex: 1; display: flex; min-height: 0; }
   .sidenav {
@@ -286,6 +301,9 @@
     .week-grid-scroll { overflow-x: auto; padding-bottom: 4px; }
     .week-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; align-items: start; }
   }
+  /* Tagesansicht: EIN Tag, deutlich breiter als eine einzelne Wochenspalte. */
+  .day-view-single { max-width: 480px; }
+  .day-view-single .day-card { padding: 14px 16px; }
   .day-card { display: flex; flex-direction: column; gap: 9px; }
   .day-card .day-head { display: flex; align-items: baseline; justify-content: space-between; }
   .day-card .day-head .wd { font-family: 'Barlow Semi Condensed', sans-serif; font-weight: 700; font-size: 14.5px; }
@@ -297,6 +315,12 @@
   }
   .assign-item .who { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; }
   .assign-item .who .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--slate); flex-shrink: 0; }
+  /* Baustellen-Reihenfolge-Nummer (1, 2, 3, …) vor dem Mitarbeiternamen */
+  .assign-item .who .num-badge {
+    width: 18px; height: 18px; border-radius: 50%; background: var(--slate); color: #fff;
+    font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
   .assign-item .what { font-size: 12.5px; color: var(--ink-soft); }
   .assign-item .note { font-size: 11.5px; color: var(--muted); }
   .assign-item .actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 2px; opacity: 0; transition: opacity .1s; }
@@ -449,6 +473,16 @@
     .p-sig-box { background: var(--p-tint); border-radius: 6px; padding: 10px 12px 8px; min-height: 96px; display: flex; flex-direction: column; justify-content: flex-end; }
     .p-sig-box img { height: 110px; display: block; margin-bottom: 2px; object-fit: contain; object-position: left bottom; max-width: 100%; }
     .p-sig-line { border-top: 1px solid var(--p-accent-soft); padding-top: 5px; font-size: 10.5px; color: #46596a; }
+    /* Stundenliste (Monats-Tabelle) */
+    .p-hours-table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin-top: 4px; }
+    .p-hours-table th { background: var(--p-accent); color: #fff; font-weight: 700; text-align: left; padding: 5px 6px; }
+    .p-hours-table td { padding: 4px 6px; border-bottom: 1px solid var(--p-line); }
+    .p-hours-table tbody tr:nth-child(even) { background: var(--p-tint); }
+    .p-hours-table tr.we td { color: var(--p-accent-soft); }
+    .p-hours-summary {
+      border: 1.5px solid var(--p-accent); border-radius: 8px; padding: 10px 14px; margin-top: 14px;
+      font-size: 11.5px; line-height: 1.7; color: #1c2b38;
+    }
   }
 
   [hidden] { display: none !important; }
@@ -500,13 +534,19 @@
     mail: "office@th-sonnenschutz.at"
   };
 
+  // Öffentlicher VAPID-Schlüssel für Web-Push (Chef-Benachrichtigungen, siehe
+  // renderPushCard/enablePushNotifications). Öffentlich = unbedenklich im Client-Code, das
+  // Gegenstück (privater Schlüssel) liegt ausschließlich in der Supabase Edge Function, die
+  // die Push-Nachrichten tatsächlich verschickt — siehe Einrichtungsanleitung.
+  var VAPID_PUBLIC_KEY = "BPPxx57cw1dzl1IiYoj_RgWHjQRHoaBoNnyaDAOu2k6edr8Tejihw-PcQx206AwCOL8A03VPQ0hFI-NTBvkwpHU";
+
   /* ---------------- state ---------------- */
   var db = null;
   var dbStatus = "connecting"; // connecting | ready | unavailable
   var dbStatusDetail = ""; // config | library | error
   var currentUser = null; // string name
-  var state = { customers: [], assignments: [], reports: [], team: [], settings: [], hours: [] };
-  var loaded = { customers: false, assignments: false, reports: false, team: false, settings: false, hours: false };
+  var state = { customers: [], assignments: [], reports: [], team: [], settings: [], hours: [], pushSubscriptions: [] };
+  var loaded = { customers: false, assignments: false, reports: false, team: false, settings: false, hours: false, pushSubscriptions: false };
   var settingsUnlocked = false;
   var settingsPwStage = null; // "set" | "enter" | null (drives the password modal)
   var currentTab = "planning";
@@ -689,7 +729,8 @@
       medcross: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8M8 12h8"/>',
       flag: '<path d="M5 21V4"/><path d="M5 4h13l-3.5 4L18 12H5"/>',
       refresh: '<path d="M20 11A8 8 0 0 0 6.3 6.3L4 8.5"/><path d="M4 4v4.5h4.5"/><path d="M4 13a8 8 0 0 0 13.7 4.7L20 15.5"/><path d="M20 20v-4.5h-4.5"/>',
-      gift: '<rect x="3.5" y="9.5" width="17" height="10.5" rx="1.3"/><path d="M3.5 13.5h17"/><path d="M12 9.5v10.5"/><path d="M12 9.5c-1.8 0-3.3-1.4-3.3-3.1S9.7 3.3 11 3.9c.9.4 1 2 1 2s.1-1.6 1-2c1.3-.6 2.8.5 2.8 2.2S13.8 9.5 12 9.5Z"/>'
+      gift: '<rect x="3.5" y="9.5" width="17" height="10.5" rx="1.3"/><path d="M3.5 13.5h17"/><path d="M12 9.5v10.5"/><path d="M12 9.5c-1.8 0-3.3-1.4-3.3-3.1S9.7 3.3 11 3.9c.9.4 1 2 1 2s.1-1.6 1-2c1.3-.6 2.8.5 2.8 2.2S13.8 9.5 12 9.5Z"/>',
+      bell: '<path d="M18 8.5a6 6 0 0 0-12 0c0 6.4-2.5 8.4-2.5 8.4h17s-2.5-2-2.5-8.4Z"/><path d="M13.7 20.5a2 2 0 0 1-3.4 0"/>'
     };
     return '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (paths[name] || "") + "</svg>";
   }
@@ -755,6 +796,7 @@
       subscribe("team", "team");
       subscribe("settings", "settings");
       subscribe("hours", "hours");
+      subscribe("push_subscriptions", "pushSubscriptions");
       render();
     } catch (e) {
       dbStatus = "unavailable";
@@ -1318,6 +1360,94 @@
     return wrap;
   }
 
+  /* ---------- Chef-Benachrichtigungsglocke ----------
+     Zeigt dem Chef (isChefUser), wenn Mitarbeiter einen Auftrag abschließen oder zurückstellen
+     — Mitarbeiter selbst sehen weder die Glocke noch diese Liste, da sie nur bei isChefUser
+     überhaupt gerendert wird. "Gesehen"-Status wird bewusst NUR lokal (localStorage) gemerkt,
+     nicht in der Datenbank — einfach und ausreichend, weil es nur um "seit dem letzten
+     Öffnen der App neu" geht, nicht um einen geräteübergreifenden Lesestatus. */
+  var notifPanelOpen = false;
+  function notifSeenKey() { return "thbp_notif_seen_" + (currentUser || ""); }
+  function getNotifSeenAt() {
+    try { return localStorage.getItem(notifSeenKey()) || ""; } catch (e) { return ""; }
+  }
+  function setNotifSeenAt(iso) {
+    try { localStorage.setItem(notifSeenKey(), iso); } catch (e) {}
+  }
+  function notifReports() {
+    return state.reports
+      .filter(function (r) { return (r.status === "abgeschlossen" || r.status === "zurückgestellt") && r.statusChangedAt; })
+      .sort(function (a, b) { return (b.statusChangedAt || "").localeCompare(a.statusChangedAt || ""); });
+  }
+  function unseenNotifReports() {
+    var seen = getNotifSeenAt();
+    return notifReports().filter(function (r) { return r.statusChangedAt > seen; });
+  }
+  function relTimeDe(iso) {
+    if (!iso) return "";
+    var diffMs = Date.now() - new Date(iso).getTime();
+    var min = Math.floor(diffMs / 60000);
+    if (min < 1) return "gerade eben";
+    if (min < 60) return "vor " + min + " Min.";
+    var std = Math.floor(min / 60);
+    if (std < 24) return "vor " + std + " Std.";
+    var tage = Math.floor(std / 24);
+    return "vor " + tage + " Tag" + (tage === 1 ? "" : "en");
+  }
+  function renderNotifBell() {
+    var unseen = unseenNotifReports();
+    var wrap = el("div", { style: "position:relative;flex-shrink:0;" });
+    var btn = el("button", { class: "btn btn-icon", title: "Benachrichtigungen", style: "position:relative;" }, []);
+    btn.innerHTML = icon("bell", 17);
+    if (unseen.length > 0) {
+      btn.appendChild(el("span", { class: "notif-badge" }, [unseen.length > 9 ? "9+" : String(unseen.length)]));
+    }
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      notifPanelOpen = !notifPanelOpen;
+      // Beim Öffnen sofort als "gesehen" markieren, damit der Zähler verschwindet — die
+      // gerade geöffnete Liste bleibt trotzdem unverändert sichtbar (sie wird aus
+      // notifReports() gebaut, nicht aus unseenNotifReports()).
+      if (notifPanelOpen) setNotifSeenAt(new Date().toISOString());
+      render();
+    });
+    wrap.appendChild(btn);
+
+    if (notifPanelOpen) {
+      var items = notifReports().slice(0, 12);
+      var panel = el("div", { class: "card notif-panel", style: "position:absolute;right:0;top:calc(100% + 6px);z-index:30;padding:8px;width:300px;max-height:380px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.18);" });
+      panel.appendChild(el("div", { style: "font-weight:700;font-size:13px;padding:2px 4px 8px;" }, ["Abgeschlossen / zurückgestellt"]));
+      if (items.length === 0) {
+        panel.appendChild(el("p", { style: "font-size:12px;color:var(--muted);padding:2px 4px;margin:0;" }, ["Noch nichts."]));
+      }
+      items.forEach(function (r) {
+        var row = el("div", { class: "notif-row" });
+        var top = el("div", { style: "display:flex;justify-content:space-between;gap:8px;align-items:center;" });
+        top.appendChild(statusTag(r.status));
+        top.appendChild(el("span", { style: "font-size:10.5px;color:var(--muted);white-space:nowrap;" }, [relTimeDe(r.statusChangedAt)]));
+        row.appendChild(top);
+        row.appendChild(el("div", { style: "font-size:12.5px;font-weight:600;" }, [r.auftraggeber || "(ohne Namen)"]));
+        if (r.baustelle) row.appendChild(el("div", { style: "font-size:11.5px;color:var(--muted);" }, [r.baustelle]));
+        row.addEventListener("click", function () {
+          notifPanelOpen = false;
+          currentTab = "archive";
+          archiveOpenReport = r;
+          openReportModal(r);
+          render();
+        });
+        panel.appendChild(row);
+      });
+      wrap.appendChild(panel);
+      setTimeout(function () {
+        document.addEventListener("click", function closeOnce(ev) {
+          document.removeEventListener("click", closeOnce);
+          if (!wrap.contains(ev.target)) { notifPanelOpen = false; render(); }
+        });
+      }, 0);
+    }
+    return wrap;
+  }
+
   function renderTopbar() {
     var bar = el("div", { class: "topbar" });
     bar.appendChild(el("img", { class: "logo", src: getLogoMark(), alt: "TH Sonnenschutz" }));
@@ -1328,6 +1458,7 @@
       el("span", { class: "app-date" }, [dateLabel])
     ]));
     bar.appendChild(el("div", { class: "spacer" }));
+    if (isChefUser(currentUser)) bar.appendChild(renderNotifBell());
     var gearBtn = el("button", { class: "btn btn-icon", title: "Einstellungen (Chef)", style: "flex-shrink:0;" }, []);
     gearBtn.innerHTML = icon("gear", 17);
     gearBtn.addEventListener("click", openSettingsGate);
@@ -1399,6 +1530,8 @@
      ===================================================================== */
   var planningOpenDate = null; // date (iso) with the add-form open
   var planningEditId = null;
+  var planningViewMode = "week"; // "week" | "day" — Umschalter Wochen-/Tagesansicht
+  var planningDayDate = new Date(); // aktuell angezeigter Tag in der Tagesansicht
   // Aktiv, während im Archiv ein Auftrag für einen bestimmten Tag ausgewählt wird
   // (ausgelöst über "+ Zuweisen" in der Planung) — { date: iso, employeeName }.
   var archivePicker = null;
@@ -1411,40 +1544,69 @@
 
   function renderPlanning() {
     var view = el("div", { class: "view" });
+
+    var modeRow = el("div", { style: "display:flex;gap:6px;" });
+    [["week", "Woche"], ["day", "Tag"]].forEach(function (pair) {
+      var b = el("button", { class: "btn btn-sm" + (planningViewMode === pair[0] ? " btn-primary" : "") }, [pair[1]]);
+      b.addEventListener("click", function () { planningViewMode = pair[0]; render(); });
+      modeRow.appendChild(b);
+    });
     view.appendChild(el("div", { class: "view-head" }, [
       el("div", {}, [
         el("h1", {}, ["Planung"]),
         el("p", {}, ["Weise Mitarbeiter tagweise einer Baustelle zu."])
-      ])
+      ]),
+      modeRow
     ]));
 
     var nav = el("div", { class: "week-nav card", style: "justify-content:center;flex-direction:row;padding:10px 12px;" });
-    var prev = el("button", { class: "btn btn-icon", title: "Vorherige Woche" }, []);
-    prev.innerHTML = icon("chevronL", 18);
-    prev.addEventListener("click", function () { weekStart = addDays(weekStart, -7); render(); });
-    var next = el("button", { class: "btn btn-icon", title: "Nächste Woche" }, []);
-    next.innerHTML = icon("chevronR", 18);
-    next.addEventListener("click", function () { weekStart = addDays(weekStart, 7); render(); });
-    var weekEnd = addDays(weekStart, 6);
-    var label = fmtRange(weekStart, weekEnd);
-    var todayBtn = el("button", { class: "btn btn-sm", style: "margin-left:8px;" }, ["Heute"]);
-    todayBtn.addEventListener("click", function () { weekStart = startOfWeek(new Date()); render(); });
-    nav.appendChild(prev);
-    nav.appendChild(el("span", { class: "label" }, [label]));
-    nav.appendChild(next);
-    nav.appendChild(todayBtn);
+    if (planningViewMode === "day") {
+      var prevD = el("button", { class: "btn btn-icon", title: "Vorheriger Tag" }, []);
+      prevD.innerHTML = icon("chevronL", 18);
+      prevD.addEventListener("click", function () { planningDayDate = addDays(planningDayDate, -1); render(); });
+      var nextD = el("button", { class: "btn btn-icon", title: "Nächster Tag" }, []);
+      nextD.innerHTML = icon("chevronR", 18);
+      nextD.addEventListener("click", function () { planningDayDate = addDays(planningDayDate, 1); render(); });
+      var dayLabel = WEEKDAYS[(planningDayDate.getDay() + 6) % 7] + ", " + planningDayDate.getDate() + ". " + MONTHS[planningDayDate.getMonth()] + " " + planningDayDate.getFullYear();
+      var todayBtnD = el("button", { class: "btn btn-sm", style: "margin-left:8px;" }, ["Heute"]);
+      todayBtnD.addEventListener("click", function () { planningDayDate = new Date(); render(); });
+      nav.appendChild(prevD);
+      nav.appendChild(el("span", { class: "label" }, [dayLabel]));
+      nav.appendChild(nextD);
+      nav.appendChild(todayBtnD);
+    } else {
+      var prev = el("button", { class: "btn btn-icon", title: "Vorherige Woche" }, []);
+      prev.innerHTML = icon("chevronL", 18);
+      prev.addEventListener("click", function () { weekStart = addDays(weekStart, -7); render(); });
+      var next = el("button", { class: "btn btn-icon", title: "Nächste Woche" }, []);
+      next.innerHTML = icon("chevronR", 18);
+      next.addEventListener("click", function () { weekStart = addDays(weekStart, 7); render(); });
+      var weekEnd = addDays(weekStart, 6);
+      var label = fmtRange(weekStart, weekEnd);
+      var todayBtn = el("button", { class: "btn btn-sm", style: "margin-left:8px;" }, ["Heute"]);
+      todayBtn.addEventListener("click", function () { weekStart = startOfWeek(new Date()); render(); });
+      nav.appendChild(prev);
+      nav.appendChild(el("span", { class: "label" }, [label]));
+      nav.appendChild(next);
+      nav.appendChild(todayBtn);
+    }
     view.appendChild(nav);
 
     if (state.team.length === 0) {
       view.appendChild(infoNote("Noch kein Mitarbeiter angelegt. Melde dich mit deinem Namen an (siehe Kopfzeile), damit du hier auswählbar bist."));
     }
 
-    var grid = el("div", { class: "week-grid" });
-    for (var i = 0; i < 7; i++) {
-      grid.appendChild(renderDayCard(addDays(weekStart, i)));
+    if (planningViewMode === "day") {
+      var dayWrap = el("div", { class: "day-view-single" }, [renderDayCard(planningDayDate)]);
+      view.appendChild(dayWrap);
+    } else {
+      var grid = el("div", { class: "week-grid" });
+      for (var i = 0; i < 7; i++) {
+        grid.appendChild(renderDayCard(addDays(weekStart, i)));
+      }
+      var scrollWrap = el("div", { class: "week-grid-scroll" }, [grid]);
+      view.appendChild(scrollWrap);
     }
-    var scrollWrap = el("div", { class: "week-grid-scroll" }, [grid]);
-    view.appendChild(scrollWrap);
     return view;
   }
 
@@ -1468,17 +1630,27 @@
       el("span", { class: "dd" }, [date.getDate() + "." + (date.getMonth() + 1) + "."])
     ]));
 
+    // Sortierung nach der vom Chef vergebenen Reihenfolge-Nummer (Baustelle 1, 2, 3, …) —
+    // Einträge ohne Nummer rutschen ans Ende und werden dort alphabetisch nach Mitarbeiter
+    // sortiert. Die tatsächlich angezeigte Nummer (1..n) ergibt sich immer aus der aktuellen
+    // Position in dieser Liste, nicht direkt aus dem gespeicherten Wert — so bleiben die
+    // Nummern auch dann lückenlos, wenn nicht jeder Eintrag eine eigene Nummer gesetzt hat.
     var dayAssignments = state.assignments
       .filter(function (a) { return a.date === iso; })
-      .sort(function (a, b) { return (a.employeeName || "").localeCompare(b.employeeName || "", "de"); });
+      .sort(function (a, b) {
+        var oa = (typeof a.sortOrder === "number") ? a.sortOrder : Infinity;
+        var ob = (typeof b.sortOrder === "number") ? b.sortOrder : Infinity;
+        if (oa !== ob) return oa - ob;
+        return (a.employeeName || "").localeCompare(b.employeeName || "", "de");
+      });
 
     if (dayAssignments.length === 0) {
       card.appendChild(el("p", { style: "font-size:12px;color:var(--muted);margin:0;" }, ["Keine Einteilung"]));
     }
-    dayAssignments.forEach(function (a) {
+    dayAssignments.forEach(function (a, idx) {
       if (planningEditId === a.id) { card.appendChild(renderAssignForm(iso, a)); return; }
       var item = el("div", { class: "assign-item" });
-      item.appendChild(el("div", { class: "who" }, [el("span", { class: "dot" }), a.employeeName || "?"]));
+      item.appendChild(el("div", { class: "who" }, [el("span", { class: "num-badge", title: "Reihenfolge" }, [String(idx + 1)]), a.employeeName || "?"]));
       item.appendChild(el("div", { class: "what" }, [a.site || "(keine Baustelle angegeben)"]));
       if (a.note) item.appendChild(el("div", { class: "note" }, [a.note]));
       if (a.reportId) {
@@ -1500,17 +1672,35 @@
       card.appendChild(item);
     });
 
-    // "+ Zuweisen" führt direkt ins Archiv, wo ein bestehender Auftrag ausgewählt und diesem
-    // Tag zugewiesen wird — Zuweisungen entstehen dadurch immer aus einem echten Auftrag
-    // (nicht mehr aus frei eingetippten, nicht verknüpften Notizen).
-    var addBtn = el("button", { class: "add-assign-btn" }, ["+ Zuweisen"]);
+    // Frei-Eintragen-Formular für diesen Tag (siehe freeBtn unten) — z. B. für Sub-Einsätze
+    // bei anderen Firmen, die keinen eigenen Auftrag im Archiv haben.
+    if (planningOpenDate === iso) {
+      card.appendChild(renderAssignForm(iso, null));
+    }
+
+    // Zwei Wege, einen Tag zu befüllen: "Auftrag zuweisen" führt ins Archiv, wo ein
+    // bestehender (eigener) Auftrag ausgewählt und diesem Tag zugewiesen wird. "Frei
+    // eintragen" öffnet direkt hier ein einfaches Formular ohne Auftragsbezug — gedacht für
+    // Subunternehmer-Einsätze bei anderen Firmen (z. B. "Newo", "Rothner"), wo es keinen
+    // eigenen Auftrag/Kunden im Archiv gibt, sondern nur "Tag X ist für Firma Y verplant".
+    var addRow = el("div", { style: "display:flex;gap:6px;" });
+    var addBtn = el("button", { class: "add-assign-btn", style: "flex:1;" }, ["+ Auftrag zuweisen"]);
     addBtn.addEventListener("click", function () {
       archivePicker = { date: iso, employeeName: "" };
       planningEditId = null;
+      planningOpenDate = null;
       currentTab = "archive";
       render();
     });
-    card.appendChild(addBtn);
+    var freeBtn = el("button", { class: "add-assign-btn", style: "flex:1;" }, ["+ Frei eintragen"]);
+    freeBtn.addEventListener("click", function () {
+      planningOpenDate = iso;
+      planningEditId = null;
+      render();
+    });
+    addRow.appendChild(addBtn);
+    addRow.appendChild(freeBtn);
+    card.appendChild(addRow);
     return card;
   }
 
@@ -1531,10 +1721,17 @@
     empField.appendChild(empSelect);
     form.appendChild(empField);
 
-    var siteField = el("div", { class: "field" }, [el("label", {}, ["Baustelle / Auftrag (optional)"])]);
-    var siteInput = el("input", { type: "text", placeholder: "z. B. Fam. Gruber, Terrassenmarkise", value: existing ? (existing.site || "") : "" });
+    var siteField = el("div", { class: "field" }, [el("label", {}, ["Baustelle / Auftrag / Firma (optional)"])]);
+    var siteInput = el("input", { type: "text", placeholder: "z. B. Fam. Gruber, Terrassenmarkise — oder Firma bei Sub-Einsatz, z. B. „Newo“", value: existing ? (existing.site || "") : "" });
     siteField.appendChild(siteInput);
     form.appendChild(siteField);
+
+    // Reihenfolge-Nummer: legt fest, als "Baustelle 1", "Baustelle 2", … angezeigt wird
+    // (Sortierung der Einträge dieses Tages). Leer lassen = ans Ende, alphabetisch einsortiert.
+    var orderField = el("div", { class: "field" }, [el("label", {}, ["Reihenfolge (Baustelle Nr.)"])]);
+    var orderInput = el("input", { type: "number", min: "1", step: "1", inputmode: "numeric", placeholder: "z. B. 1", value: (existing && typeof existing.sortOrder === "number") ? String(existing.sortOrder) : "" });
+    orderField.appendChild(orderInput);
+    form.appendChild(orderField);
 
     var noteField = el("div", { class: "field" }, [el("label", {}, ["Notiz (optional)"])]);
     var noteInput = el("input", { type: "text", placeholder: "z. B. Uhrzeit, Hinweise", value: existing ? (existing.note || "") : "" });
@@ -1549,7 +1746,8 @@
       var emp = empSelect.value.trim();
       var site = siteInput.value.trim();
       if (!emp) { empSelect.focus(); return; }
-      var payload = { date: iso, employeeName: emp, site: site, note: noteInput.value.trim() };
+      var orderRaw = orderInput.value.trim();
+      var payload = { date: iso, employeeName: emp, site: site, note: noteInput.value.trim(), sortOrder: orderRaw === "" ? null : parseInt(orderRaw, 10) };
       if (existing) updateAssignment(existing, payload);
       else addAssignment(payload);
     });
@@ -2023,7 +2221,11 @@
     if (!/^\d{4}$/.test(digits)) return;
     __plzLookupTimer = setTimeout(function () {
       if (typeof navigator !== "undefined" && "onLine" in navigator && !navigator.onLine) return;
-      fetch("https://openplzapi.org/at/Localities?postalCode=" + digits, { headers: { Accept: "application/json" } })
+      // pageSize hochgesetzt: ohne Angabe liefert die API nur die ersten 10 (alphabetisch
+      // sortierten) Ortschaften pro PLZ zurück — bei PLZ-Gebieten mit vielen Katastralgemeinden
+      // (z. B. 4910: 17 Ortschaften) fiel dadurch der eigentliche Hauptort (hier "Ried im
+      // Innkreis", alphabetisch erst an 13. Stelle) komplett aus der Liste heraus.
+      fetch("https://openplzapi.org/at/Localities?postalCode=" + digits + "&pageSize=50", { headers: { Accept: "application/json" } })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (list) {
           var namen = (list || []).map(function (o) { return o && o.name; }).filter(Boolean);
@@ -2628,43 +2830,107 @@
     }
   }
 
+  // Zahlen ohne unnötige Nachkommastellen ausgeben (8 statt 8.00, aber 7.5 bleibt 7.5) —
+  // rundet außerdem sauber, damit z. B. 7.999999999 (Fließkomma-Rundungsfehler) nicht als
+  // "7.999999999" auftaucht.
+  function fmtHoursNum(n) {
+    var r = Math.round((n || 0) * 100) / 100;
+    if (Math.abs(r - Math.round(r)) < 0.001) return String(Math.round(r));
+    return String(r);
+  }
+
+  // Monatliche Stundenliste zum Ausdrucken/Unterschreiben — eine Zeile pro Kalendertag (auch
+  // Tage ohne Eintrag, wie bei einer klassischen Zeiterfassungs-Stundenliste üblich), plus
+  // Summenkarte und Unterschriftenzeilen für Mitarbeiter und Firma.
+  //
+  // Soll-Stunden/±-Abweichung werden — genau wie in der "Soll (bisher)"-Kachel in der
+  // Stunden-Ansicht (siehe renderHoursSummaryCard/monthSollSoFar) — nur bis einschließlich
+  // heute gezählt: sonst würde ein mitten im Monat gedruckter Zettel für die noch bevorstehenden
+  // Tage fälschlich ein großes Minus anzeigen, obwohl diese Tage einfach noch nicht erfasst sind.
+  // Dadurch stimmen die Zahlen der Summenzeile exakt mit der Summe der sichtbaren Tabellenwerte
+  // überein.
   function buildHoursPrintHtml(title, employeeName, ym) {
+    var todayIsoVal = todayIso();
+    var thisYm = todayIsoVal.slice(0, 7);
+
     var html = "";
-    html += '<div class="p-header"><div class="company">' + escapeHtml(COMPANY.name) + " | " + escapeHtml(COMPANY.street) + " | " + escapeHtml(COMPANY.city) +
-      "<br>Tel.: " + escapeHtml(COMPANY.tel) + " · Handy: " + escapeHtml(COMPANY.mobile) + "<br>" + escapeHtml(COMPANY.mail) + '</div><img src="' + getLogoFull() + '"></div>';
-    html += '<h2 style="margin:10px 0;">' + escapeHtml(title) + "</h2>";
-    html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
-    html += '<thead><tr style="text-align:left;border-bottom:1.5px solid #000;">' +
-      '<th style="padding:4px 6px;">Datum</th><th style="padding:4px 6px;">Typ</th><th style="padding:4px 6px;">Zeiten</th>' +
-      '<th style="padding:4px 6px;">Pause</th><th style="padding:4px 6px;">Std.</th><th style="padding:4px 6px;">Ort</th><th style="padding:4px 6px;">Notiz</th></tr></thead><tbody>';
-    var total = 0;
-    (daysInMonth(ym) || []).forEach(function (d) {
+    html += '<div class="p-header">';
+    html += '<img src="' + getLogoFull() + '">';
+    html += '<div><div class="company-name">' + escapeHtml(COMPANY.name) + '</div><div class="company">' + escapeHtml(COMPANY.street) + " · " + escapeHtml(COMPANY.city) +
+      "<br>Tel.: " + escapeHtml(COMPANY.tel) + " · Handy: " + escapeHtml(COMPANY.mobile) + "<br>" + escapeHtml(COMPANY.mail) + '</div></div>';
+    html += '</div>';
+    html += '<h2 style="margin:14px 0 2px;">' + escapeHtml(title) + '</h2>';
+    html += '<p style="margin:0 0 14px;font-size:12px;color:#46596a;">Mitarbeiter: ' + escapeHtml(employeeName) + '</p>';
+
+    html += '<table class="p-hours-table"><thead><tr>' +
+      '<th>Tag</th><th>Art</th><th>Ort</th><th>Beginn</th><th>Pause</th><th>Ende</th><th>Ist</th><th>Soll</th><th>±</th><th>Notiz</th>' +
+      '</tr></thead><tbody>';
+
+    var sumIst = 0;
+    var tageCount = { Urlaub: 0, Krank: 0, Zeitausgleich: 0, Feiertag: 0, Sonderurlaub: 0 };
+
+    (daysInMonth(ym) || []).forEach(function (d, i) {
       var agg = hoursDayAggregate(d, employeeName);
-      if (!agg) return;
-      total += agg.ist;
+      var countsSoll = (ym < thisYm) || (ym === thisYm && d <= todayIsoVal);
+      var soll = countsSoll ? sollHoursForDate(d, employeeName) : 0;
+      var ist = agg ? agg.ist : 0;
+      sumIst += ist;
+      if (agg && tageCount.hasOwnProperty(agg.type)) tageCount[agg.type]++;
+
       var dObj = new Date(d + "T00:00:00");
-      var wd = WEEKDAYS[(dObj.getDay() + 6) % 7].slice(0, 2);
-      var zeiten = agg.type === "Arbeit"
-        ? agg.rows.reduce(function (acc, r) { return acc.concat(hoursEntryBlocks(r).map(function (b) { return (b.start || "") + "–" + (b.ende || ""); })); }, []).join(", ")
-        : "";
-      var pause = agg.type === "Arbeit" ? agg.rows.reduce(function (s, r) { return s + (r.breakMinutes || 0); }, 0) + " Min." : "";
-      html += '<tr style="border-bottom:1px solid #ccc;">' +
-        '<td style="padding:4px 6px;">' + wd + " " + escapeHtml(deDateFromIso(d)) + "</td>" +
-        '<td style="padding:4px 6px;">' + escapeHtml(agg.type) + "</td>" +
-        '<td style="padding:4px 6px;">' + escapeHtml(zeiten) + "</td>" +
-        '<td style="padding:4px 6px;">' + pause + "</td>" +
-        '<td style="padding:4px 6px;">' + agg.ist.toFixed(2) + "</td>" +
-        '<td style="padding:4px 6px;">' + escapeHtml(agg.ort) + "</td>" +
-        '<td style="padding:4px 6px;">' + escapeHtml(agg.note) + "</td></tr>";
+      var dow = dObj.getDay();
+      var isWeekend = dow === 0 || dow === 6;
+      var wd = WEEKDAYS[(dow + 6) % 7].slice(0, 2);
+      var tagLabel = String(i + 1).padStart(2, "0") + " " + wd;
+
+      var beginn = "", ende = "", pause = "";
+      if (agg && agg.type === "Arbeit") {
+        var blocks = agg.rows.reduce(function (acc, r) { return acc.concat(hoursEntryBlocks(r)); }, [])
+          .filter(function (b) { return b.start || b.ende; });
+        if (blocks.length) { beginn = blocks[0].start || ""; ende = blocks[blocks.length - 1].ende || ""; }
+        var pauseMin = agg.rows.reduce(function (s, r) { return s + (r.breakMinutes || 0); }, 0);
+        pause = pauseMin ? pauseMin + " Min." : "";
+      }
+
+      var showSoll = countsSoll && soll > 0;
+      var showDiff = countsSoll && (soll > 0 || !!agg);
+      var diff = ist - soll;
+
+      html += '<tr class="' + (isWeekend ? "we" : "") + '">' +
+        '<td>' + tagLabel + '</td>' +
+        '<td>' + (agg ? escapeHtml(agg.type) : "") + '</td>' +
+        '<td>' + (agg ? escapeHtml(agg.ort) : "") + '</td>' +
+        '<td>' + escapeHtml(beginn) + '</td>' +
+        '<td>' + escapeHtml(pause) + '</td>' +
+        '<td>' + escapeHtml(ende) + '</td>' +
+        '<td>' + (agg ? fmtHoursNum(ist) : "") + '</td>' +
+        '<td>' + (showSoll ? fmtHoursNum(soll) : "") + '</td>' +
+        '<td>' + (showDiff ? (diff > 0 ? "+" : "") + fmtHoursNum(diff) : "") + '</td>' +
+        '<td>' + (agg ? escapeHtml(agg.note) : "") + '</td>' +
+        '</tr>';
     });
     html += "</tbody></table>";
-    html += '<p style="margin-top:12px;font-weight:700;">Summe: ' + total.toFixed(2) + " Stunden</p>";
+
+    var sumSoll = monthSollSoFar(ym, employeeName);
+    var ueber = sumIst - sumSoll;
+    html += '<div class="p-hours-summary">';
+    html += '<div>Summe Ist: <strong>' + fmtHoursNum(sumIst) + ' h</strong> · Summe Soll: <strong>' + fmtHoursNum(sumSoll) + ' h</strong> · Überstunden: <strong>' +
+      (ueber > 0 ? "+" : "") + fmtHoursNum(ueber) + ' h</strong></div>';
+    html += '<div>Urlaub: ' + tageCount.Urlaub + ' Tage · Krank: ' + tageCount.Krank + ' Tage · Zeitausgleich: ' + tageCount.Zeitausgleich +
+      ' Tage · Feiertage: ' + tageCount.Feiertag + ' Tage' +
+      (tageCount.Sonderurlaub ? ' · Sonderurlaub: ' + tageCount.Sonderurlaub + ' Tage' : '') + '</div>';
+    html += '</div>';
+
+    html += '<div class="p-sig-grid">';
+    html += '<div><div class="p-sig-box" style="min-height:40px;"></div><div class="p-sig-line">Datum, Unterschrift Mitarbeiter</div></div>';
+    html += '<div><div class="p-sig-box" style="min-height:40px;"></div><div class="p-sig-line">Datum, Unterschrift Firma</div></div>';
+    html += '</div>';
     return html;
   }
 
   function printHoursMonth(ym, employeeName) {
     var mp = ym.split("-");
-    hoursPrintData = { title: "Stundenliste " + MONTHS[parseInt(mp[1], 10) - 1] + " " + mp[0] + " — " + employeeName, employeeName: employeeName, ym: ym };
+    hoursPrintData = { title: "Stundenaufzeichnung – " + MONTHS[parseInt(mp[1], 10) - 1] + " " + mp[0], employeeName: employeeName, ym: ym };
     renderPrintArea();
     setTimeout(function () { window.print(); }, 60);
   }
@@ -2911,13 +3177,10 @@
     doc.appendChild(draftTextarea("Sonstige Vermerke", "vermerke"));
 
     doc.appendChild(el("h3", { class: "section-title" }, ["Unterschriften"]));
+    doc.appendChild(draftFixedDateField("Datum, Unterschrift Kunde", "datumUnterschrift"));
+
     var sigRow = el("div", { class: "field-row cols-2" });
-
-    var kundeBlock = el("div", { class: "field" });
-    kundeBlock.appendChild(draftFixedDateField("Datum, Unterschrift Kunde", "datumUnterschrift"));
-    kundeBlock.appendChild(renderSigBlock("kunde", "Unterschrift Kunde"));
-    sigRow.appendChild(kundeBlock);
-
+    sigRow.appendChild(renderSigBlock("kunde", "Unterschrift Kunde"));
     sigRow.appendChild(renderSigBlock("monteur", "Unterschrift Monteur"));
     doc.appendChild(sigRow);
 
@@ -3299,7 +3562,10 @@
     if (!reportDraft.datum) reportDraft.datum = todayDe();
     if (!reportDraft.datumUnterschrift) reportDraft.datumUnterschrift = todayDe();
 
-    saveReportRecord({ status: "abgeschlossen", completedAt: new Date().toISOString() }, function (reportId) {
+    // statusChangedAt: eigenes Feld (unabhängig von completedAt), damit die Chef-Glocke
+    // (siehe renderNotifBell) Abschluss UND Zurückstellung einheitlich per Zeitstempel
+    // erkennen kann, ohne zwei verschiedene Feldnamen abfragen zu müssen.
+    saveReportRecord({ status: "abgeschlossen", completedAt: new Date().toISOString(), statusChangedAt: new Date().toISOString() }, function (reportId) {
       syncAssignmentForReport(reportId, draftDataFields());
       startNewReport();
       currentTab = "archive";
@@ -3330,7 +3596,7 @@
     if (!reportDraft.auftraggeber.trim()) { alert("Bitte einen Auftraggeber angeben."); return; }
     if (!db) { alert("Keine Verbindung zur Datenbank — Auftrag kann gerade nicht gespeichert werden."); return; }
 
-    saveReportRecord({ status: "zurückgestellt" }, function (reportId) {
+    saveReportRecord({ status: "zurückgestellt", statusChangedAt: new Date().toISOString() }, function (reportId) {
       if (!createFollowup) {
         // Zurückgestellt, aber weiterhin derselbe Auftrag — Kalendereintrag (falls
         // Mitarbeiter/Datum gesetzt) bleibt/entsteht, damit er zum Neu-Einteilen sichtbar ist.
@@ -3747,9 +4013,130 @@
     view.appendChild(renderKonfiguratorSettingsCard());
     view.appendChild(renderSollstundenSettingsCard());
     view.appendChild(renderTeamSettingsCard());
+    // Push-Benachrichtigungen: bewusst zusätzlich an isChefUser gebunden (nicht nur an das
+    // Einstellungen-Passwort) — so bekommt wirklich nur Thomas selbst die Option angeboten,
+    // sich für "Auftrag abgeschlossen/zurückgestellt"-Meldungen einzutragen, ganz gleich wer
+    // sonst das Einstellungen-Passwort kennt.
+    if (isChefUser(currentUser)) view.appendChild(renderPushSettingsCard());
     view.appendChild(renderPasswordSettingsCard());
 
     return view;
+  }
+
+  /* =====================================================================
+     Push-Benachrichtigungen (Web Push) — nur für den Chef.
+     Eine Supabase Edge Function schickt bei Auftrags-Abschluss/-Zurückstellung eine
+     Push-Nachricht an alle hier hinterlegten Geräte-Abos (Tabelle "push_subscriptions").
+     Siehe sw.js für die Empfangsseite (push/notificationclick) und die Einrichtungsanleitung
+     für die einmalige Server-Einrichtung in Supabase.
+     ===================================================================== */
+  var pushSubStatus = "unknown"; // "unknown" | "checking" | "subscribed" | "unsubscribed" | "unsupported"
+  var pushBusy = false;
+
+  function urlBase64ToUint8Array(base64String) {
+    var padding = "=".repeat((4 - base64String.length % 4) % 4);
+    var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    var rawData = atob(base64);
+    var outputArray = new Uint8Array(rawData.length);
+    for (var i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+  }
+
+  function checkPushSubStatus() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) { pushSubStatus = "unsupported"; render(); return; }
+    pushSubStatus = "checking";
+    navigator.serviceWorker.ready.then(function (reg) {
+      return reg.pushManager.getSubscription();
+    }).then(function (sub) {
+      pushSubStatus = sub ? "subscribed" : "unsubscribed";
+      render();
+    }).catch(function () {
+      pushSubStatus = "unsubscribed";
+      render();
+    });
+  }
+
+  function enablePushNotifications() {
+    if (!db) { alert("Keine Verbindung zur Datenbank."); return; }
+    if (pushBusy) return;
+    pushBusy = true; render();
+    Notification.requestPermission().then(function (perm) {
+      if (perm !== "granted") {
+        pushBusy = false;
+        alert("Ohne Erlaubnis im Browser können keine Benachrichtigungen gesendet werden.");
+        render();
+        return;
+      }
+      navigator.serviceWorker.ready.then(function (reg) {
+        return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+      }).then(function (sub) {
+        var json = sub.toJSON();
+        var payload = {
+          employeeName: currentUser,
+          endpoint: json.endpoint,
+          p256dh: json.keys.p256dh,
+          auth: json.keys.auth,
+          createdAt: new Date().toISOString()
+        };
+        // Falls dieses Gerät (Endpoint) schon einmal ein Abo hatte, aktualisieren statt doppelt anlegen.
+        var existing = state.pushSubscriptions.find(function (p) { return p.endpoint === payload.endpoint; });
+        var done = function () { pushBusy = false; pushSubStatus = "subscribed"; render(); };
+        if (existing) db.doc("push_subscriptions/" + existing.id).update(payload).then(done).catch(done);
+        else db.collection("push_subscriptions").add(payload).then(done).catch(done);
+      }).catch(function () {
+        pushBusy = false;
+        alert("Push-Benachrichtigungen konnten nicht aktiviert werden.");
+        render();
+      });
+    });
+  }
+
+  function disablePushNotifications() {
+    if (pushBusy) return;
+    pushBusy = true; render();
+    navigator.serviceWorker.ready.then(function (reg) { return reg.pushManager.getSubscription(); }).then(function (sub) {
+      if (!sub) { pushBusy = false; pushSubStatus = "unsubscribed"; render(); return; }
+      var endpoint = sub.endpoint;
+      return sub.unsubscribe().then(function () {
+        var existing = state.pushSubscriptions.find(function (p) { return p.endpoint === endpoint; });
+        var done = function () { pushBusy = false; pushSubStatus = "unsubscribed"; render(); };
+        if (existing && db) db.doc("push_subscriptions/" + existing.id).delete().then(done).catch(done);
+        else done();
+      });
+    }).catch(function () { pushBusy = false; render(); });
+  }
+
+  function renderPushSettingsCard() {
+    if (pushSubStatus === "unknown") checkPushSubStatus();
+    var card = el("div", { class: "card", style: "display:flex;flex-direction:column;gap:10px;" });
+    card.appendChild(el("h3", { style: "margin:0;" }, ["Push-Benachrichtigungen (nur für dich)"]));
+    card.appendChild(el("p", { style: "margin:0;font-size:12.5px;color:var(--muted);" },
+      ["Erhalte eine Meldung auf diesem Gerät, sobald ein Mitarbeiter einen Auftrag abschließt oder zurückstellt — Mitarbeiter selbst bekommen davon nichts mit."]));
+
+    if (pushSubStatus === "unsupported") {
+      card.appendChild(infoNote("Dieser Browser unterstützt keine Push-Benachrichtigungen."));
+      return card;
+    }
+    if (pushSubStatus === "checking" || pushSubStatus === "unknown") {
+      card.appendChild(el("p", { style: "margin:0;font-size:12.5px;color:var(--muted);" }, ["Status wird geprüft …"]));
+      return card;
+    }
+
+    var row = el("div", { style: "display:flex;align-items:center;gap:10px;flex-wrap:wrap;" });
+    if (pushSubStatus === "subscribed") {
+      row.appendChild(el("span", { class: "tag success" }, ["Aktiv auf diesem Gerät"]));
+      var offBtn = el("button", { class: "btn btn-sm" }, [pushBusy ? "…" : "Deaktivieren"]);
+      offBtn.addEventListener("click", disablePushNotifications);
+      row.appendChild(offBtn);
+    } else {
+      var onBtn = el("button", { class: "btn btn-sm btn-primary" }, [pushBusy ? "…" : "Push aktivieren"]);
+      onBtn.addEventListener("click", enablePushNotifications);
+      row.appendChild(onBtn);
+    }
+    card.appendChild(row);
+    card.appendChild(el("p", { style: "margin:0;font-size:11px;color:var(--muted);" },
+      ["Gilt pro Gerät/Browser — auf jedem Gerät, auf dem du Meldungen willst, einmal aktivieren."]));
+    return card;
   }
 
   // Firmenweite Standardzeiten zum schnellen Ausfüllen eines neuen Arbeitstags. Die
