@@ -443,6 +443,35 @@
   .modal-head { display: flex; align-items: center; justify-content: space-between; }
   .modal-head h2 { font-size: 18px; margin: 0; }
   .modal-head button { background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px; }
+  .modal-sheet.wide { max-width: 680px; }
+
+  /* ---------- Toggle switch ---------- */
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
+  .toggle-switch { position: relative; display: inline-block; width: 40px; height: 23px; flex-shrink: 0; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .toggle-slider { position: absolute; inset: 0; background: var(--line); border-radius: 999px; transition: background .15s; pointer-events: none; }
+  .toggle-slider::before { content: ""; position: absolute; width: 17px; height: 17px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+  .toggle-switch input:checked + .toggle-slider { background: var(--slate); }
+  .toggle-switch input:checked + .toggle-slider::before { transform: translateX(17px); }
+  .toggle-row .toggle-text strong { display: block; font-size: 13px; font-weight: 600; color: var(--ink); }
+  .toggle-row .toggle-text span { display: block; font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+
+  /* ---------- Profil-Modal (Mitarbeiter) ---------- */
+  .profile-section { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .profile-section:first-of-type { border-top: none; padding-top: 0; }
+  .profile-section h4 { margin: 0; font-size: 13.5px; font-family: 'Barlow Semi Condensed', sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-soft); }
+  .profile-section .hint { margin: -4px 0 0; font-size: 11.5px; color: var(--muted); }
+  .mode-choice-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .mode-choice { border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px; cursor: pointer; font-size: 12.5px; font-weight: 600; background: var(--card-raised); }
+  .mode-choice.checked { border-color: var(--slate); background: var(--slate); color: #fff; }
+  .weekday-field-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  @media (min-width: 460px) { .weekday-field-grid { grid-template-columns: repeat(7, 1fr); } }
+  .weekday-field-grid .field label { text-align: center; }
+  .weekday-field-grid input { padding: 6px 4px; text-align: center; font-size: 12.5px; }
+  .konto-preview { display: flex; align-items: baseline; justify-content: space-between; background: var(--card-raised); border-radius: 9px; padding: 9px 12px; font-size: 13px; }
+  .konto-preview strong { font-size: 16px; font-family: 'Barlow Semi Condensed', sans-serif; }
+  .zeitausgleich-input-row { display: flex; gap: 6px; align-items: center; }
+  .zeitausgleich-input-row .sign-btn { width: 42px; flex-shrink: 0; font-size: 16px; font-weight: 700; }
 
   /* ---------- Print ---------- */
   #print-area { display: none; }
@@ -730,7 +759,8 @@
       flag: '<path d="M5 21V4"/><path d="M5 4h13l-3.5 4L18 12H5"/>',
       refresh: '<path d="M20 11A8 8 0 0 0 6.3 6.3L4 8.5"/><path d="M4 4v4.5h4.5"/><path d="M4 13a8 8 0 0 0 13.7 4.7L20 15.5"/><path d="M20 20v-4.5h-4.5"/>',
       gift: '<rect x="3.5" y="9.5" width="17" height="10.5" rx="1.3"/><path d="M3.5 13.5h17"/><path d="M12 9.5v10.5"/><path d="M12 9.5c-1.8 0-3.3-1.4-3.3-3.1S9.7 3.3 11 3.9c.9.4 1 2 1 2s.1-1.6 1-2c1.3-.6 2.8.5 2.8 2.2S13.8 9.5 12 9.5Z"/>',
-      bell: '<path d="M18 8.5a6 6 0 0 0-12 0c0 6.4-2.5 8.4-2.5 8.4h17s-2.5-2-2.5-8.4Z"/><path d="M13.7 20.5a2 2 0 0 1-3.4 0"/>'
+      bell: '<path d="M18 8.5a6 6 0 0 0-12 0c0 6.4-2.5 8.4-2.5 8.4h17s-2.5-2-2.5-8.4Z"/><path d="M13.7 20.5a2 2 0 0 1-3.4 0"/>',
+      mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 6.5 8 6.2 8-6.2"/>'
     };
     return '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (paths[name] || "") + "</svg>";
   }
@@ -2195,6 +2225,25 @@
     return { wrap: wrap, input: input };
   }
 
+  // Wiederverwendbarer Ein/Aus-Schalter (Toggle-Switch) — z. B. "Firmenurlaub führen" oder
+  // "Freitags-Urlaub getrennt führen" im Profil-Bearbeiten-Dialog. onChange(checked) wird bei
+  // jeder Änderung aufgerufen; der Aufrufer entscheidet selbst, ob/wie neu gerendert wird.
+  function renderToggle(title, subtitle, checked, onChange) {
+    var row = el("label", { class: "toggle-row" }, []);
+    var textWrap = el("div", { class: "toggle-text" }, []);
+    textWrap.appendChild(el("strong", {}, [title]));
+    if (subtitle) textWrap.appendChild(el("span", {}, [subtitle]));
+    row.appendChild(textWrap);
+    var sw = el("span", { class: "toggle-switch" }, []);
+    var input = el("input", { type: "checkbox" });
+    input.checked = !!checked;
+    input.addEventListener("change", function (e) { onChange(e.target.checked); });
+    sw.appendChild(input);
+    sw.appendChild(el("span", { class: "toggle-slider" }, []));
+    row.appendChild(sw);
+    return { row: row, input: input };
+  }
+
   // Zerlegt einen bisher als EIN Feld gespeicherten "PLZ Ort"-Text (z. B. "4770 Andorf")
   // wieder in seine zwei Bestandteile, damit bestehende Adressen beim Bearbeiten weiterhin
   // korrekt in den getrennten PLZ-/Ort-Feldern erscheinen.
@@ -2390,19 +2439,30 @@
     if (diff < 0) diff += 24 * 60; // falls über Mitternacht (selten)
     return diff;
   }
-  // Soll-Stunden gelten PRO MITARBEITER und pro Wochentag (Mo–Fr je einzeln in den
-  // Einstellungen > Mitarbeiter hinterlegt) — nicht mehr firmenweit einheitlich, weil manche
+  // Soll-Stunden gelten PRO MITARBEITER und pro Wochentag (im Profil-Bearbeiten-Dialog je
+  // einzeln hinterlegt, jetzt inkl. Samstag/Sonntag) — nicht firmenweit einheitlich, weil manche
   // Mitarbeiter nur Halbtags oder an einzelnen Tagen weniger arbeiten. Ist für eine Person noch
-  // nichts hinterlegt, gilt die Standard-Vorgabe (8 Std. Mo–Do, 5 Std. Fr).
-  var SOLL_KEY_BY_WEEKDAY = { 1: "sollMo", 2: "sollDi", 3: "sollMi", 4: "sollDo", 5: "sollFr" };
+  // nichts hinterlegt, gilt die Standard-Vorgabe (8 Std. Mo–Do, 5 Std. Fr, 0 Sa/So).
+  //
+  // "sollstundenMode" (neu, Profil-Dialog) steuert, WIE die Werte für eine Person zustande
+  // kommen — bleibt das Feld leer/undefiniert (ältere Datensätze), verhält sich alles wie bisher:
+  //   "individuell" — eigene Werte je Wochentag (sollMo … sollSo), fehlende Tage = Standard/0
+  //   "pauschal"    — eine Wochenstunden-Zahl (sollWeeklyTotal), gleichmäßig auf Mo–Fr verteilt
+  //   "standard"/leer — reine Firmen-Vorgabe (8/8/8/8/5, Sa/So 0), keine Ausnahmen je Person
+  var SOLL_KEY_BY_WEEKDAY = { 0: "sollSo", 1: "sollMo", 2: "sollDi", 3: "sollMi", 4: "sollDo", 5: "sollFr", 6: "sollSa" };
   function sollHoursForDate(iso, employeeName) {
     var d = new Date(iso + "T00:00:00");
     var dow = d.getDay(); // 0 = Sonntag … 6 = Samstag
-    if (dow === 0 || dow === 6) return 0;
     var tm = findTeamMember(employeeName);
+    if (tm && tm.sollstundenMode === "standard") return dow === 0 || dow === 6 ? 0 : (dow === 5 ? 5 : 8);
+    if (tm && tm.sollstundenMode === "pauschal" && tm.sollWeeklyTotal != null && tm.sollWeeklyTotal !== "") {
+      if (dow === 0 || dow === 6) return 0;
+      return Number(tm.sollWeeklyTotal) / 5;
+    }
     var key = SOLL_KEY_BY_WEEKDAY[dow];
     if (tm && tm[key] != null && tm[key] !== "") return Number(tm[key]);
-    return dow === 5 ? 5 : 8; // Standard-Vorgabe für Personen ohne eigene Angabe
+    if (dow === 0 || dow === 6) return 0;
+    return dow === 5 ? 5 : 8; // Standard-Vorgabe für Personen/Tage ohne eigene Angabe
   }
   function computeHoursDuration(h) {
     if (!h) return 0;
@@ -2479,6 +2539,112 @@
       else if (ym === thisYm && d <= today) total += sollHoursForDate(d, employeeName);
     });
     return total;
+  }
+
+  /* =====================================================================
+     Urlaub-/Firmenurlaub-Kontostände (Profil-Bearbeiten-Dialog, siehe
+     renderEmployeeProfileModal weiter unten) — automatische jährliche
+     Zuwachsberechnung ab einem Eintrittsdatum (Tag/Monat), aufbauend auf
+     einem manuell gesetzten "Anfangsstand" zu einem Referenzdatum.
+
+     Bewusste Design-Entscheidung: Ist für eine Person noch KEIN Referenz-
+     datum ("anfangsstandDatum"/"firmenurlaubAnfangsstandDatum") gesetzt,
+     verhält sich alles genau wie bisher — die Zahl im jeweiligen Feld
+     ("urlaubTage"/"firmenurlaubTage") wird unverändert als aktueller Stand
+     angezeigt, ganz ohne automatische Berechnung. Erst wenn der Chef im
+     Profil-Dialog einmal ein Referenzdatum setzt (oder auf "Neues
+     Urlaubsjahr beginnen" klickt, was das Referenzdatum auf heute setzt),
+     beginnt die automatische Hochrechnung — so wird kein bestehender,
+     manuell gepflegter Wert plötzlich rückwirkend verändert.
+     ===================================================================== */
+  function round2(n) { return Math.round((n || 0) * 100) / 100; }
+
+  // Zählt, wie oft der Jahrestag (Tag/Monat des Eintrittsdatums) im Zeitraum
+  // NACH "fromIsoExclusive" und BIS EINSCHLIESSLICH "toIsoInclusive" auftritt.
+  // Ohne Tag/Monat (noch nicht hinterlegt) gibt es keine automatischen Zuwächse.
+  function countAnniversariesSince(eintrittTag, eintrittMonat, fromIsoExclusive, toIsoInclusive) {
+    eintrittTag = parseInt(eintrittTag, 10);
+    eintrittMonat = parseInt(eintrittMonat, 10);
+    if (!eintrittTag || !eintrittMonat) return 0;
+    var from = fromIsoExclusive ? new Date(fromIsoExclusive + "T00:00:00") : null;
+    var to = new Date(toIsoInclusive + "T00:00:00");
+    if (isNaN(to.getTime())) return 0;
+    var startYear = from ? from.getFullYear() : to.getFullYear();
+    var count = 0;
+    for (var y = startYear; y <= to.getFullYear(); y++) {
+      var lastDayOfMonth = new Date(y, eintrittMonat, 0).getDate(); // z. B. 29.2. in Nicht-Schaltjahren -> 28.2.
+      var day = Math.min(eintrittTag, lastDayOfMonth);
+      var anniv = new Date(y, eintrittMonat - 1, day);
+      if (from && anniv <= from) continue;
+      if (anniv > to) continue;
+      count++;
+    }
+    return count;
+  }
+
+  // Zählt Kalendertage eines bestimmten Eintrags-Typs (z. B. "Urlaub") im Zeitraum,
+  // über eindeutige Tage aggregiert (hoursDayAggregate) — zählt also auch bei
+  // alten Mehrfach-Datensätzen pro Tag nie doppelt. fridayFilter: "nichtFr"
+  // schließt Freitage aus, "nurFr" zählt ausschließlich Freitage.
+  function consumedDayCount(employeeName, dayType, fromIsoExclusive, toIsoInclusive, fridayFilter) {
+    var seen = {};
+    state.hours.forEach(function (h) {
+      if (h.employeeName !== employeeName) return;
+      if (fromIsoExclusive && !(h.date > fromIsoExclusive)) return;
+      if (!(h.date <= toIsoInclusive)) return;
+      seen[h.date] = true;
+    });
+    var count = 0;
+    Object.keys(seen).forEach(function (dateIso) {
+      var agg = hoursDayAggregate(dateIso, employeeName);
+      if (!agg || agg.type !== dayType) return;
+      var isFr = new Date(dateIso + "T00:00:00").getDay() === 5;
+      if (fridayFilter === "nichtFr" && isFr) return;
+      if (fridayFilter === "nurFr" && !isFr) return;
+      count++;
+    });
+    return count;
+  }
+
+  // Urlaubskonto (Haupttopf). Bei aktivierter getrennter Freitagsführung zählen
+  // Freitags-Urlaubstage NICHT gegen dieses Konto (siehe urlaubFrKontostand).
+  function urlaubKontostand(m, asOfIso) {
+    asOfIso = asOfIso || todayIso();
+    var anfangsstand = Number(m.urlaubTage) || 0;
+    var baseline = m.anfangsstandDatum || null;
+    if (!baseline) return anfangsstand;
+    var accrued = countAnniversariesSince(m.eintrittTag, m.eintrittMonat, baseline, asOfIso) * (Number(m.urlaubProJahr) || 0);
+    var consumed = consumedDayCount(m.name, "Urlaub", baseline, asOfIso, m.freitagsUrlaubGetrennt ? "nichtFr" : null);
+    return round2(anfangsstand + accrued - consumed);
+  }
+
+  // Getrennter Freitags-Urlaubstopf (nur relevant/sichtbar, wenn "freitagsUrlaubGetrennt"
+  // aktiviert ist) — bekommt keinen eigenen automatischen Jahres-Zuwachs, sondern wird vom
+  // Chef manuell befüllt (Anfangsstand); es werden nur die tatsächlich genommenen
+  // Freitags-Urlaubstage abgezogen.
+  function urlaubFrKontostand(m, asOfIso) {
+    if (!m.freitagsUrlaubGetrennt) return null;
+    asOfIso = asOfIso || todayIso();
+    var anfangsstand = Number(m.urlaubTageFr) || 0;
+    var baseline = m.anfangsstandDatum || null;
+    if (!baseline) return anfangsstand;
+    var consumed = consumedDayCount(m.name, "Urlaub", baseline, asOfIso, "nurFr");
+    return round2(anfangsstand - consumed);
+  }
+
+  // Firmenurlaub — eigenständiges, getrennt geführtes Konto (nur wenn "firmenurlaubFuehren"
+  // aktiviert ist). Bewusst NICHT automatisch durch erfasste "Urlaub"-Tage verringert (es gibt
+  // keinen eigenen Eintrags-Typ, um zu unterscheiden, aus welchem Topf ein Urlaubstag stammt) —
+  // der Verbrauch wird wie bisher vom Chef manuell im Anfangsstand nachgeführt; automatisch
+  // dazu kommt nur der jährliche Zuwachs seit dem Referenzdatum.
+  function firmenurlaubKontostand(m, asOfIso) {
+    if (!m.firmenurlaubFuehren) return null;
+    asOfIso = asOfIso || todayIso();
+    var anfangsstand = Number(m.firmenurlaubTage) || 0;
+    var baseline = m.firmenurlaubAnfangsstandDatum || null;
+    if (!baseline) return anfangsstand;
+    var accrued = countAnniversariesSince(m.eintrittTag, m.eintrittMonat, baseline, asOfIso) * (Number(m.firmenurlaubProJahr) || 0);
+    return round2(anfangsstand + accrued);
   }
 
   function renderHours() {
@@ -2568,10 +2734,20 @@
     row.appendChild(stat("Soll (bisher)", soll.toFixed(2) + " Std."));
     row.appendChild(stat("Überstunden", (diff >= 0 ? "+" : "") + diff.toFixed(2) + " Std.", diff < 0 ? "--danger" : "--success"));
     card.appendChild(row);
+    var btnRow = el("div", { style: "display:flex;gap:8px;flex-wrap:wrap;" });
     var printBtn = el("button", { class: "btn btn-sm" }, []);
     printBtn.innerHTML = icon("printer", 14) + "<span>Drucken</span>";
     printBtn.addEventListener("click", function () { printHoursMonth(ym, employeeName); });
-    card.appendChild(printBtn);
+    btnRow.appendChild(printBtn);
+    var tmForExport = findTeamMember(employeeName);
+    var xlsBtn = el("button", { class: "btn btn-sm" }, []);
+    xlsBtn.innerHTML = icon("download", 14) + "<span>" + (tmForExport && tmForExport.email ? "Excel + Mail" : "Excel") + "</span>";
+    xlsBtn.title = tmForExport && tmForExport.email
+      ? "Lädt die Stundenliste als Excel-Datei herunter und öffnet ein vorausgefülltes E-Mail-Fenster (Anhang muss danach manuell hinzugefügt werden)."
+      : "Lädt die Stundenliste als Excel-Datei herunter. Im Profil ist keine E-Mail-Adresse hinterlegt, es wird daher kein Mail-Fenster geöffnet.";
+    xlsBtn.addEventListener("click", function () { exportHoursMonthExcel(ym, employeeName); });
+    btnRow.appendChild(xlsBtn);
+    card.appendChild(btnRow);
     return card;
   }
 
@@ -2664,8 +2840,16 @@
       });
     }
     if (!blocks.length) {
+      // Vorbelegung: zuerst die persönlichen Standardzeiten dieser Person (Profil-Dialog,
+      // "Standardzeiten für neue Einträge"), erst wenn dort nichts hinterlegt ist die
+      // firmenweite Vorgabe (Einstellungen > Zeiterfassung).
+      var tm = findTeamMember(employeeName);
       var s = getSettings();
-      if (s.standardBeginn || s.standardEnde) {
+      var pBeginn = tm && tm.standardBeginn, pEnde = tm && tm.standardEnde, pPause = tm && tm.standardPause;
+      if (pBeginn || pEnde) {
+        blocks = [{ start: pBeginn || "", ende: pEnde || "" }];
+        breakMinutes = pPause != null && pPause !== "" ? Number(pPause) : 0;
+      } else if (s.standardBeginn || s.standardEnde) {
         blocks = [{ start: s.standardBeginn || "", ende: s.standardEnde || "" }];
         breakMinutes = s.standardPause != null ? Number(s.standardPause) : 0;
       } else {
@@ -2933,6 +3117,60 @@
     hoursPrintData = { title: "Stundenaufzeichnung – " + MONTHS[parseInt(mp[1], 10) - 1] + " " + mp[0], employeeName: employeeName, ym: ym };
     renderPrintArea();
     setTimeout(function () { window.print(); }, 60);
+  }
+
+  // Excel-Export der Stundenliste eines Monats + Mail-Versand an die im Profil hinterlegte
+  // Adresse. Ehrlich gehalten: Ein Browser kann aus JavaScript heraus KEINE Datei automatisch
+  // an eine ausgehende E-Mail anhängen (das lassen alle Mailprogramme aus Sicherheitsgründen
+  // nicht zu) — die .xlsx-Datei wird daher heruntergeladen UND gleichzeitig ein
+  // vorausgefülltes "mailto:"-Fenster geöffnet; die Datei muss danach einmal manuell im
+  // Mailprogramm angehängt werden. Für einen wirklich automatischen Versand bräuchte es einen
+  // eigenen Mail-Versand-Baustein (Supabase Edge Function), ähnlich wie bei den
+  // Push-Benachrichtigungen — das ist hier bewusst nicht mit eingebaut.
+  function exportHoursMonthExcel(ym, employeeName) {
+    withXlsxLib(function () {
+      var todayIsoVal = todayIso(), thisYm = todayIsoVal.slice(0, 7);
+      var rows = (daysInMonth(ym) || []).map(function (d, i) {
+        var agg = hoursDayAggregate(d, employeeName);
+        var countsSoll = (ym < thisYm) || (ym === thisYm && d <= todayIsoVal);
+        var soll = countsSoll ? sollHoursForDate(d, employeeName) : 0;
+        var ist = agg ? agg.ist : 0;
+        var beginn = "", ende = "", pause = "";
+        if (agg && agg.type === "Arbeit") {
+          var blocks = agg.rows.reduce(function (acc, r) { return acc.concat(hoursEntryBlocks(r)); }, [])
+            .filter(function (b) { return b.start || b.ende; });
+          if (blocks.length) { beginn = blocks[0].start || ""; ende = blocks[blocks.length - 1].ende || ""; }
+          var pauseMin = agg.rows.reduce(function (s, r) { return s + (r.breakMinutes || 0); }, 0);
+          pause = pauseMin || "";
+        }
+        var dObj = new Date(d + "T00:00:00");
+        return {
+          "Tag": String(i + 1).padStart(2, "0") + "." + ym.split("-")[1] + ".",
+          "Wochentag": WEEKDAYS[(dObj.getDay() + 6) % 7],
+          "Art": agg ? agg.type : "",
+          "Ort": agg ? agg.ort : "",
+          "Beginn": beginn, "Pause (Min.)": pause, "Ende": ende,
+          "Ist (Std.)": agg ? fmtHoursNum(ist) : "",
+          "Soll (Std.)": countsSoll && soll > 0 ? fmtHoursNum(soll) : "",
+          "Notiz": agg ? agg.note : ""
+        };
+      });
+      var ws = window.XLSX.utils.json_to_sheet(rows);
+      var wb = window.XLSX.utils.book_new();
+      window.XLSX.utils.book_append_sheet(wb, ws, "Stunden");
+      var mp = ym.split("-");
+      var dateiname = "Stundenliste_" + employeeName.replace(/[^A-Za-z0-9]+/g, "_") + "_" + ym + ".xlsx";
+      window.XLSX.writeFile(wb, dateiname);
+
+      var tm = findTeamMember(employeeName);
+      if (tm && tm.email) {
+        var betreff = "Stundenliste " + MONTHS[parseInt(mp[1], 10) - 1] + " " + mp[0] + " – " + employeeName;
+        var body = "Hallo " + employeeName + ",\n\nim Anhang die Stundenliste für " + MONTHS[parseInt(mp[1], 10) - 1] + " " + mp[0] +
+          " (Datei „" + dateiname + '" wurde gerade heruntergeladen — bitte hier noch manuell anhängen).\n\nViele Grüße';
+        var mailto = "mailto:" + encodeURIComponent(tm.email) + "?subject=" + encodeURIComponent(betreff) + "&body=" + encodeURIComponent(body);
+        setTimeout(function () { window.location.href = mailto; }, 300);
+      }
+    });
   }
 
   var pendingCustomerSelectCallback = null;
@@ -4326,7 +4564,354 @@
   // unabhängiger Wert je Person) — NICHT zu verwechseln mit "settings.passwordHash", dem
   // Chef-Passwort für die Einstellungen. Der Chef kann hier für jede Person ein Passwort neu
   // vergeben (z. B. wenn jemand es vergessen hat), ohne das alte zu kennen.
-  var teamPwEditFor = null; // id der Person, deren Passwort-Feld gerade offen ist
+
+  /* =====================================================================
+     Profil-Bearbeiten-Dialog (Einstellungen > Mitarbeiter > "Bearbeiten") —
+     ein einzelner Modal-Dialog statt der früheren, immer sichtbaren Inline-
+     Felder je Mitarbeiter-Zeile. Arbeitet auf einer lokalen Arbeitskopie
+     ("employeeProfileDraft"), die erst beim Klick auf "Speichern" auf
+     einmal in die Datenbank geschrieben wird — Zwischenstände (z. B. beim
+     Umschalten zwischen den Sollstunden-Modi) verändern also NIE den
+     echten state.team-Datensatz, mit dem an anderer Stelle der App bereits
+     gerechnet wird (Soll-Stunden, Konten, …).
+     ===================================================================== */
+  var employeeProfileEditId = null; // id der Person, deren Profil-Dialog gerade offen ist
+  var employeeProfileDraft = null;  // Arbeitskopie der Felder dieser Person (noch ungespeichert)
+  var employeeProfileZaSign = "+";  // UI-Zustand: Vorzeichen-Umschalter für den Zeitausgleich-Betrag
+  var employeeProfilePwOpen = false; // Passwort-Unterbereich im Dialog gerade aufgeklappt?
+  var employeeProfileMsg = { text: "", color: "" };
+
+  function openEmployeeProfileModal(id) {
+    var m = state.team.find(function (t) { return t.id === id; });
+    if (!m) return;
+    employeeProfileEditId = id;
+    employeeProfileDraft = Object.assign({}, m);
+    employeeProfileZaSign = (Number(m.zeitausgleichStunden) || 0) < 0 ? "-" : "+";
+    employeeProfilePwOpen = false;
+    employeeProfileMsg = { text: "", color: "" };
+    renderEmployeeProfileModal();
+  }
+
+  // Liest alle Felder mit einem "data-field"-Attribut innerhalb von "sheet" in "target" ein —
+  // wird vor jedem Neu-Rendern des Dialogs aufgerufen (z. B. bei einem Umschalter-Klick), damit
+  // bereits getippte, noch nicht gespeicherte Werte in anderen Feldern dabei nicht verloren gehen.
+  function captureProfileFormInto(sheet, target) {
+    sheet.querySelectorAll("[data-field]").forEach(function (input) {
+      var key = input.getAttribute("data-field");
+      target[key] = input.type === "checkbox" ? input.checked : input.value;
+    });
+  }
+  function numOrNull(v) { return (v === "" || v == null || isNaN(parseFloat(v))) ? null : parseFloat(v); }
+
+  function renderEmployeeProfileModal() {
+    var liveM = state.team.find(function (t) { return t.id === employeeProfileEditId; });
+    if (!liveM || !employeeProfileDraft) { closeAnyModal(); return; }
+    var d = employeeProfileDraft;
+
+    var root = $("#modal-root");
+    root.innerHTML = "";
+    var backdrop = el("div", { class: "modal-backdrop" });
+    backdrop.addEventListener("click", function (e) { if (e.target === backdrop) closeAnyModal(); });
+    var sheet = el("div", { class: "modal-sheet wide" });
+
+    var head = el("div", { class: "modal-head" });
+    head.appendChild(el("h2", {}, ["Profil bearbeiten – " + (d.name || liveM.name)]));
+    var closeBtn = el("button", {}, []); closeBtn.innerHTML = icon("x", 20); closeBtn.addEventListener("click", closeAnyModal);
+    head.appendChild(closeBtn);
+    sheet.appendChild(head);
+
+    // ---- Basis ----
+    var basisSec = el("div", { class: "profile-section" }, []);
+    basisSec.appendChild(el("h4", {}, ["Basis"]));
+    var basisRow = el("div", { class: "field-row cols-2" });
+    var nameField = el("div", { class: "field" }, [el("label", {}, ["Name"])]);
+    nameField.appendChild(el("input", { type: "text", value: d.name || "", "data-field": "name" }));
+    basisRow.appendChild(nameField);
+    var emailField = el("div", { class: "field" }, [el("label", {}, ["E-Mail"])]);
+    emailField.appendChild(el("input", { type: "email", placeholder: "z. B. für den Stundenlisten-Versand", value: d.email || "", "data-field": "email" }));
+    basisRow.appendChild(emailField);
+    basisSec.appendChild(basisRow);
+    var chefToggle = renderToggle("Chef", "Sieht alle Mitarbeiter-Stunden und Produktion/Kalkulation im Konfigurator.", !!d.isChef, function () {});
+    chefToggle.input.setAttribute("data-field", "isChef");
+    basisSec.appendChild(chefToggle.row);
+    sheet.appendChild(basisSec);
+
+    // ---- Sollstunden ----
+    var sollSec = el("div", { class: "profile-section" }, []);
+    sollSec.appendChild(el("h4", {}, ["Sollstunden"]));
+    var mode = d.sollstundenMode || "individuell";
+    var modeRow = el("div", { class: "mode-choice-row" });
+    [["standard", "Standard (8/8/8/8/5)"], ["individuell", "Eigene Wochentage"], ["pauschal", "Pauschal pro Woche"]].forEach(function (mm) {
+      var b = el("button", { type: "button", class: "mode-choice" + (mode === mm[0] ? " checked" : "") }, [mm[1]]);
+      b.addEventListener("click", function () {
+        captureProfileFormInto(sheet, d);
+        d.sollstundenMode = mm[0];
+        renderEmployeeProfileModal();
+      });
+      modeRow.appendChild(b);
+    });
+    sollSec.appendChild(modeRow);
+
+    var sumEl = el("strong", {}, [""]);
+    function recalcSum() {
+      var total = 0;
+      if (mode === "individuell") {
+        ["sollMo", "sollDi", "sollMi", "sollDo", "sollFr", "sollSa", "sollSo"].forEach(function (k) {
+          var f = sheet.querySelector('[data-field="' + k + '"]');
+          if (f && f.value !== "") total += parseFloat(f.value) || 0;
+        });
+      } else if (mode === "pauschal") {
+        var pf = sheet.querySelector('[data-field="sollWeeklyTotal"]');
+        total = pf && pf.value !== "" ? (parseFloat(pf.value) || 0) : 0;
+      } else {
+        total = 8 * 4 + 5;
+      }
+      sumEl.textContent = fmtHoursNum(total) + " Std./Woche";
+    }
+
+    if (mode === "individuell") {
+      var wdGrid = el("div", { class: "weekday-field-grid" });
+      [["Mo", "sollMo", 8], ["Di", "sollDi", 8], ["Mi", "sollMi", 8], ["Do", "sollDo", 8], ["Fr", "sollFr", 5], ["Sa", "sollSa", 0], ["So", "sollSo", 0]].forEach(function (t) {
+        var f = el("div", { class: "field" }, [el("label", {}, [t[0]])]);
+        var input = el("input", { type: "number", step: "0.5", min: "0", value: d[t[1]] != null ? d[t[1]] : t[2], "data-field": t[1] });
+        input.addEventListener("input", recalcSum);
+        f.appendChild(input);
+        wdGrid.appendChild(f);
+      });
+      sollSec.appendChild(wdGrid);
+    } else if (mode === "pauschal") {
+      var pField = el("div", { class: "field", style: "max-width:220px;" }, [el("label", {}, ["Stunden pro Woche"])]);
+      var pInput = el("input", { type: "number", step: "0.5", min: "0", value: d.sollWeeklyTotal != null ? d.sollWeeklyTotal : "", "data-field": "sollWeeklyTotal" });
+      pInput.addEventListener("input", recalcSum);
+      pField.appendChild(pInput);
+      sollSec.appendChild(pField);
+      sollSec.appendChild(el("p", { class: "hint" }, ["Wird gleichmäßig auf Montag–Freitag verteilt (Samstag/Sonntag = 0)."]));
+    } else {
+      sollSec.appendChild(el("p", { class: "hint" }, ["8 Std. Mo–Do, 5 Std. Fr, 0 Std. Sa/So — wie firmenweit voreingestellt, keine Ausnahme für diese Person."]));
+    }
+    sollSec.appendChild(el("div", { class: "konto-preview" }, [el("span", {}, ["Wochensumme"]), sumEl]));
+    sheet.appendChild(sollSec);
+    recalcSum();
+
+    // ---- Urlaub ----
+    var urlSec = el("div", { class: "profile-section" }, []);
+    urlSec.appendChild(el("h4", {}, ["Urlaub"]));
+    function numField2(label, key, value, step) {
+      var f = el("div", { class: "field" }, [el("label", {}, [label])]);
+      f.appendChild(el("input", { type: "number", step: step || "0.5", value: value != null ? value : "", "data-field": key }));
+      return f;
+    }
+    var urlRow1 = el("div", { class: "field-row cols-3" });
+    urlRow1.appendChild(numField2("Anfangsstand (Tage)", "urlaubTage", d.urlaubTage));
+    var adField = el("div", { class: "field" }, [el("label", {}, ["Anfangsstand-Datum"])]);
+    adField.appendChild(el("input", { type: "date", value: d.anfangsstandDatum || "", "data-field": "anfangsstandDatum" }));
+    urlRow1.appendChild(adField);
+    urlRow1.appendChild(numField2("Urlaub pro Jahr (Tage)", "urlaubProJahr", d.urlaubProJahr, "0.5"));
+    urlSec.appendChild(urlRow1);
+
+    var eintrittRow = el("div", { class: "field-row cols-2" });
+    var etField = el("div", { class: "field" }, [el("label", {}, ["Eintritt — Tag"])]);
+    etField.appendChild(el("input", { type: "number", min: "1", max: "31", value: d.eintrittTag || "", "data-field": "eintrittTag" }));
+    eintrittRow.appendChild(etField);
+    var emField = el("div", { class: "field" }, [el("label", {}, ["Eintritt — Monat"])]);
+    var emSelect = el("select", { "data-field": "eintrittMonat" });
+    emSelect.appendChild(el("option", { value: "" }, ["–"]));
+    MONTHS.forEach(function (name, idx) {
+      var opt = el("option", { value: String(idx + 1) }, [name]);
+      if (String(d.eintrittMonat) === String(idx + 1)) opt.setAttribute("selected", "selected");
+      emSelect.appendChild(opt);
+    });
+    emField.appendChild(emSelect);
+    eintrittRow.appendChild(emField);
+    urlSec.appendChild(eintrittRow);
+    urlSec.appendChild(el("p", { class: "hint" }, ["Bestimmt, an welchem Tag im Jahr der automatische Urlaubs-Zuwachs gutgeschrieben wird (auch für Firmenurlaub weiter unten). Ohne Anfangsstand-Datum bleibt alles wie bisher — reiner, manuell gepflegter Wert, ohne automatische Berechnung."]));
+
+    var frToggle = renderToggle("Freitags-Urlaub getrennt führen", "Urlaub an einem Freitag zählt gegen ein eigenes Kontingent statt gegen den normalen Resturlaub.", !!d.freitagsUrlaubGetrennt, function (checked) {
+      captureProfileFormInto(sheet, d);
+      d.freitagsUrlaubGetrennt = checked;
+      renderEmployeeProfileModal();
+    });
+    frToggle.input.setAttribute("data-field", "freitagsUrlaubGetrennt");
+    urlSec.appendChild(frToggle.row);
+    if (d.freitagsUrlaubGetrennt) {
+      var frRow = el("div", { class: "field-row cols-2" });
+      frRow.appendChild(numField2("Anfangsstand Freitags-Topf (Tage)", "urlaubTageFr", d.urlaubTageFr));
+      urlSec.appendChild(frRow);
+      urlSec.appendChild(el("div", { class: "konto-preview" }, [el("span", {}, ["Aktueller Freitags-Kontostand"]), el("strong", {}, [fmtHoursNum(urlaubFrKontostand(d)) + " Tage"])]));
+    }
+    urlSec.appendChild(el("div", { class: "konto-preview" }, [el("span", {}, ["Aktueller Urlaubs-Kontostand"]), el("strong", {}, [fmtHoursNum(urlaubKontostand(d)) + " Tage"])]));
+    var newYearBtn = el("button", { class: "btn btn-sm", type: "button" }, ["Neues Urlaubsjahr beginnen"]);
+    newYearBtn.title = "Setzt den Anfangsstand auf den aktuellen Kontostand und das Anfangsstand-Datum auf heute.";
+    newYearBtn.addEventListener("click", function () {
+      captureProfileFormInto(sheet, d);
+      var stand = urlaubKontostand(d);
+      if (d.freitagsUrlaubGetrennt) d.urlaubTageFr = urlaubFrKontostand(d);
+      d.urlaubTage = stand;
+      d.anfangsstandDatum = todayIso();
+      renderEmployeeProfileModal();
+    });
+    urlSec.appendChild(newYearBtn);
+    sheet.appendChild(urlSec);
+
+    // ---- Firmenurlaub ----
+    var fuSec = el("div", { class: "profile-section" }, []);
+    fuSec.appendChild(el("h4", {}, ["Firmenurlaub"]));
+    var fuToggle = renderToggle("Firmenurlaub führen", "Getrenntes zweites Urlaubskonto, unabhängig vom normalen Resturlaub oben.", !!d.firmenurlaubFuehren, function (checked) {
+      captureProfileFormInto(sheet, d);
+      d.firmenurlaubFuehren = checked;
+      renderEmployeeProfileModal();
+    });
+    fuToggle.input.setAttribute("data-field", "firmenurlaubFuehren");
+    fuSec.appendChild(fuToggle.row);
+    if (d.firmenurlaubFuehren) {
+      var fuRow = el("div", { class: "field-row cols-3" });
+      fuRow.appendChild(numField2("Anfangsstand (Tage)", "firmenurlaubTage", d.firmenurlaubTage));
+      var fuAdField = el("div", { class: "field" }, [el("label", {}, ["Anfangsstand-Datum"])]);
+      fuAdField.appendChild(el("input", { type: "date", value: d.firmenurlaubAnfangsstandDatum || "", "data-field": "firmenurlaubAnfangsstandDatum" }));
+      fuRow.appendChild(fuAdField);
+      fuRow.appendChild(numField2("Firmenurlaub pro Jahr (Tage)", "firmenurlaubProJahr", d.firmenurlaubProJahr, "0.5"));
+      fuSec.appendChild(fuRow);
+      fuSec.appendChild(el("div", { class: "konto-preview" }, [el("span", {}, ["Aktueller Firmenurlaub-Kontostand"]), el("strong", {}, [fmtHoursNum(firmenurlaubKontostand(d)) + " Tage"])]));
+      var fuNewYearBtn = el("button", { class: "btn btn-sm", type: "button" }, ["Neues Firmenurlaubsjahr beginnen"]);
+      fuNewYearBtn.addEventListener("click", function () {
+        captureProfileFormInto(sheet, d);
+        d.firmenurlaubTage = firmenurlaubKontostand(d);
+        d.firmenurlaubAnfangsstandDatum = todayIso();
+        renderEmployeeProfileModal();
+      });
+      fuSec.appendChild(fuNewYearBtn);
+    }
+    sheet.appendChild(fuSec);
+
+    // ---- Zeitausgleich ----
+    var zaSec = el("div", { class: "profile-section" }, []);
+    zaSec.appendChild(el("h4", {}, ["Zeitausgleich"]));
+    var zaRow = el("div", { class: "zeitausgleich-input-row" });
+    var zaSignBtn = el("button", { class: "btn btn-sm sign-btn", type: "button" }, [employeeProfileZaSign]);
+    zaSignBtn.addEventListener("click", function () {
+      captureProfileFormInto(sheet, d);
+      employeeProfileZaSign = employeeProfileZaSign === "+" ? "-" : "+";
+      renderEmployeeProfileModal();
+    });
+    zaRow.appendChild(zaSignBtn);
+    var zaAbsDefault = d.zeitausgleichAbs != null ? d.zeitausgleichAbs : Math.abs(Number(d.zeitausgleichStunden) || 0);
+    zaRow.appendChild(el("input", { type: "number", step: "0.5", min: "0", value: zaAbsDefault, "data-field": "zeitausgleichAbs", style: "flex:1;" }));
+    zaRow.appendChild(el("span", { style: "font-size:12.5px;color:var(--muted);" }, ["Std."]));
+    zaSec.appendChild(zaRow);
+    zaSec.appendChild(el("p", { class: "hint" }, ["Aktueller Kontostand — wird vom Chef manuell nachgeführt (z. B. nach Auszahlung oder Verbrauch), kein automatischer Zuwachs."]));
+    sheet.appendChild(zaSec);
+
+    // ---- Standardzeiten für neue Einträge ----
+    var stSec = el("div", { class: "profile-section" }, []);
+    stSec.appendChild(el("h4", {}, ["Standardzeiten für neue Einträge"]));
+    stSec.appendChild(el("p", { class: "hint" }, ["Überschreibt für diese Person die firmenweite Vorgabe (Einstellungen > Zeiterfassung). Leer lassen, um die firmenweite Vorgabe zu verwenden."]));
+    var stRow = el("div", { class: "field-row cols-3" });
+    var sbField = el("div", { class: "field" }, [el("label", {}, ["Beginn"])]);
+    sbField.appendChild(el("input", { type: "time", value: d.standardBeginn || "", "data-field": "standardBeginn" }));
+    stRow.appendChild(sbField);
+    var seField = el("div", { class: "field" }, [el("label", {}, ["Ende"])]);
+    seField.appendChild(el("input", { type: "time", value: d.standardEnde || "", "data-field": "standardEnde" }));
+    stRow.appendChild(seField);
+    var spField = el("div", { class: "field" }, [el("label", {}, ["Pause (Min.)"])]);
+    spField.appendChild(el("input", { type: "number", step: "5", min: "0", value: d.standardPause != null ? d.standardPause : "", "data-field": "standardPause" }));
+    stRow.appendChild(spField);
+    stSec.appendChild(stRow);
+    sheet.appendChild(stSec);
+
+    // ---- Passwort ----
+    var pwSec = el("div", { class: "profile-section" }, []);
+    pwSec.appendChild(el("h4", {}, ["Passwort"]));
+    var pwToggleBtn = el("button", { class: "btn btn-sm", type: "button" }, [employeeProfilePwOpen ? "Abbrechen" : "Passwort setzen/ändern"]);
+    pwToggleBtn.addEventListener("click", function () {
+      captureProfileFormInto(sheet, d);
+      employeeProfilePwOpen = !employeeProfilePwOpen;
+      renderEmployeeProfileModal();
+    });
+    pwSec.appendChild(pwToggleBtn);
+    if (employeeProfilePwOpen) {
+      var np1 = fieldInput("Neues Passwort", "npm1", "", "mind. 4 Zeichen");
+      np1.input.type = "password";
+      var np2 = fieldInput("Passwort bestätigen", "npm2", "", "");
+      np2.input.type = "password";
+      var pwMsg = el("p", { style: "margin:0;font-size:12px;color:var(--muted);" }, [""]);
+      var pwSaveBtn = el("button", { class: "btn btn-sm", type: "button" }, ["Passwort speichern"]);
+      pwSaveBtn.addEventListener("click", function () {
+        var v1 = np1.input.value, v2 = np2.input.value;
+        if (!v1 || v1.length < 4) { pwMsg.textContent = "Bitte mindestens 4 Zeichen verwenden."; pwMsg.style.color = "var(--danger)"; return; }
+        if (v1 !== v2) { pwMsg.textContent = "Die Passwörter stimmen nicht überein."; pwMsg.style.color = "var(--danger)"; return; }
+        if (!db) { pwMsg.textContent = "Keine Verbindung zur Datenbank."; pwMsg.style.color = "var(--danger)"; return; }
+        sha256Hex(v1).then(function (hash) {
+          db.doc("team/" + liveM.id).update({ passwordHash: hash }).then(function () {
+            employeeProfilePwOpen = false;
+            employeeProfileMsg = { text: "Passwort geändert.", color: "var(--success)" };
+            renderEmployeeProfileModal();
+          }).catch(function () { pwMsg.textContent = "Speichern nicht möglich."; pwMsg.style.color = "var(--danger)"; });
+        });
+      });
+      pwSec.appendChild(np1.wrap);
+      pwSec.appendChild(np2.wrap);
+      pwSec.appendChild(pwMsg);
+      pwSec.appendChild(pwSaveBtn);
+    }
+    sheet.appendChild(pwSec);
+
+    // ---- Meldung + Aktionen ----
+    sheet.appendChild(el("p", { style: "margin:0;font-size:12.5px;" + (employeeProfileMsg.color ? "color:" + employeeProfileMsg.color + ";" : "color:var(--muted);") }, [employeeProfileMsg.text]));
+
+    var actions = el("div", { style: "display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;" });
+    var delBtn = el("button", { class: "btn btn-danger btn-sm", type: "button" }, []);
+    delBtn.innerHTML = icon("trash", 14) + "<span>Entfernen</span>";
+    delBtn.addEventListener("click", function () {
+      if (!confirm('„' + liveM.name + '" aus der Liste entfernen? Vorhandene Einträge bleiben erhalten.')) return;
+      if (db) db.doc("team/" + liveM.id).delete().then(function () { closeAnyModal(); }).catch(function () {});
+    });
+    actions.appendChild(delBtn);
+
+    var saveWrap = el("div", { style: "display:flex;gap:8px;" });
+    var cancelBtn = el("button", { class: "btn btn-sm", type: "button" }, ["Abbrechen"]);
+    cancelBtn.addEventListener("click", closeAnyModal);
+    saveWrap.appendChild(cancelBtn);
+    var saveBtn = el("button", { class: "btn btn-primary btn-sm", type: "button" }, ["Speichern"]);
+    saveBtn.addEventListener("click", function () {
+      captureProfileFormInto(sheet, d);
+      if (!d.name || !d.name.trim()) { employeeProfileMsg = { text: "Name darf nicht leer sein.", color: "var(--danger)" }; renderEmployeeProfileModal(); return; }
+      if (!db) { employeeProfileMsg = { text: "Keine Verbindung zur Datenbank.", color: "var(--danger)" }; renderEmployeeProfileModal(); return; }
+      var patch = {
+        name: d.name.trim(),
+        email: d.email || "",
+        isChef: !!d.isChef,
+        sollstundenMode: d.sollstundenMode || "individuell",
+        sollMo: numOrNull(d.sollMo), sollDi: numOrNull(d.sollDi), sollMi: numOrNull(d.sollMi), sollDo: numOrNull(d.sollDo),
+        sollFr: numOrNull(d.sollFr), sollSa: numOrNull(d.sollSa), sollSo: numOrNull(d.sollSo),
+        sollWeeklyTotal: numOrNull(d.sollWeeklyTotal),
+        urlaubTage: numOrNull(d.urlaubTage) || 0,
+        anfangsstandDatum: d.anfangsstandDatum || null,
+        urlaubProJahr: numOrNull(d.urlaubProJahr) || 0,
+        eintrittTag: d.eintrittTag ? parseInt(d.eintrittTag, 10) : null,
+        eintrittMonat: d.eintrittMonat ? parseInt(d.eintrittMonat, 10) : null,
+        freitagsUrlaubGetrennt: !!d.freitagsUrlaubGetrennt,
+        urlaubTageFr: numOrNull(d.urlaubTageFr) || 0,
+        firmenurlaubFuehren: !!d.firmenurlaubFuehren,
+        firmenurlaubTage: numOrNull(d.firmenurlaubTage) || 0,
+        firmenurlaubAnfangsstandDatum: d.firmenurlaubAnfangsstandDatum || null,
+        firmenurlaubProJahr: numOrNull(d.firmenurlaubProJahr) || 0,
+        zeitausgleichStunden: (employeeProfileZaSign === "-" ? -1 : 1) * (parseFloat(d.zeitausgleichAbs) || 0),
+        standardBeginn: d.standardBeginn || "",
+        standardEnde: d.standardEnde || "",
+        standardPause: (d.standardPause !== "" && d.standardPause != null) ? parseInt(d.standardPause, 10) : null
+      };
+      db.doc("team/" + liveM.id).update(patch).then(function () {
+        employeeProfileMsg = { text: "Gespeichert.", color: "var(--success)" };
+        renderEmployeeProfileModal();
+      }).catch(function () { employeeProfileMsg = { text: "Speichern nicht möglich.", color: "var(--danger)" }; renderEmployeeProfileModal(); });
+    });
+    saveWrap.appendChild(saveBtn);
+    actions.appendChild(saveWrap);
+    sheet.appendChild(actions);
+
+    backdrop.appendChild(sheet);
+    root.appendChild(backdrop);
+  }
 
   function renderTeamSettingsCard() {
     var card = el("div", { class: "card", style: "display:flex;flex-direction:column;gap:12px;" });
@@ -4338,122 +4923,23 @@
       list.appendChild(el("p", { style: "margin:0;font-size:13px;color:var(--muted);" }, ["Noch keine Mitarbeiter angelegt."]));
     }
     state.team.slice().sort(function (a, b) { return (a.name || "").localeCompare(b.name || "", "de"); }).forEach(function (m) {
-      var rowWrap = el("div", { style: "display:flex;flex-direction:column;gap:0;" });
       var row = el("div", { class: "customer-row" });
       row.appendChild(el("div", { class: "initials" }, [initials(m.name)]));
-      var nameInput = el("input", { type: "text", value: m.name, style: "flex:1;" });
-      row.appendChild(nameInput);
-      if (!m.passwordHash) row.appendChild(el("span", { style: "font-size:11px;color:var(--warn,#b8860b);white-space:nowrap;" }, ["kein Passwort"]));
+      var info = el("div", { class: "info" }, []);
+      info.appendChild(el("div", { class: "name" }, [m.name]));
+      var subBits = [];
+      if (m.email) subBits.push(m.email);
+      if (!m.passwordHash) subBits.push("kein Passwort");
+      if (subBits.length) info.appendChild(el("div", { class: "addr" }, [subBits.join(" · ")]));
+      row.appendChild(info);
       if (m.isChef) row.appendChild(el("span", { class: "tag success" }, ["Chef"]));
-      var saveBtn = el("button", { class: "btn btn-icon btn-sm", title: "Umbenennen" }, []);
-      saveBtn.innerHTML = icon("check", 15);
-      saveBtn.addEventListener("click", function () {
-        var v = nameInput.value.trim();
-        if (!v || v === m.name) return;
-        if (db) db.doc("team/" + m.id).update({ name: v }).catch(function () {});
-      });
-      var pwBtn = el("button", { class: "btn btn-icon btn-sm", title: "Passwort setzen/ändern" }, []);
-      pwBtn.innerHTML = icon("lock", 15);
-      pwBtn.addEventListener("click", function () { teamPwEditFor = (teamPwEditFor === m.id ? null : m.id); render(); });
-      var delBtn = el("button", { class: "btn btn-icon btn-sm btn-danger", title: "Entfernen" }, []);
-      delBtn.innerHTML = icon("trash", 15);
-      delBtn.addEventListener("click", function () { removeTeamMember(m); });
+      var editBtn = el("button", { class: "btn btn-sm", title: "Profil bearbeiten" }, []);
+      editBtn.innerHTML = icon("edit", 14) + "<span>Bearbeiten</span>";
+      editBtn.addEventListener("click", function () { openEmployeeProfileModal(m.id); });
       var actions = el("div", { class: "actions" });
-      actions.appendChild(saveBtn);
-      actions.appendChild(pwBtn);
-      actions.appendChild(delBtn);
+      actions.appendChild(editBtn);
       row.appendChild(actions);
-      rowWrap.appendChild(row);
-
-      // "isChef" ist der einzige Schalter, der bestimmt, wer alle Mitarbeiter-Stunden einsehen
-      // und im Konfigurator Produktion/Kalkulation sehen kann (siehe isChefUser()) — unabhängig
-      // vom separaten Einstellungen-Passwort. Nur wer die Einstellungen bereits geöffnet hat
-      // (also das Einstellungen-Passwort kennt), kann dieses Häkchen überhaupt setzen.
-      var chefRow = el("div", { style: "padding:0 8px 6px 52px;" });
-      var chefLabel = el("label", { style: "display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--ink-soft);" }, []);
-      var chefCheckbox = el("input", { type: "checkbox" });
-      chefCheckbox.checked = !!m.isChef;
-      chefCheckbox.addEventListener("change", function (e) {
-        if (!db) return;
-        db.doc("team/" + m.id).update({ isChef: e.target.checked }).catch(function () {});
-      });
-      chefLabel.appendChild(chefCheckbox);
-      chefLabel.appendChild(document.createTextNode(" Chef — sieht alle Mitarbeiter-Stunden und Produktion/Kalkulation im Konfigurator"));
-      chefRow.appendChild(chefLabel);
-      rowWrap.appendChild(chefRow);
-
-      // Resturlaub/Zeitausgleich werden hier vom Chef manuell gepflegt (keine automatische
-      // Berechnung) — sie erscheinen als "Konten" in der Stunden-Ansicht der jeweiligen Person.
-      var acctRow = el("div", { style: "display:flex;gap:16px;flex-wrap:wrap;padding:0 8px 8px 52px;" });
-      (function (m) {
-        function numField(label, key) {
-          var wrap = el("div", { style: "display:flex;align-items:center;gap:6px;" });
-          wrap.appendChild(el("label", { style: "font-size:11px;color:var(--muted);white-space:nowrap;" }, [label]));
-          var input = el("input", { type: "number", step: "0.5", value: m[key] != null ? m[key] : "", style: "width:72px;padding:5px 7px;font-size:12.5px;" });
-          input.addEventListener("change", function (e) {
-            var v = e.target.value === "" ? null : parseFloat(e.target.value);
-            if (!db) return;
-            var patch = {}; patch[key] = v;
-            db.doc("team/" + m.id).update(patch).catch(function () {});
-          });
-          wrap.appendChild(input);
-          return wrap;
-        }
-        acctRow.appendChild(numField("Resturlaub (Tage)", "urlaubTage"));
-        acctRow.appendChild(numField("Zeitausgleich (Std.)", "zeitausgleichStunden"));
-      })(m);
-      rowWrap.appendChild(acctRow);
-
-      // Soll-Stunden je Wochentag — pro Person einzeln, damit Halbtags-Kräfte oder Personen mit
-      // einem kürzeren Tag (z. B. nur vormittags am Freitag) korrekt erfasst werden. Ohne eigene
-      // Angabe gilt die Standard-Vorgabe (8 Std. Mo–Do, 5 Std. Fr) — siehe sollHoursForDate().
-      var sollRow = el("div", { style: "display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:0 8px 8px 52px;" });
-      sollRow.appendChild(el("span", { style: "font-size:11px;color:var(--muted);white-space:nowrap;" }, ["Soll-Std./Tag:"]));
-      (function (m) {
-        [["Mo", "sollMo", 8], ["Di", "sollDi", 8], ["Mi", "sollMi", 8], ["Do", "sollDo", 8], ["Fr", "sollFr", 5]].forEach(function (t) {
-          var label = t[0], key = t[1], fallback = t[2];
-          var wrap = el("div", { style: "display:flex;align-items:center;gap:4px;" });
-          wrap.appendChild(el("label", { style: "font-size:11px;color:var(--muted);" }, [label]));
-          var input = el("input", { type: "number", step: "0.5", min: "0", value: m[key] != null ? m[key] : fallback, style: "width:52px;padding:5px 6px;font-size:12.5px;" });
-          input.addEventListener("change", function (e) {
-            var v = e.target.value === "" ? null : parseFloat(e.target.value);
-            if (!db) return;
-            var patch = {}; patch[key] = v;
-            db.doc("team/" + m.id).update(patch).catch(function () {});
-          });
-          wrap.appendChild(input);
-          sollRow.appendChild(wrap);
-        });
-      })(m);
-      rowWrap.appendChild(sollRow);
-
-      if (teamPwEditFor === m.id) {
-        var pwCard = el("div", { style: "display:flex;flex-direction:column;gap:8px;padding:10px 8px 12px 44px;" });
-        var np1 = fieldInput("Neues Passwort für " + m.name, "tp1-" + m.id, "", "mind. 4 Zeichen");
-        np1.input.type = "password";
-        var np2 = fieldInput("Passwort bestätigen", "tp2-" + m.id, "", "");
-        np2.input.type = "password";
-        var pmsg = el("p", { style: "margin:0;font-size:12px;color:var(--muted);" }, [""]);
-        var pSaveBtn = el("button", { class: "btn btn-primary btn-sm", style: "align-self:flex-start;" }, ["Speichern"]);
-        pSaveBtn.addEventListener("click", function () {
-          var v1 = np1.input.value, v2 = np2.input.value;
-          if (!v1 || v1.length < 4) { pmsg.textContent = "Bitte mindestens 4 Zeichen verwenden."; pmsg.style.color = "var(--danger)"; return; }
-          if (v1 !== v2) { pmsg.textContent = "Die Passwörter stimmen nicht überein."; pmsg.style.color = "var(--danger)"; return; }
-          if (!db) { pmsg.textContent = "Keine Verbindung zur Datenbank."; pmsg.style.color = "var(--danger)"; return; }
-          sha256Hex(v1).then(function (hash) {
-            db.doc("team/" + m.id).update({ passwordHash: hash }).then(function () {
-              teamPwEditFor = null;
-              render();
-            }).catch(function () { pmsg.textContent = "Speichern nicht möglich."; pmsg.style.color = "var(--danger)"; render(); });
-          });
-        });
-        pwCard.appendChild(np1.wrap);
-        pwCard.appendChild(np2.wrap);
-        pwCard.appendChild(pmsg);
-        pwCard.appendChild(pSaveBtn);
-        rowWrap.appendChild(pwCard);
-      }
-      list.appendChild(rowWrap);
+      list.appendChild(row);
     });
     card.appendChild(list);
 
