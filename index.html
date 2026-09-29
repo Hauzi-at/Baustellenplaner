@@ -528,9 +528,14 @@
   var loginNewPwMode = false; // true = für diese Person ist noch kein Passwort gesetzt -> jetzt eins vergeben
 
   var hoursMonth = todayIso().slice(0, 7); // "YYYY-MM" (todayIso() is a hoisted function decl, safe to call here)
-  var hoursEmployeeFilter = "";
-  var hoursEditing = null; // entry object or "new"
-  var hoursPrintData = null; // { title, rows } set right before printing a Stundenliste
+  // Wer wird in "Stunden" angezeigt? Wird defensiv bei JEDEM renderHours() neu bestimmt (siehe
+  // dort) — ist die Chef-Sperre (settingsUnlocked) nicht offen, gilt IMMER currentUser, ganz
+  // gleich was hier zuletzt gespeichert war. So sieht jede Person standardmäßig nur die eigenen
+  // Stunden; nur der Chef kann über die Sperre in den Einstellungen auf andere umschalten.
+  var hoursViewEmployee = "";
+  var hoursDayDraft = null; // Entwurf-Objekt für den Tages-Editor (siehe openHoursDayEditor) oder null
+  var hoursKontenScope = "jahr"; // "jahr" | "gesamt" — Umschalter für die Konten-Karte
+  var hoursPrintData = null; // { title, employeeName, ym } set right before printing a Stundenliste
 
   var isOnline = (typeof navigator !== "undefined" && "onLine" in navigator) ? navigator.onLine : true;
   var pendingSyncCount = 0; // Anzahl noch nicht hochgeladener Änderungen (Offline-Warteschlange)
@@ -637,6 +642,16 @@
     var p = iso.split("-");
     return p[2] + "." + p[1] + "." + p[0];
   }
+  // Gegenstück zu deDateFromIso: wandelt "17.09.2026" zurück in "2026-09-17" — gebraucht, um ein
+  // bereits gespeichertes Datum (Speicherformat bleibt TT.MM.JJJJ, wie überall sonst in der App)
+  // im nativen <input type="date"> anzuzeigen, ohne das Speicherformat selbst zu ändern.
+  function isoFromDe(de) {
+    var p = (de || "").split(".");
+    if (p.length !== 3) return "";
+    var d = p[0].trim(), m = p[1].trim(), y = p[2].trim();
+    if (!/^\d{1,2}$/.test(d) || !/^\d{1,2}$/.test(m) || !/^\d{4}$/.test(y)) return "";
+    return y + "-" + (m.length === 1 ? "0" + m : m) + "-" + (d.length === 1 ? "0" + d : d);
+  }
   function todayIso() { return isoDate(new Date()); }
   function todayDe() { return deDateFromIso(todayIso()); }
   var WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
@@ -669,7 +684,12 @@
       upload: '<path d="M12 15V4m0 0L8 8m4-4 4 4"/><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/>',
       clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
       grid: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.4"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.4"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.4"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.4"/>',
-      expand: '<path d="M9 3H4v5M15 3h5v5M4 15v5h5M20 15v5h-5"/>'
+      expand: '<path d="M9 3H4v5M15 3h5v5M4 15v5h5M20 15v5h-5"/>',
+      sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
+      medcross: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8M8 12h8"/>',
+      flag: '<path d="M5 21V4"/><path d="M5 4h13l-3.5 4L18 12H5"/>',
+      refresh: '<path d="M20 11A8 8 0 0 0 6.3 6.3L4 8.5"/><path d="M4 4v4.5h4.5"/><path d="M4 13a8 8 0 0 0 13.7 4.7L20 15.5"/><path d="M20 20v-4.5h-4.5"/>',
+      gift: '<rect x="3.5" y="9.5" width="17" height="10.5" rx="1.3"/><path d="M3.5 13.5h17"/><path d="M12 9.5v10.5"/><path d="M12 9.5c-1.8 0-3.3-1.4-3.3-3.1S9.7 3.3 11 3.9c.9.4 1 2 1 2s.1-1.6 1-2c1.3-.6 2.8.5 2.8 2.2S13.8 9.5 12 9.5Z"/>'
     };
     return '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (paths[name] || "") + "</svg>";
   }
@@ -1715,16 +1735,22 @@
   }
 
   /* -------- Import: Kunden aus einer CSV/Excel-Datei (z. B. Export aus sevDesk) -------- */
-  // Erkennt gängige Spaltennamen (deutsch/englisch, verschiedene Schreibweisen) automatisch.
+  // Erkennt gängige Spaltennamen (deutsch/englisch, verschiedene Schreibweisen) automatisch —
+  // sowohl Exporte mit einer einzelnen "Name"-Spalte als auch Exporte, die Firma/Vorname/Nachname
+  // in getrennten Spalten führen (z. B. sevDesk: "Organisation", "Vorname", "Nachname").
   // Falls die Zuordnung bei einer bestimmten Datei nicht passt, kann die Spaltenerkennung anhand
   // eines Beispiel-Exports gezielt nachgeschärft werden.
   var CUSTOMER_IMPORT_COLUMN_SYNONYMS = {
-    name: ["name", "firma", "firmenname", "kunde", "kundenname", "auftraggeber", "company", "unternehmen"],
+    name: ["name", "kundenname", "auftraggeber"],
+    organisation: ["organisation", "organization", "firma", "firmenname", "unternehmen", "company"],
+    vorname: ["vorname", "first name", "firstname"],
+    nachname: ["nachname", "last name", "lastname", "familienname"],
     street: ["straße", "strasse", "adresse", "street", "anschrift"],
     plz: ["plz", "postleitzahl", "zip", "zipcode", "postal code"],
     ort: ["ort", "stadt", "city", "location"],
     ortPlzCombined: ["ort/plz", "ort / plz", "plz/ort", "plz / ort"],
-    phone: ["telefon", "telefonnummer", "tel", "phone", "mobil", "handy", "telefon 1"],
+    phone: ["telefon", "telefonnummer", "tel", "phone", "telefon 1"],
+    mobile: ["mobil", "handy", "mobile", "mobiltelefon"],
     email: ["email", "e-mail", "mail", "e-mail-adresse"],
     uid: ["uid", "uid-nr", "uid nr", "ustid", "ust-id", "ust-idnr", "umsatzsteuer-id", "umsatzsteuer-idnr", "vat", "vat id"]
   };
@@ -1741,6 +1767,15 @@
       });
     });
     return map;
+  }
+  // Ein Kunde gilt als "schon vorhanden", wenn Name + Straße + Ort (normalisiert) mit einem
+  // bestehenden Kunden übereinstimmen. Nur nach dem Namen zu gehen wäre riskant: zwei
+  // unterschiedliche Personen können denselben Namen haben (z. B. Vater/Sohn), und die würden
+  // dann fälschlich als "schon angelegt" übersprungen. Über Name+Adresse zu vergleichen fängt
+  // echte Duplikate zuverlässig ab, ohne unterschiedliche Personen zu verwechseln.
+  function customerDedupeKey(name, street, city) {
+    function norm(s) { return String(s || "").trim().toLowerCase().replace(/\s+/g, " "); }
+    return norm(name) + "|" + norm(street) + "|" + norm(city);
   }
   function importCustomersButton() {
     var btn = el("button", { class: "btn btn-sm" }, []);
@@ -1764,16 +1799,19 @@
             var rows = window.XLSX.utils.sheet_to_json(sheet, { defval: "" });
             if (!rows.length) { alert("Die Datei enthält keine Zeilen."); btn.disabled = false; return; }
             var colMap = buildColumnMap(Object.keys(rows[0]));
-            if (!colMap.name) { alert("Konnte keine Namens-Spalte in der Datei erkennen. Bitte eine Datei mit einer Spalte \"Name\" oder \"Firma\" verwenden, oder eine Beispieldatei zur Prüfung schicken."); btn.disabled = false; return; }
-            var existingNames = {};
-            state.customers.forEach(function (c) { existingNames[(c.name || "").trim().toLowerCase()] = true; });
+            var hasNameSource = colMap.name || colMap.organisation || colMap.vorname || colMap.nachname;
+            if (!hasNameSource) { alert("Konnte keine Namens-Spalte in der Datei erkennen. Bitte eine Datei mit einer Spalte \"Name\"/\"Firma\" oder \"Organisation\"/\"Vorname\"/\"Nachname\" verwenden, oder eine Beispieldatei zur Prüfung schicken."); btn.disabled = false; return; }
+            var existingKeys = {};
+            state.customers.forEach(function (c) { existingKeys[customerDedupeKey(c.name, c.street, c.city)] = true; });
             var toCreate = [];
             var skippedNoName = 0, skippedDuplicate = 0;
             rows.forEach(function (row) {
-              var name = String(row[colMap.name] || "").trim();
+              var org = colMap.organisation ? String(row[colMap.organisation] || "").trim() : "";
+              var vn = colMap.vorname ? String(row[colMap.vorname] || "").trim() : "";
+              var nn = colMap.nachname ? String(row[colMap.nachname] || "").trim() : "";
+              var name = colMap.name ? String(row[colMap.name] || "").trim() : "";
+              if (!name) name = org || (vn + " " + nn).replace(/\s+/g, " ").trim();
               if (!name) { skippedNoName++; return; }
-              if (existingNames[name.toLowerCase()]) { skippedDuplicate++; return; }
-              existingNames[name.toLowerCase()] = true; // gleich benannte Zeilen innerhalb derselben Datei nicht doppelt anlegen
               var street = colMap.street ? String(row[colMap.street] || "").trim() : "";
               var city = "";
               if (colMap.plz || colMap.ort) {
@@ -1781,15 +1819,23 @@
               } else if (colMap.ortPlzCombined) {
                 city = String(row[colMap.ortPlzCombined] || "").trim();
               }
+              var key = customerDedupeKey(name, street, city);
+              if (existingKeys[key]) { skippedDuplicate++; return; }
+              existingKeys[key] = true; // gleiche Zeilen innerhalb derselben Datei nicht doppelt anlegen
               var uid = colMap.uid ? String(row[colMap.uid] || "").trim() : "";
+              // Geschäftskunde: wenn die Datei eine Organisation-Spalte hat, entscheidet die (Firma
+              // eingetragen = Geschäftskunde); sonst als Rückfallebene die UID-Spalte.
+              var isBiz = colMap.organisation ? !!org : !!uid;
+              var phone = colMap.phone ? String(row[colMap.phone] || "").trim() : "";
+              if (!phone && colMap.mobile) phone = String(row[colMap.mobile] || "").trim();
               toCreate.push({
                 name: name,
                 street: street,
                 city: city,
-                phone: colMap.phone ? String(row[colMap.phone] || "").trim() : "",
+                phone: phone,
                 email: colMap.email ? String(row[colMap.email] || "").trim() : "",
-                isBusiness: !!uid,
-                uid: uid,
+                isBusiness: isBiz,
+                uid: isBiz ? uid : "",
                 createdAt: new Date().toISOString()
               });
             });
@@ -2051,6 +2097,34 @@
     return wrap;
   }
 
+  // Checkbox "Baustelle hat eine eigene Adresse" + die zugehörigen Felder (Straße, PLZ/Ort,
+  // Telefon). Gedacht für den Fall, dass der Auftraggeber eine Firma ist, die selbst Kunden hat
+  // (z. B. "Stadlmayr Montage & Handel" beauftragt uns bei einem IHRER Kunden) — dann ist die
+  // Baustellen-Adresse eine andere als die des Auftraggebers, und genau diese Adresse sollen die
+  // Mitarbeiter sehen (im Formular wie im Ausdruck), nicht die Firmenadresse des Auftraggebers.
+  function renderBaustelleAdresseFields() {
+    var wrap = el("div", { class: "field", style: "margin-top:-6px;" });
+    var label = el("label", { style: "display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500;" }, []);
+    var checkbox = el("input", { type: "checkbox" });
+    checkbox.checked = !!reportDraft.baustelleAbweichend;
+    checkbox.addEventListener("change", function (e) { reportDraft.baustelleAbweichend = e.target.checked; render(); });
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(" Baustelle hat eine eigene Adresse (abweichend vom Auftraggeber)"));
+    wrap.appendChild(label);
+    if (reportDraft.baustelleAbweichend) {
+      var box = el("div", { class: "card", style: "margin-top:8px;padding:12px;" });
+      box.appendChild(el("p", { style: "margin:0 0 8px;font-size:12px;color:var(--muted);" },
+        ["Z. B. wenn der Auftraggeber eine Firma ist und die eigentliche Baustelle bei einem ihrer Kunden liegt — diese Adresse sehen die Mitarbeiter."]));
+      var brow = el("div", { class: "field-row cols-2" });
+      brow.appendChild(draftField("Straße (Baustelle)", "baustelleStrasse"));
+      brow.appendChild(draftField("Telefon (Baustelle)", "baustelleTelefon"));
+      box.appendChild(brow);
+      box.appendChild(plzOrtFieldRow(reportDraft, "baustelleOrt", "baustellePlz", "baustelleOrtOnly"));
+      wrap.appendChild(box);
+    }
+    return wrap;
+  }
+
   // Zeitfeld mit nativer Uhrzeit-Eingabe (zeigt auf dem Handy automatisch ein Drehrädchen bzw.
   // eine Uhr zur Auswahl) plus "Jetzt"-Knopf, der die aktuelle Uhrzeit einträgt — nach dem
   // gleichen Muster wie der bestehende "Heute"-Knopf beim Datum.
@@ -2075,252 +2149,495 @@
   }
 
   /* =====================================================================
-     Stunden (Zeiterfassung) — jeder Mitarbeiter trägt seine geleisteten
-     Stunden manuell ein (Beginn/Ende/Pause); Auswertung nach Monat/Mitarbeiter.
+     Stunden (Zeiterfassung) — Monatskalender je Mitarbeiter, ein Tag kann
+     "Arbeit" (mit mehreren Zeit-Blöcken), "Urlaub", "Krank", "Feiertag",
+     "Zeitausgleich" oder "Sonderurlaub" sein. Sichtbarkeit: jede Person sieht
+     standardmäßig nur ihre EIGENEN Stunden — nur wenn die Chef-Sperre
+     (settingsUnlocked, siehe openSettingsGate) offen ist, kann zwischen allen
+     Mitarbeitern gewechselt werden. Das ist (wie überall sonst in dieser App)
+     eine Sichtbarkeits-Regel auf UI-Ebene, keine serverseitige Berechtigung —
+     der Datenbankzugriff selbst ist für alle angemeldeten Personen gleich.
+
+     Datenmodell (Tabelle "hours"): pro Person und Tag EIN Datensatz —
+       date, employeeName, type, blocks (jsonb [{start,ende}, …]),
+       breakMinutes, ort, note
+     Ältere Einträge (vor diesem Update) haben kein "type"/"blocks"/"ort" —
+     sie werden weiterhin korrekt gelesen (siehe hoursEntry*-Hilfsfunktionen)
+     und beim nächsten Bearbeiten automatisch in das neue Format überführt.
      ===================================================================== */
-  function computeHoursDuration(h) {
-    if (!h || !h.start || !h.ende) return 0;
-    var sp = String(h.start).split(":"), ep = String(h.ende).split(":");
+  var DAY_TYPES = ["Arbeit", "Urlaub", "Krank", "Feiertag", "Zeitausgleich", "Sonderurlaub"];
+  function dayTypeIcon(t) {
+    return { Arbeit: "clock", Urlaub: "sun", Krank: "medcross", Feiertag: "flag", Zeitausgleich: "refresh", Sonderurlaub: "gift" }[t] || "clock";
+  }
+
+  function hoursEntryType(h) { return (h && h.type) || "Arbeit"; }
+  function hoursEntryOrt(h) { return (h && (h.ort != null ? h.ort : h.site)) || ""; }
+  function hoursEntryBlocks(h) {
+    if (h && Array.isArray(h.blocks) && h.blocks.length) return h.blocks;
+    if (h && (h.start || h.ende)) return [{ start: h.start || "", ende: h.ende || "" }]; // Alt-Datensatz
+    return [];
+  }
+  function blockMinutes(b) {
+    if (!b || !b.start || !b.ende) return 0;
+    var sp = String(b.start).split(":"), ep = String(b.ende).split(":");
     if (sp.length < 2 || ep.length < 2) return 0;
-    var startMin = parseInt(sp[0], 10) * 60 + parseInt(sp[1], 10);
-    var endMin = parseInt(ep[0], 10) * 60 + parseInt(ep[1], 10);
-    var diff = endMin - startMin;
+    var s = parseInt(sp[0], 10) * 60 + parseInt(sp[1], 10);
+    var e = parseInt(ep[0], 10) * 60 + parseInt(ep[1], 10);
+    var diff = e - s;
     if (diff < 0) diff += 24 * 60; // falls über Mitternacht (selten)
-    diff -= (h.breakMinutes || 0);
-    if (diff < 0) diff = 0;
-    return diff / 60;
+    return diff;
+  }
+  function sollHoursForDate(iso) {
+    var s = getSettings();
+    var d = new Date(iso + "T00:00:00");
+    var dow = d.getDay(); // 0 = Sonntag … 6 = Samstag
+    if (dow === 0 || dow === 6) return 0;
+    if (dow === 5) return s.sollFr != null ? Number(s.sollFr) : 5;
+    return s.sollMoDo != null ? Number(s.sollMoDo) : 8;
+  }
+  function computeHoursDuration(h) {
+    if (!h) return 0;
+    if (hoursEntryType(h) !== "Arbeit") {
+      // Urlaub/Krank/Feiertag/Zeitausgleich/Sonderurlaub: die Soll-Stunden dieses Tages
+      // werden gutgeschrieben, damit an solchen Tagen keine Minusstunden entstehen.
+      return sollHoursForDate(h.date);
+    }
+    var totalMin = hoursEntryBlocks(h).reduce(function (sum, b) { return sum + blockMinutes(b); }, 0);
+    totalMin -= (h.breakMinutes || 0);
+    if (totalMin < 0) totalMin = 0;
+    return totalMin / 60;
+  }
+  function nowHm() {
+    var d = new Date();
+    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+  function daysInMonth(ym) {
+    var p = ym.split("-"), y = parseInt(p[0], 10), m = parseInt(p[1], 10);
+    var last = new Date(y, m, 0).getDate();
+    var days = [];
+    for (var i = 1; i <= last; i++) days.push(ym + "-" + String(i).padStart(2, "0"));
+    return days;
+  }
+  function shiftMonth(ym, delta) {
+    var p = ym.split("-"), y = parseInt(p[0], 10), m = parseInt(p[1], 10) + delta;
+    while (m < 1) { m += 12; y--; }
+    while (m > 12) { m -= 12; y++; }
+    return y + "-" + String(m).padStart(2, "0");
+  }
+  function findTeamMember(name) {
+    return state.team.find(function (m) { return m.name === name; }) || null;
+  }
+  function hoursRowsFor(dateIso, employeeName) {
+    return state.hours.filter(function (h) { return h.date === dateIso && h.employeeName === employeeName; });
+  }
+  // Fasst alle Datensätze eines Tages (normalerweise einer, bei Alt-Daten evtl. mehrere)
+  // zu EINER Anzeige zusammen: Typ, Gesamt-Ist-Stunden, Ort, Notiz.
+  function hoursDayAggregate(dateIso, employeeName) {
+    var rows = hoursRowsFor(dateIso, employeeName);
+    if (!rows.length) return null;
+    var primary = rows.filter(function (r) { return r.type; })[0] || rows[0];
+    var ist = rows.reduce(function (sum, r) { return sum + computeHoursDuration(r); }, 0);
+    var ort = rows.map(hoursEntryOrt).filter(Boolean)[0] || "";
+    var note = rows.map(function (r) { return r.note; }).filter(Boolean).join(" · ");
+    return { rows: rows, type: hoursEntryType(primary), ist: ist, ort: ort, note: note };
+  }
+  function recentOrteFor(employeeName) {
+    var seen = [];
+    state.hours.filter(function (h) { return h.employeeName === employeeName; })
+      .sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); })
+      .forEach(function (h) {
+        var o = hoursEntryOrt(h);
+        if (o && seen.indexOf(o) === -1) seen.push(o);
+      });
+    return seen.slice(0, 5);
+  }
+  // Soll-Stunden des Monats, aber nur bis einschließlich heute (liegt der Monat in der
+  // Vergangenheit, zählt er ganz; liegt er in der Zukunft, zählt noch nichts) — so entsteht
+  // am 3. eines Monats nicht sofort ein großes Minus für die noch bevorstehenden Tage.
+  function monthSollSoFar(ym) {
+    var today = todayIso(), thisYm = today.slice(0, 7), total = 0;
+    daysInMonth(ym).forEach(function (d) {
+      if (ym < thisYm) total += sollHoursForDate(d);
+      else if (ym === thisYm && d <= today) total += sollHoursForDate(d);
+    });
+    return total;
   }
 
   function renderHours() {
+    // Sichtbarkeit defensiv bei jedem Aufruf neu bestimmen — nie eine ältere Auswahl vertrauen,
+    // wenn die Chef-Sperre inzwischen (wieder) geschlossen ist.
+    if (!settingsUnlocked) hoursViewEmployee = currentUser;
+    else if (!hoursViewEmployee) hoursViewEmployee = currentUser;
+    var viewingEmployee = settingsUnlocked ? (hoursViewEmployee || currentUser) : currentUser;
+    var canEdit = settingsUnlocked || viewingEmployee === currentUser;
+
     var view = el("div", { class: "view" });
-    var addBtn = el("button", { class: "btn btn-primary btn-sm" }, []);
-    addBtn.innerHTML = icon("plus", 15) + "<span>Erfassen</span>";
-    addBtn.addEventListener("click", function () {
-      hoursEditing = { date: todayIso(), employeeName: currentUser || "", site: "", start: "", ende: "", breakMinutes: 0, note: "" };
-      render();
-    });
     view.appendChild(el("div", { class: "view-head" }, [
       el("div", {}, [
         el("h1", {}, ["Stunden"]),
-        el("p", {}, ["Arbeitszeiten erfassen und je Monat auswerten."])
-      ]),
-      addBtn
+        el("p", {}, [settingsUnlocked ? "Chef-Ansicht — Stunden jedes Mitarbeiters einsehbar." : "Deine eigenen Arbeitsstunden."])
+      ])
     ]));
 
-    if (hoursEditing) view.appendChild(renderHoursEditor());
+    if (settingsUnlocked) {
+      var empField = el("div", { class: "field", style: "max-width:280px;" }, [el("label", {}, ["Mitarbeiter"])]);
+      var empSelect = el("select", {});
+      teamMemberNames().forEach(function (n) {
+        var opt = el("option", { value: n }, [n]);
+        if (viewingEmployee === n) opt.setAttribute("selected", "selected");
+        empSelect.appendChild(opt);
+      });
+      empSelect.addEventListener("change", function (e) { hoursViewEmployee = e.target.value; hoursDayDraft = null; render(); });
+      empField.appendChild(empSelect);
+      view.appendChild(empField);
+    }
 
-    var filterRow = el("div", { class: "field-row cols-2" });
-    var monthField = el("div", { class: "field" }, [el("label", {}, ["Monat"])]);
-    var monthInput = el("input", { type: "month", value: hoursMonth });
-    monthInput.addEventListener("change", function (e) { hoursMonth = e.target.value || hoursMonth; render(); });
-    monthField.appendChild(monthInput);
-    filterRow.appendChild(monthField);
+    if (hoursDayDraft) view.appendChild(renderHoursDayEditor());
 
-    var empField = el("div", { class: "field" }, [el("label", {}, ["Mitarbeiter"])]);
-    var empSelect = el("select", {});
-    empSelect.appendChild(el("option", { value: "" }, ["Alle"]));
-    state.team.slice().sort(function (a, b) { return (a.name || "").localeCompare(b.name || "", "de"); }).forEach(function (m) {
-      var opt = el("option", { value: m.name }, [m.name]);
-      if (hoursEmployeeFilter === m.name) opt.setAttribute("selected", "selected");
-      empSelect.appendChild(opt);
-    });
-    empSelect.addEventListener("change", function (e) { hoursEmployeeFilter = e.target.value; render(); });
-    empField.appendChild(empSelect);
-    filterRow.appendChild(empField);
-    view.appendChild(filterRow);
+    var navRow = el("div", { style: "display:flex;align-items:center;gap:10px;" });
+    var prevBtn = el("button", { class: "btn btn-icon btn-sm" }, []); prevBtn.innerHTML = icon("chevronL", 16);
+    prevBtn.addEventListener("click", function () { hoursMonth = shiftMonth(hoursMonth, -1); render(); });
+    var nextBtn = el("button", { class: "btn btn-icon btn-sm" }, []); nextBtn.innerHTML = icon("chevronR", 16);
+    nextBtn.addEventListener("click", function () { hoursMonth = shiftMonth(hoursMonth, 1); render(); });
+    var mp = hoursMonth.split("-");
+    var monthLabel = el("span", { style: "font-weight:700;min-width:150px;text-align:center;font-family:'Barlow Semi Condensed',sans-serif;font-size:15px;" },
+      [MONTHS[parseInt(mp[1], 10) - 1] + " " + mp[0]]);
+    var todayBtn = el("button", { class: "btn btn-sm" }, ["Heute"]);
+    todayBtn.addEventListener("click", function () { hoursMonth = todayIso().slice(0, 7); render(); });
+    navRow.appendChild(prevBtn); navRow.appendChild(monthLabel); navRow.appendChild(nextBtn); navRow.appendChild(todayBtn);
+    view.appendChild(navRow);
 
-    var filtered = state.hours.filter(function (h) {
-      if ((h.date || "").slice(0, 7) !== hoursMonth) return false;
-      if (hoursEmployeeFilter && h.employeeName !== hoursEmployeeFilter) return false;
-      return true;
-    }).sort(function (a, b) { return (a.date || "").localeCompare(b.date || ""); });
+    if (viewingEmployee === currentUser && !hoursDayDraft) {
+      var todayAgg = hoursDayAggregate(todayIso(), currentUser);
+      var chip = el("button", { class: "prefill-chip" }, []);
+      chip.innerHTML = icon(todayAgg ? "edit" : "plus", 16) + "<span>Heute – " + escapeHtml(deDateFromIso(todayIso())) +
+        (todayAgg ? ": " + escapeHtml(todayAgg.type) + ", " + todayAgg.ist.toFixed(2) + " Std. erfasst" : ": noch nicht erfasst") + "</span>";
+      chip.addEventListener("click", function () { openHoursDayEditor(todayIso(), currentUser); });
+      view.appendChild(chip);
+    }
 
     if (!loaded.hours) {
       view.appendChild(el("p", { style: "color:var(--muted);" }, ["Lädt …"]));
-    } else if (filtered.length === 0) {
-      view.appendChild(emptyState("clock", "Keine Einträge", "Für diesen Monat wurden noch keine Arbeitsstunden erfasst."));
     } else {
+      view.appendChild(renderHoursSummaryCard(hoursMonth, viewingEmployee));
+      view.appendChild(renderHoursKontenCard(viewingEmployee));
       var list = el("div", { class: "customer-list" });
-      var total = 0;
-      filtered.forEach(function (h) {
-        total += computeHoursDuration(h);
-        list.appendChild(renderHoursRow(h));
-      });
+      daysInMonth(hoursMonth).forEach(function (d) { list.appendChild(renderHoursDayRow(d, viewingEmployee, canEdit)); });
       view.appendChild(list);
-
-      var printBtn = el("button", { class: "btn btn-sm" }, []);
-      printBtn.innerHTML = icon("printer", 14) + "<span>Drucken</span>";
-      printBtn.addEventListener("click", function () {
-        printHoursList("Stundenliste " + hoursMonth + (hoursEmployeeFilter ? " — " + hoursEmployeeFilter : ""), filtered);
-      });
-      var summary = el("div", { class: "card", style: "display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;" }, [
-        el("span", { style: "font-weight:600;" }, ["Summe " + (hoursEmployeeFilter || "alle Mitarbeiter") + ": " + total.toFixed(2) + " Std."]),
-        printBtn
-      ]);
-      view.appendChild(summary);
     }
     return view;
   }
 
-  function renderHoursRow(h) {
-    var row = el("div", { class: "customer-row" });
-    row.appendChild(el("div", { class: "initials" }, [initials(h.employeeName)]));
-    var info = el("div", { class: "info" });
-    info.appendChild(el("div", { class: "name" }, [deDateFromIso(h.date) + " · " + (h.employeeName || "?")]));
-    var line2parts = [
-      h.site,
-      (h.start || "") + "–" + (h.ende || "") + (h.breakMinutes ? " (Pause " + h.breakMinutes + " Min.)" : ""),
-      computeHoursDuration(h).toFixed(2) + " Std."
-    ].filter(Boolean);
-    info.appendChild(el("div", { class: "addr" }, [line2parts.join(" · ")]));
-    if (h.note) info.appendChild(el("div", { class: "addr" }, [h.note]));
-    row.appendChild(info);
-    var actions = el("div", { class: "actions" });
-    var editBtn = el("button", { class: "btn btn-icon btn-sm", title: "Bearbeiten" }, []);
-    editBtn.innerHTML = icon("edit", 15);
-    editBtn.addEventListener("click", function () { hoursEditing = Object.assign({}, h); render(); });
-    var delBtn = el("button", { class: "btn btn-icon btn-sm btn-danger", title: "Löschen" }, []);
-    delBtn.innerHTML = icon("trash", 15);
-    delBtn.addEventListener("click", function () {
-      if (!confirm("Diesen Eintrag wirklich löschen?")) return;
-      if (db) db.doc("hours/" + h.id).delete().catch(function () {});
+  function renderHoursSummaryCard(ym, employeeName) {
+    var ist = 0;
+    daysInMonth(ym).forEach(function (d) {
+      hoursRowsFor(d, employeeName).forEach(function (h) { ist += computeHoursDuration(h); });
     });
-    actions.appendChild(editBtn);
-    actions.appendChild(delBtn);
-    row.appendChild(actions);
+    var soll = monthSollSoFar(ym);
+    var diff = ist - soll;
+    var card = el("div", { class: "card", style: "display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;" });
+    function stat(label, text, colorVar) {
+      var box = el("div", { style: "text-align:center;min-width:76px;" });
+      box.appendChild(el("div", { style: "font-size:19px;font-weight:700;font-family:'Barlow Semi Condensed',sans-serif;" + (colorVar ? "color:var(" + colorVar + ");" : "") }, [text]));
+      box.appendChild(el("div", { style: "font-size:11px;color:var(--muted);" }, [label]));
+      return box;
+    }
+    var row = el("div", { style: "display:flex;gap:10px;flex:1;flex-wrap:wrap;" });
+    row.appendChild(stat("Ist (Monat)", ist.toFixed(2) + " Std."));
+    row.appendChild(stat("Soll (bisher)", soll.toFixed(2) + " Std."));
+    row.appendChild(stat("Überstunden", (diff >= 0 ? "+" : "") + diff.toFixed(2) + " Std.", diff < 0 ? "--danger" : "--success"));
+    card.appendChild(row);
+    var printBtn = el("button", { class: "btn btn-sm" }, []);
+    printBtn.innerHTML = icon("printer", 14) + "<span>Drucken</span>";
+    printBtn.addEventListener("click", function () { printHoursMonth(ym, employeeName); });
+    card.appendChild(printBtn);
+    return card;
+  }
+
+  function renderHoursKontenCard(employeeName) {
+    var tm = findTeamMember(employeeName);
+    var year = new Date().getFullYear();
+    var krankTage = state.hours.filter(function (h) {
+      if (h.employeeName !== employeeName || hoursEntryType(h) !== "Krank") return false;
+      if (hoursKontenScope === "jahr" && (h.date || "").slice(0, 4) !== String(year)) return false;
+      return true;
+    }).length;
+
+    var card = el("div", { class: "card", style: "display:flex;flex-direction:column;gap:12px;" });
+    var headRow = el("div", { style: "display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;" });
+    headRow.appendChild(el("h3", { style: "margin:0;" }, ["Konten"]));
+    var scopeRow = el("div", { style: "display:flex;gap:6px;" });
+    [["jahr", "Jahr"], ["gesamt", "Laufzeit"]].forEach(function (pair) {
+      var b = el("button", { class: "btn btn-sm" + (hoursKontenScope === pair[0] ? " btn-primary" : "") }, [pair[1]]);
+      b.addEventListener("click", function () { hoursKontenScope = pair[0]; render(); });
+      scopeRow.appendChild(b);
+    });
+    headRow.appendChild(scopeRow);
+    card.appendChild(headRow);
+
+    var grid = el("div", { style: "display:grid;grid-template-columns:repeat(3,1fr);gap:10px;text-align:center;" });
+    function stat(label, value) {
+      var box = el("div", {});
+      box.appendChild(el("div", { style: "font-size:19px;font-weight:700;font-family:'Barlow Semi Condensed',sans-serif;" }, [value]));
+      box.appendChild(el("div", { style: "font-size:11px;color:var(--muted);" }, [label]));
+      return box;
+    }
+    grid.appendChild(stat("Resturlaub (Tage)", tm && tm.urlaubTage != null ? String(tm.urlaubTage) : "—"));
+    grid.appendChild(stat("Zeitausgleich (Std.)", tm && tm.zeitausgleichStunden != null ? String(tm.zeitausgleichStunden) : "—"));
+    grid.appendChild(stat("Krankheitstage" + (hoursKontenScope === "jahr" ? " " + year : ""), String(krankTage)));
+    card.appendChild(grid);
+    card.appendChild(el("p", { style: "margin:0;font-size:11px;color:var(--muted);" },
+      ["Resturlaub und Zeitausgleich werden vom Chef in den Einstellungen (Mitarbeiter) gepflegt."]));
+    return card;
+  }
+
+  function renderHoursDayRow(dateIso, employeeName, canEdit) {
+    var agg = hoursDayAggregate(dateIso, employeeName);
+    var dObj = new Date(dateIso + "T00:00:00");
+    var dow = dObj.getDay();
+    var isWeekend = dow === 0 || dow === 6;
+    var isToday = dateIso === todayIso();
+    var soll = sollHoursForDate(dateIso);
+
+    var row = el("div", { class: "customer-row" + (isToday ? " today" : "") });
+    if (isToday) row.style.borderColor = "var(--slate)";
+    var wdBox = el("div", { class: "initials", style: isWeekend ? "background:var(--muted);" : "" }, [WEEKDAYS[(dow + 6) % 7].slice(0, 2)]);
+    row.appendChild(wdBox);
+    var info = el("div", { class: "info" });
+    var nameLine = el("div", { class: "name", style: "display:flex;align-items:center;gap:7px;flex-wrap:wrap;" + (isWeekend ? "color:var(--danger);" : "") },
+      [String(dObj.getDate()) + ". " + MONTHS[dObj.getMonth()] + "."]);
+    if (agg) {
+      var tagClass = agg.type !== "Arbeit" ? "info" : (agg.ist + 0.01 >= soll ? "success" : "warn");
+      nameLine.appendChild(el("span", { class: "tag " + tagClass }, [agg.type]));
+    } else if (!isWeekend && dateIso < todayIso()) {
+      nameLine.appendChild(el("span", { class: "tag warn" }, ["fehlt"]));
+    }
+    info.appendChild(nameLine);
+    var line2 = agg
+      ? (agg.ist.toFixed(2) + " Std." + (soll ? " · Soll " + soll.toFixed(2) : "") + (agg.ort ? " · " + agg.ort : ""))
+      : (soll ? "Soll " + soll.toFixed(2) + " Std." : "—");
+    info.appendChild(el("div", { class: "addr" }, [line2]));
+    if (agg && agg.note) info.appendChild(el("div", { class: "addr" }, [agg.note]));
+    row.appendChild(info);
+    if (canEdit) {
+      var actions = el("div", { class: "actions" });
+      var editBtn = el("button", { class: "btn btn-icon btn-sm", title: "Bearbeiten" }, []);
+      editBtn.innerHTML = icon(agg ? "edit" : "plus", 15);
+      editBtn.addEventListener("click", function () { openHoursDayEditor(dateIso, employeeName); });
+      actions.appendChild(editBtn);
+      row.appendChild(actions);
+    }
     return row;
   }
 
-  function renderHoursEditor() {
-    var h = hoursEditing;
-    var isNew = !h.id;
+  function openHoursDayEditor(dateIso, employeeName) {
+    var rows = hoursRowsFor(dateIso, employeeName);
+    var blocks = [], breakMinutes = 0, ort = "", note = "", type = "Arbeit";
+    if (rows.length) {
+      type = hoursEntryType(rows.filter(function (r) { return r.type; })[0] || rows[0]);
+      rows.forEach(function (r) {
+        blocks = blocks.concat(hoursEntryBlocks(r));
+        breakMinutes += (r.breakMinutes || 0);
+        if (!ort) ort = hoursEntryOrt(r);
+        if (r.note) note = note ? note + " · " + r.note : r.note;
+      });
+    }
+    if (!blocks.length) {
+      var s = getSettings();
+      if (s.standardBeginn || s.standardEnde) {
+        blocks = [{ start: s.standardBeginn || "", ende: s.standardEnde || "" }];
+        breakMinutes = s.standardPause != null ? Number(s.standardPause) : 0;
+      } else {
+        blocks = [{ start: "", ende: "" }];
+      }
+    }
+    hoursDayDraft = {
+      date: dateIso, employeeName: employeeName, type: type, blocks: blocks,
+      breakMinutes: breakMinutes, ort: ort, note: note,
+      _legacyIds: rows.map(function (r) { return r.id; })
+    };
+    render();
+  }
+
+  function renderHoursDayEditor() {
+    var d = hoursDayDraft;
+    var dObj = new Date(d.date + "T00:00:00");
     var card = el("div", { class: "card" });
-    card.appendChild(el("h3", { style: "margin:0 0 4px;" }, [isNew ? "Stunden erfassen" : "Eintrag bearbeiten"]));
+    var headLine = WEEKDAYS[(dObj.getDay() + 6) % 7] + ", " + deDateFromIso(d.date) + (d.employeeName !== currentUser ? " — " + d.employeeName : "");
+    card.appendChild(el("h3", { style: "margin:0 0 4px;" }, [headLine]));
 
-    // Jedes Feld schreibt laufend in "h" (den Entwurf) zurück, nicht erst beim Speichern —
-    // so gehen Eingaben nicht verloren, falls zwischendurch neu gerendert wird (z. B. weil im
-    // Hintergrund Daten synchronisiert werden, während man gerade tippt).
-    var row1 = el("div", { class: "field-row cols-2" });
-    var dateField = el("div", { class: "field" }, [el("label", {}, ["Datum"])]);
-    var dateInput = el("input", { type: "date", value: h.date || todayIso() });
-    dateInput.addEventListener("input", function (e) { h.date = e.target.value; });
-    dateField.appendChild(dateInput);
-    row1.appendChild(dateField);
-
-    var empField = el("div", { class: "field" }, [el("label", {}, ["Mitarbeiter"])]);
-    var empSelect = el("select", {});
-    var names = state.team.map(function (m) { return m.name; });
-    if (currentUser && names.indexOf(currentUser) === -1) names.push(currentUser);
-    names.sort(function (a, b) { return a.localeCompare(b, "de"); });
-    names.forEach(function (n) {
-      var opt = el("option", { value: n }, [n]);
-      if (h.employeeName === n) opt.setAttribute("selected", "selected");
-      empSelect.appendChild(opt);
+    var typeRow = el("div", { style: "display:flex;flex-wrap:wrap;gap:6px;" });
+    DAY_TYPES.forEach(function (t) {
+      var b = el("button", { class: "type-choice" + (d.type === t ? " checked" : ""), type: "button" }, []);
+      b.innerHTML = icon(dayTypeIcon(t), 15) + "<span>" + t + "</span>";
+      b.addEventListener("click", function () { d.type = t; render(); });
+      typeRow.appendChild(b);
     });
-    empSelect.addEventListener("change", function (e) { h.employeeName = e.target.value; });
-    empField.appendChild(empSelect);
-    row1.appendChild(empField);
-    card.appendChild(row1);
+    card.appendChild(typeRow);
 
-    var siteField = el("div", { class: "field" }, [el("label", {}, ["Baustelle / Auftrag (optional)"])]);
-    var siteInput = el("input", { type: "text", value: h.site || "", placeholder: "z. B. Fam. Gruber" });
-    siteInput.addEventListener("input", function (e) { h.site = e.target.value; });
-    siteField.appendChild(siteInput);
-    card.appendChild(siteField);
+    if (d.type === "Arbeit") {
+      var blocksWrap = el("div", { style: "display:flex;flex-direction:column;gap:10px;" });
+      d.blocks.forEach(function (b, idx) {
+        var row = el("div", { class: "field-row cols-2", style: "align-items:flex-end;" });
 
-    var row2 = el("div", { class: "field-row cols-3" });
-    var startField = el("div", { class: "field" }, [el("label", {}, ["Beginn"])]);
-    var startInput = el("input", { type: "time", value: h.start || "" });
-    startInput.addEventListener("input", function (e) { h.start = e.target.value; });
-    startField.appendChild(startInput);
-    row2.appendChild(startField);
+        var startField = el("div", { class: "field" }, [el("label", {}, ["Beginn"])]);
+        var startWrap = el("div", { style: "display:flex;gap:6px;" });
+        var startInput = el("input", { type: "time", value: b.start || "", style: "flex:1;" });
+        startInput.addEventListener("input", function (e) { b.start = e.target.value; });
+        var nowBtn1 = el("button", { class: "btn btn-icon btn-sm", title: "Jetzt", type: "button" }, []);
+        nowBtn1.innerHTML = icon("clock", 14);
+        nowBtn1.addEventListener("click", function () { b.start = nowHm(); render(); });
+        startWrap.appendChild(startInput); startWrap.appendChild(nowBtn1);
+        startField.appendChild(startWrap);
+        row.appendChild(startField);
 
-    var endField = el("div", { class: "field" }, [el("label", {}, ["Ende"])]);
-    var endInput = el("input", { type: "time", value: h.ende || "" });
-    endInput.addEventListener("input", function (e) { h.ende = e.target.value; });
-    endField.appendChild(endInput);
-    row2.appendChild(endField);
+        var endField = el("div", { class: "field" }, [el("label", {}, ["Ende"])]);
+        var endWrap = el("div", { style: "display:flex;gap:6px;" });
+        var endInput = el("input", { type: "time", value: b.ende || "", style: "flex:1;" });
+        endInput.addEventListener("input", function (e) { b.ende = e.target.value; });
+        var nowBtn2 = el("button", { class: "btn btn-icon btn-sm", title: "Jetzt", type: "button" }, []);
+        nowBtn2.innerHTML = icon("clock", 14);
+        nowBtn2.addEventListener("click", function () { b.ende = nowHm(); render(); });
+        endWrap.appendChild(endInput); endWrap.appendChild(nowBtn2);
+        endField.appendChild(endWrap);
+        row.appendChild(endField);
 
-    var breakField = el("div", { class: "field" }, [el("label", {}, ["Pause (Min.)"])]);
-    var breakInput = el("input", { type: "number", min: "0", step: "5", value: h.breakMinutes != null ? h.breakMinutes : 0 });
-    breakInput.addEventListener("input", function (e) { h.breakMinutes = e.target.value; });
-    breakField.appendChild(breakInput);
-    row2.appendChild(breakField);
-    card.appendChild(row2);
+        blocksWrap.appendChild(row);
+        if (d.blocks.length > 1) {
+          var rmBtn = el("button", { class: "btn btn-ghost btn-sm", style: "align-self:flex-start;", type: "button" }, []);
+          rmBtn.innerHTML = icon("trash", 13) + "<span>Block entfernen</span>";
+          rmBtn.addEventListener("click", function () { d.blocks.splice(idx, 1); render(); });
+          blocksWrap.appendChild(rmBtn);
+        }
+      });
+      card.appendChild(blocksWrap);
+
+      var addBlockBtn = el("button", { class: "btn btn-ghost btn-sm", type: "button" }, []);
+      addBlockBtn.innerHTML = icon("plus", 14) + "<span>Block hinzufügen</span>";
+      addBlockBtn.addEventListener("click", function () { d.blocks.push({ start: "", ende: "" }); render(); });
+      card.appendChild(addBlockBtn);
+
+      var breakField = el("div", { class: "field" }, [el("label", {}, ["Pause (Min., gesamter Tag)"])]);
+      var breakInput = el("input", { type: "number", min: "0", step: "5", value: d.breakMinutes != null ? d.breakMinutes : 0 });
+      breakInput.addEventListener("input", function (e) { d.breakMinutes = parseInt(e.target.value, 10) || 0; });
+      breakField.appendChild(breakInput);
+      card.appendChild(breakField);
+
+      var ortField = el("div", { class: "field" }, [el("label", {}, ["Ort / Baustelle (optional)"])]);
+      var ortInput = el("input", { type: "text", value: d.ort || "" });
+      ortInput.addEventListener("input", function (e) { d.ort = e.target.value; });
+      ortField.appendChild(ortInput);
+      var recentOrte = recentOrteFor(d.employeeName);
+      if (recentOrte.length) {
+        var chipsRow = el("div", { style: "display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;" });
+        recentOrte.forEach(function (o) {
+          var chipBtn = el("button", { class: "btn btn-sm", type: "button" }, [o]);
+          chipBtn.addEventListener("click", function () { d.ort = o; ortInput.value = o; });
+          chipsRow.appendChild(chipBtn);
+        });
+        ortField.appendChild(chipsRow);
+      }
+      card.appendChild(ortField);
+    } else {
+      card.appendChild(el("p", { style: "margin:0;font-size:12.5px;color:var(--muted);" },
+        ["An diesem Tag werden " + sollHoursForDate(d.date).toFixed(2) + " Std. (Soll-Stunden) gutgeschrieben."]));
+    }
 
     var noteField = el("div", { class: "field" }, [el("label", {}, ["Notiz (optional)"])]);
-    var noteInput = el("input", { type: "text", value: h.note || "" });
-    noteInput.addEventListener("input", function (e) { h.note = e.target.value; });
+    var noteInput = el("input", { type: "text", value: d.note || "" });
+    noteInput.addEventListener("input", function (e) { d.note = e.target.value; });
     noteField.appendChild(noteInput);
     card.appendChild(noteField);
 
     var actions = el("div", { style: "display:flex;justify-content:flex-end;gap:8px;" });
     var cancelBtn = el("button", { class: "btn" }, ["Abbrechen"]);
-    cancelBtn.addEventListener("click", function () { hoursEditing = null; render(); });
+    cancelBtn.addEventListener("click", function () { hoursDayDraft = null; render(); });
     actions.appendChild(cancelBtn);
-    if (!isNew) {
+    if (d._legacyIds.length) {
       var delBtn = el("button", { class: "btn btn-danger" }, ["Löschen"]);
       delBtn.addEventListener("click", function () {
-        if (!confirm("Diesen Eintrag wirklich löschen?")) return;
-        if (db) db.doc("hours/" + h.id).delete().then(function () { hoursEditing = null; render(); }).catch(function () {});
+        if (!confirm("Eintrag für diesen Tag wirklich löschen?")) return;
+        if (!db) return;
+        Promise.all(d._legacyIds.map(function (id) { return db.doc("hours/" + id).delete().catch(function () {}); }))
+          .then(function () { hoursDayDraft = null; render(); });
       });
       actions.appendChild(delBtn);
     }
     var saveBtn = el("button", { class: "btn btn-primary" }, ["Speichern"]);
-    saveBtn.addEventListener("click", function () {
-      var emp = empSelect.value.trim();
-      if (!emp) { empSelect.focus(); return; }
-      if (!startInput.value || !endInput.value) { startInput.focus(); return; }
-      var payload = {
-        date: dateInput.value || todayIso(),
-        employeeName: emp,
-        site: siteInput.value.trim(),
-        start: startInput.value,
-        ende: endInput.value,
-        breakMinutes: parseInt(breakInput.value, 10) || 0,
-        note: noteInput.value.trim()
-      };
-      if (!db) { alert("Keine Verbindung zur Datenbank."); return; }
-      var p = isNew ? db.collection("hours").add(Object.assign(payload, { createdAt: new Date().toISOString() }))
-                    : db.doc("hours/" + h.id).update(payload);
-      p.then(function () { hoursEditing = null; render(); }).catch(function () { alert("Speichern nicht möglich."); });
-    });
+    saveBtn.addEventListener("click", saveHoursDayDraft);
     actions.appendChild(saveBtn);
     card.appendChild(actions);
     return card;
   }
 
-  function buildHoursPrintHtml(title, rows) {
+  function saveHoursDayDraft() {
+    var d = hoursDayDraft;
+    if (!db) { alert("Keine Verbindung zur Datenbank."); return; }
+    var payload = {
+      date: d.date,
+      employeeName: d.employeeName,
+      type: d.type,
+      blocks: d.type === "Arbeit" ? d.blocks.filter(function (b) { return b.start || b.ende; }) : [],
+      breakMinutes: d.type === "Arbeit" ? (d.breakMinutes || 0) : 0,
+      ort: d.ort ? d.ort.trim() : "",
+      note: d.note ? d.note.trim() : ""
+    };
+    if (d.type === "Arbeit" && payload.blocks.length === 0) {
+      alert("Bitte mindestens einen Zeit-Block mit Beginn und Ende eintragen.");
+      return;
+    }
+    var ids = d._legacyIds || [];
+    var finish = function () { hoursDayDraft = null; render(); };
+    var fail = function () { alert("Speichern nicht möglich."); };
+    if (ids.length === 1) {
+      db.doc("hours/" + ids[0]).update(payload).then(finish).catch(fail);
+    } else if (ids.length > 1) {
+      // Alt-Daten mit mehreren Zeilen für denselben Tag: auf EINEN Datensatz zusammenführen.
+      Promise.all(ids.slice(1).map(function (id) { return db.doc("hours/" + id).delete().catch(function () {}); }))
+        .then(function () { return db.doc("hours/" + ids[0]).update(payload); })
+        .then(finish).catch(fail);
+    } else {
+      db.collection("hours").add(Object.assign({}, payload, { createdAt: new Date().toISOString() })).then(finish).catch(fail);
+    }
+  }
+
+  function buildHoursPrintHtml(title, employeeName, ym) {
     var html = "";
     html += '<div class="p-header"><div class="company">' + escapeHtml(COMPANY.name) + " | " + escapeHtml(COMPANY.street) + " | " + escapeHtml(COMPANY.city) +
       "<br>Tel.: " + escapeHtml(COMPANY.tel) + " · Handy: " + escapeHtml(COMPANY.mobile) + "<br>" + escapeHtml(COMPANY.mail) + '</div><img src="' + getLogoFull() + '"></div>';
     html += '<h2 style="margin:10px 0;">' + escapeHtml(title) + "</h2>";
     html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
     html += '<thead><tr style="text-align:left;border-bottom:1.5px solid #000;">' +
-      '<th style="padding:4px 6px;">Datum</th><th style="padding:4px 6px;">Mitarbeiter</th><th style="padding:4px 6px;">Baustelle</th>' +
-      '<th style="padding:4px 6px;">Beginn</th><th style="padding:4px 6px;">Ende</th><th style="padding:4px 6px;">Pause</th>' +
-      '<th style="padding:4px 6px;">Stunden</th><th style="padding:4px 6px;">Notiz</th></tr></thead><tbody>';
+      '<th style="padding:4px 6px;">Datum</th><th style="padding:4px 6px;">Typ</th><th style="padding:4px 6px;">Zeiten</th>' +
+      '<th style="padding:4px 6px;">Pause</th><th style="padding:4px 6px;">Std.</th><th style="padding:4px 6px;">Ort</th><th style="padding:4px 6px;">Notiz</th></tr></thead><tbody>';
     var total = 0;
-    (rows || []).forEach(function (h) {
-      var dur = computeHoursDuration(h);
-      total += dur;
+    (daysInMonth(ym) || []).forEach(function (d) {
+      var agg = hoursDayAggregate(d, employeeName);
+      if (!agg) return;
+      total += agg.ist;
+      var dObj = new Date(d + "T00:00:00");
+      var wd = WEEKDAYS[(dObj.getDay() + 6) % 7].slice(0, 2);
+      var zeiten = agg.type === "Arbeit"
+        ? agg.rows.reduce(function (acc, r) { return acc.concat(hoursEntryBlocks(r).map(function (b) { return (b.start || "") + "–" + (b.ende || ""); })); }, []).join(", ")
+        : "";
+      var pause = agg.type === "Arbeit" ? agg.rows.reduce(function (s, r) { return s + (r.breakMinutes || 0); }, 0) + " Min." : "";
       html += '<tr style="border-bottom:1px solid #ccc;">' +
-        '<td style="padding:4px 6px;">' + escapeHtml(deDateFromIso(h.date)) + "</td>" +
-        '<td style="padding:4px 6px;">' + escapeHtml(h.employeeName) + "</td>" +
-        '<td style="padding:4px 6px;">' + escapeHtml(h.site) + "</td>" +
-        '<td style="padding:4px 6px;">' + escapeHtml(h.start) + "</td>" +
-        '<td style="padding:4px 6px;">' + escapeHtml(h.ende) + "</td>" +
-        '<td style="padding:4px 6px;">' + (h.breakMinutes || 0) + " Min.</td>" +
-        '<td style="padding:4px 6px;">' + dur.toFixed(2) + "</td>" +
-        '<td style="padding:4px 6px;">' + escapeHtml(h.note) + "</td></tr>";
+        '<td style="padding:4px 6px;">' + wd + " " + escapeHtml(deDateFromIso(d)) + "</td>" +
+        '<td style="padding:4px 6px;">' + escapeHtml(agg.type) + "</td>" +
+        '<td style="padding:4px 6px;">' + escapeHtml(zeiten) + "</td>" +
+        '<td style="padding:4px 6px;">' + pause + "</td>" +
+        '<td style="padding:4px 6px;">' + agg.ist.toFixed(2) + "</td>" +
+        '<td style="padding:4px 6px;">' + escapeHtml(agg.ort) + "</td>" +
+        '<td style="padding:4px 6px;">' + escapeHtml(agg.note) + "</td></tr>";
     });
     html += "</tbody></table>";
     html += '<p style="margin-top:12px;font-weight:700;">Summe: ' + total.toFixed(2) + " Stunden</p>";
     return html;
   }
 
-  function printHoursList(title, rows) {
-    hoursPrintData = { title: title, rows: rows };
+  function printHoursMonth(ym, employeeName) {
+    var mp = ym.split("-");
+    hoursPrintData = { title: "Stundenliste " + MONTHS[parseInt(mp[1], 10) - 1] + " " + mp[0] + " — " + employeeName, employeeName: employeeName, ym: ym };
     renderPrintArea();
     setTimeout(function () { window.print(); }, 60);
   }
@@ -2341,6 +2658,13 @@
       customerId: null,
       auftraggeber: "", strasse: "", ort: "", telefon: "",
       baustelle: "",
+      // Nur relevant, wenn der Auftraggeber eine Firma ist, die eigene Kunden hat (z. B. ein
+      // Handwerksbetrieb, der uns als Subunternehmer beauftragt) — dann ist die eigentliche
+      // Baustelle NICHT die Adresse des Auftraggebers, sondern die von dessen Kunden. Nur wenn
+      // "baustelleAbweichend" angehakt ist, wird eine eigene Baustellen-Adresse erfasst und
+      // (v. a. im Ausdruck fürs Montageteam) getrennt von der Auftraggeber-Adresse angezeigt.
+      baustelleAbweichend: false,
+      baustelleStrasse: "", baustelleOrt: "", baustelleTelefon: "",
       datum: "",
       monteur: currentUser || "",
       beschreibungKunde: "", beschreibungTaetigkeit: "",
@@ -2368,6 +2692,8 @@
       customerId: r.customerId || null,
       auftraggeber: r.auftraggeber || "", strasse: r.strasse || "", ort: r.ort || "", telefon: r.telefon || "",
       baustelle: r.baustelle || "",
+      baustelleAbweichend: !!r.baustelleAbweichend,
+      baustelleStrasse: r.baustelleStrasse || "", baustelleOrt: r.baustelleOrt || "", baustelleTelefon: r.baustelleTelefon || "",
       datum: r.datum || "",
       monteur: r.monteur || currentUser || "",
       beschreibungKunde: r.beschreibungKunde || "", beschreibungTaetigkeit: r.beschreibungTaetigkeit || "",
@@ -2475,6 +2801,13 @@
           reportDraft.strasse = c.street || "";
           reportDraft.ort = c.city || "";
           reportDraft.telefon = c.phone || "";
+          // "ort" ist der kombinierte String ("4770 Andorf"); plzOrtFieldRow zeigt aber PLZ und
+          // Ort getrennt an und liest dafür "plz"/"ortOnly" — die müssen beim Übernehmen eines
+          // Kunden manuell mit aufgesplittet werden, sonst bleiben die beiden Felder im Formular
+          // leer, obwohl "ort" im Hintergrund schon den richtigen Wert hat.
+          var pickedPlzOrt = splitPlzOrt(c.city || "");
+          reportDraft.plz = pickedPlzOrt.plz;
+          reportDraft.ortOnly = pickedPlzOrt.ort;
           reportSuggestOpen = false;
           render();
         });
@@ -2520,16 +2853,10 @@
     doc.appendChild(addrRow);
     doc.appendChild(plzOrtFieldRow(reportDraft, "ort", "plz", "ortOnly"));
     doc.appendChild(draftField("Baustelle / Bezeichnung (optional)", "baustelle"));
+    doc.appendChild(renderBaustelleAdresseFields());
 
     var metaRow = el("div", { class: "field-row cols-2" });
-    var datumField = el("div", { class: "field" }, [el("label", {}, ["Datum"])]);
-    var datumWrap = el("div", { class: "fixed-date-field" });
-    var datumInput = el("input", { type: "text", readonly: "readonly", placeholder: "—", value: reportDraft.datum });
-    var datumBtn = el("button", { class: "btn btn-sm" }, ["Heute"]);
-    datumBtn.addEventListener("click", function () { reportDraft.datum = todayDe(); render(); });
-    datumWrap.appendChild(datumInput); datumWrap.appendChild(datumBtn);
-    datumField.appendChild(datumWrap);
-    metaRow.appendChild(datumField);
+    metaRow.appendChild(draftFixedDateField("Datum", "datum"));
 
     var monteurField = el("div", { class: "field" }, [el("label", {}, ["Monteur"])]);
     monteurField.appendChild(el("input", { type: "text", value: reportDraft.monteur, disabled: "disabled" }));
@@ -2563,14 +2890,7 @@
     var sigRow = el("div", { class: "field-row cols-2" });
 
     var kundeBlock = el("div", { class: "field" });
-    var kdField = el("div", { class: "field" }, [el("label", {}, ["Datum, Unterschrift Kunde"])]);
-    var kdWrap = el("div", { class: "fixed-date-field" });
-    var kdInput = el("input", { type: "text", readonly: "readonly", placeholder: "—", value: reportDraft.datumUnterschrift });
-    var kdBtn = el("button", { class: "btn btn-sm" }, ["Heute"]);
-    kdBtn.addEventListener("click", function () { reportDraft.datumUnterschrift = todayDe(); render(); });
-    kdWrap.appendChild(kdInput); kdWrap.appendChild(kdBtn);
-    kdField.appendChild(kdWrap);
-    kundeBlock.appendChild(kdField);
+    kundeBlock.appendChild(draftFixedDateField("Datum, Unterschrift Kunde", "datumUnterschrift"));
     kundeBlock.appendChild(renderSigBlock("kunde", "Unterschrift Kunde"));
     sigRow.appendChild(kundeBlock);
 
@@ -2660,6 +2980,26 @@
     var input = el("input", { type: "date", value: reportDraft[key] || "" });
     input.addEventListener("change", function (e) { reportDraft[key] = e.target.value; render(); });
     wrap.appendChild(input);
+    return wrap;
+  }
+  // Wie draftDateField, aber für die Felder, die (aus historischen Gründen) im deutschen Format
+  // "TT.MM.JJJJ" als Text gespeichert werden (reportDraft.datum, .datumUnterschrift) statt als
+  // ISO-Datum — früher ließen sich diese Felder nur per "Heute"-Knopf auf das aktuelle Datum
+  // setzen und gar nicht frei bearbeiten. Jetzt gibt es zusätzlich einen echten Datums-Picker;
+  // der "Heute"-Knopf bleibt als schnelle Abkürzung erhalten. Gespeichert wird weiterhin im
+  // gewohnten TT.MM.JJJJ-Format, damit Druck/Anzeige/Archiv unverändert funktionieren.
+  function draftFixedDateField(label, key) {
+    var wrap = el("div", { class: "field" });
+    wrap.appendChild(el("label", {}, [label]));
+    var row = el("div", { class: "fixed-date-field" });
+    var input = el("input", { type: "date", value: isoFromDe(reportDraft[key]) });
+    input.addEventListener("change", function (e) {
+      reportDraft[key] = e.target.value ? deDateFromIso(e.target.value) : "";
+    });
+    var btn = el("button", { class: "btn btn-sm" }, ["Heute"]);
+    btn.addEventListener("click", function () { reportDraft[key] = todayDe(); render(); });
+    row.appendChild(input); row.appendChild(btn);
+    wrap.appendChild(row);
     return wrap;
   }
   var REPORT_STATUS_INFO = {
@@ -2832,6 +3172,10 @@
       ort: reportDraft.ort,
       telefon: reportDraft.telefon,
       baustelle: reportDraft.baustelle,
+      baustelleAbweichend: reportDraft.baustelleAbweichend || false,
+      baustelleStrasse: reportDraft.baustelleStrasse || "",
+      baustelleOrt: reportDraft.baustelleOrt || "",
+      baustelleTelefon: reportDraft.baustelleTelefon || "",
       datum: reportDraft.datum,
       monteur: reportDraft.monteur,
       beschreibungKunde: reportDraft.beschreibungKunde,
@@ -3130,8 +3474,12 @@
     function rowKV(k, v) { return el("div", { style: "display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:5px 0;" }, [el("span", { style: "color:var(--muted);" }, [k]), el("span", { style: "font-weight:600;text-align:right;" }, [v || "—"])]); }
     wrap.appendChild(rowKV("Typ", r.type));
     wrap.appendChild(rowKV("Baustelle", r.baustelle));
-    wrap.appendChild(rowKV("Adresse", [r.strasse, r.ort].filter(Boolean).join(", ")));
-    wrap.appendChild(rowKV("Telefon", r.telefon));
+    wrap.appendChild(rowKV("Adresse (Auftraggeber)", [r.strasse, r.ort].filter(Boolean).join(", ")));
+    wrap.appendChild(rowKV("Telefon (Auftraggeber)", r.telefon));
+    if (r.baustelleAbweichend) {
+      wrap.appendChild(rowKV("Adresse (Baustelle)", [r.baustelleStrasse, r.baustelleOrt].filter(Boolean).join(", ")));
+      wrap.appendChild(rowKV("Telefon (Baustelle)", r.baustelleTelefon));
+    }
     wrap.appendChild(rowKV("Datum", r.datum));
     wrap.appendChild(rowKV("Monteur", r.monteur));
     if (r.assignedTo) wrap.appendChild(rowKV("Zugewiesen an", r.assignedTo + (r.scheduledDate ? " — " + deDateFromIso(r.scheduledDate) : "")));
@@ -3162,7 +3510,7 @@
     var area = $("#print-area");
     if (!area) return;
     if (!archiveOpenReport) {
-      area.innerHTML = hoursPrintData ? buildHoursPrintHtml(hoursPrintData.title, hoursPrintData.rows) : "";
+      area.innerHTML = hoursPrintData ? buildHoursPrintHtml(hoursPrintData.title, hoursPrintData.employeeName, hoursPrintData.ym) : "";
       return;
     }
     var r = archiveOpenReport;
@@ -3177,13 +3525,20 @@
     html += '<div>';
     html += pField("Auftraggeber", r.auftraggeber);
     html += pField("Baustelle", r.baustelle);
-    html += pField("Straße", r.strasse);
-    html += pField("Ort/PLZ", r.ort);
-    html += pField("Telefon", r.telefon);
+    html += pField(r.baustelleAbweichend ? "Straße (Auftraggeber)" : "Straße", r.strasse);
+    html += pField(r.baustelleAbweichend ? "Ort/PLZ (Auftraggeber)" : "Ort/PLZ", r.ort);
+    html += pField(r.baustelleAbweichend ? "Telefon (Auftraggeber)" : "Telefon", r.telefon);
     html += "</div><div>";
     html += pField("Datum", r.datum);
     html += pField("Monteur", r.monteur);
     html += "</div></div>";
+    // Wenn die Baustelle eine eigene, vom Auftraggeber abweichende Adresse hat, wird sie deutlich
+    // hervorgehoben ausgegeben — damit das Montageteam auf den ersten Blick sieht, wohin es
+    // tatsächlich fahren muss, statt versehentlich zur Firmenadresse des Auftraggebers zu fahren.
+    if (r.baustelleAbweichend && (r.baustelleStrasse || r.baustelleOrt || r.baustelleTelefon)) {
+      html += pBlock("Baustellen-Adresse (abweichend vom Auftraggeber)",
+        [r.baustelleStrasse, r.baustelleOrt].filter(Boolean).join(", ") + (r.baustelleTelefon ? "\nTel.: " + r.baustelleTelefon : ""));
+    }
     html += pBlock("Beschreibung vom Kunden", r.beschreibungKunde);
     html += pBlock("Beschreibung der Tätigkeit", r.beschreibungTaetigkeit);
     var fahrtFelder = pField("Fahrzeit", r.fahrzeit) + pField("Ankunft", r.ankunft) + pField("Abfahrt", r.abfahrt);
@@ -3315,10 +3670,68 @@
     view.appendChild(renderColorSettingsCard());
     view.appendChild(renderLogoSettingsCard());
     view.appendChild(renderKonfiguratorSettingsCard());
+    view.appendChild(renderSollstundenSettingsCard());
     view.appendChild(renderTeamSettingsCard());
     view.appendChild(renderPasswordSettingsCard());
 
     return view;
+  }
+
+  // Firmenweite Vorgaben für "Stunden": Soll-Stunden je Wochentag (für Ist/Soll-Vergleich
+  // und die automatische Gutschrift an Urlaub/Krank/Feiertag-Tagen) sowie Standardzeiten zum
+  // schnellen Ausfüllen eines neuen Arbeitstags.
+  function renderSollstundenSettingsCard() {
+    var s = getSettings();
+    var card = el("div", { class: "card", style: "display:flex;flex-direction:column;gap:12px;" });
+    card.appendChild(el("h3", { style: "margin:0;" }, ["Stunden — Vorgaben"]));
+    card.appendChild(el("p", { style: "margin:-6px 0 0;font-size:12.5px;color:var(--muted);" },
+      ["Gilt für alle Mitarbeiter — Soll-Stunden je Wochentag und Standardzeiten zum schnellen Ausfüllen eines Arbeitstags."]));
+
+    var row1 = el("div", { class: "field-row cols-2" });
+    var moDoField = el("div", { class: "field" }, [el("label", {}, ["Soll Mo–Do (Std./Tag)"])]);
+    var moDoInput = el("input", { type: "number", step: "0.5", min: "0", value: s.sollMoDo != null ? s.sollMoDo : 8 });
+    moDoField.appendChild(moDoInput);
+    row1.appendChild(moDoField);
+    var frField = el("div", { class: "field" }, [el("label", {}, ["Soll Freitag (Std.)"])]);
+    var frInput = el("input", { type: "number", step: "0.5", min: "0", value: s.sollFr != null ? s.sollFr : 5 });
+    frField.appendChild(frInput);
+    row1.appendChild(frField);
+    card.appendChild(row1);
+
+    var row2 = el("div", { class: "field-row cols-3" });
+    var beginField = el("div", { class: "field" }, [el("label", {}, ["Standard-Beginn"])]);
+    var beginInput = el("input", { type: "time", value: s.standardBeginn || "" });
+    beginField.appendChild(beginInput);
+    row2.appendChild(beginField);
+    var endField = el("div", { class: "field" }, [el("label", {}, ["Standard-Ende"])]);
+    var endInput = el("input", { type: "time", value: s.standardEnde || "" });
+    endField.appendChild(endInput);
+    row2.appendChild(endField);
+    var pauseField = el("div", { class: "field" }, [el("label", {}, ["Standard-Pause (Min.)"])]);
+    var pauseInput = el("input", { type: "number", step: "5", min: "0", value: s.standardPause != null ? s.standardPause : 0 });
+    pauseField.appendChild(pauseInput);
+    row2.appendChild(pauseField);
+    card.appendChild(row2);
+
+    var msg = el("p", { style: "margin:0;font-size:12.5px;color:var(--muted);" }, [""]);
+    var saveBtn = el("button", { class: "btn btn-primary", style: "align-self:flex-end;" }, ["Speichern"]);
+    saveBtn.addEventListener("click", function () {
+      if (!db) { msg.textContent = "Keine Verbindung zur Datenbank."; msg.style.color = "var(--danger)"; return; }
+      db.doc("settings/main").update({
+        sollMoDo: parseFloat(moDoInput.value) || 0,
+        sollFr: parseFloat(frInput.value) || 0,
+        standardBeginn: beginInput.value || "",
+        standardEnde: endInput.value || "",
+        standardPause: parseInt(pauseInput.value, 10) || 0,
+        updatedAt: new Date().toISOString()
+      }).then(function () {
+        msg.textContent = "Gespeichert.";
+        msg.style.color = "var(--success)";
+      }).catch(function () { msg.textContent = "Speichern nicht möglich."; msg.style.color = "var(--danger)"; });
+    });
+    card.appendChild(saveBtn);
+    card.appendChild(msg);
+    return card;
   }
 
   // Sichtbarkeit von "Produktion"/"Kalkulation" im Konfigurator — liegt im selben gemeinsamen
@@ -3501,6 +3914,28 @@
       row.appendChild(actions);
       rowWrap.appendChild(row);
 
+      // Resturlaub/Zeitausgleich werden hier vom Chef manuell gepflegt (keine automatische
+      // Berechnung) — sie erscheinen als "Konten" in der Stunden-Ansicht der jeweiligen Person.
+      var acctRow = el("div", { style: "display:flex;gap:16px;flex-wrap:wrap;padding:0 8px 8px 52px;" });
+      (function (m) {
+        function numField(label, key) {
+          var wrap = el("div", { style: "display:flex;align-items:center;gap:6px;" });
+          wrap.appendChild(el("label", { style: "font-size:11px;color:var(--muted);white-space:nowrap;" }, [label]));
+          var input = el("input", { type: "number", step: "0.5", value: m[key] != null ? m[key] : "", style: "width:72px;padding:5px 7px;font-size:12.5px;" });
+          input.addEventListener("change", function (e) {
+            var v = e.target.value === "" ? null : parseFloat(e.target.value);
+            if (!db) return;
+            var patch = {}; patch[key] = v;
+            db.doc("team/" + m.id).update(patch).catch(function () {});
+          });
+          wrap.appendChild(input);
+          return wrap;
+        }
+        acctRow.appendChild(numField("Resturlaub (Tage)", "urlaubTage"));
+        acctRow.appendChild(numField("Zeitausgleich (Std.)", "zeitausgleichStunden"));
+      })(m);
+      rowWrap.appendChild(acctRow);
+
       if (teamPwEditFor === m.id) {
         var pwCard = el("div", { style: "display:flex;flex-direction:column;gap:8px;padding:10px 8px 12px 44px;" });
         var np1 = fieldInput("Neues Passwort für " + m.name, "tp1-" + m.id, "", "mind. 4 Zeichen");
@@ -3593,8 +4028,6 @@
     card.appendChild(saveBtn);
     return card;
   }
-
-  window.__thbp_internal = { render: render };
 })();
 </script>
 
