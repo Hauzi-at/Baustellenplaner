@@ -2884,11 +2884,8 @@
 
     var metaRow = el("div", { class: "field-row cols-2" });
     metaRow.appendChild(draftFixedDateField("Datum", "datum"));
-
-    var monteurField = el("div", { class: "field" }, [el("label", {}, ["Monteur"])]);
-    monteurField.appendChild(el("input", { type: "text", value: reportDraft.monteur, disabled: "disabled" }));
-    metaRow.appendChild(monteurField);
     doc.appendChild(metaRow);
+    doc.appendChild(renderMonteurField());
 
     doc.appendChild(el("h3", { class: "section-title" }, ["Einteilung (optional — für Chef/Planung)"]));
     var assignRow = el("div", { class: "field-row cols-2" });
@@ -2977,6 +2974,40 @@
     var input = el("input", { type: "text", placeholder: placeholder || "", value: reportDraft[key] || "" });
     input.addEventListener("input", function (e) { reportDraft[key] = e.target.value; });
     wrap.appendChild(input);
+    return wrap;
+  }
+  // Der Monteur wurde früher automatisch (und unveränderlich) auf die angemeldete Person gesetzt.
+  // Jetzt frei wählbar — UND mehrfach wählbar, falls zwei Personen gemeinsam am Auftrag waren.
+  // Gespeichert wird weiterhin als EIN Text-Feld ("reportDraft.monteur", wie im Datenmodell schon
+  // vorhanden), die ausgewählten Namen werden dafür mit " & " verbunden — so bleiben Druck,
+  // Auftragsliste, Archiv-Anzeige usw. unverändert, ohne dass eine neue Spalte nötig ist.
+  var MONTEUR_TRENNER = " & ";
+  function monteureAusString(s) {
+    return (s || "").split(MONTEUR_TRENNER).map(function (x) { return x.trim(); }).filter(Boolean);
+  }
+  function renderMonteurField() {
+    var wrap = el("div", { class: "field" });
+    wrap.appendChild(el("label", {}, ["Monteur(e)"]));
+    wrap.appendChild(el("p", { class: "hint", style: "margin:-2px 0 2px;" }, ["Mehrfachauswahl möglich, falls zu zweit unterwegs."]));
+    var namen = teamMemberNames();
+    var ausgewaehlt = monteureAusString(reportDraft.monteur);
+    // Falls eine Person eingetragen ist, die inzwischen nicht mehr im Team steht (z. B. entfernt),
+    // bleibt sie trotzdem als wählbare/abwählbare Option sichtbar, statt stillschweigend zu verschwinden.
+    ausgewaehlt.forEach(function (n) { if (namen.indexOf(n) === -1) namen.push(n); });
+    var choices = el("div", { class: "type-group" });
+    namen.forEach(function (n) {
+      var checked = ausgewaehlt.indexOf(n) !== -1;
+      var btn = el("button", { class: "type-choice" + (checked ? " checked" : ""), type: "button" }, [n]);
+      btn.addEventListener("click", function () {
+        var liste = monteureAusString(reportDraft.monteur);
+        var idx = liste.indexOf(n);
+        if (idx === -1) liste.push(n); else liste.splice(idx, 1);
+        reportDraft.monteur = liste.join(MONTEUR_TRENNER);
+        render();
+      });
+      choices.appendChild(btn);
+    });
+    wrap.appendChild(choices);
     return wrap;
   }
   function draftTextarea(label, key) {
@@ -3404,7 +3435,10 @@
 
     var empSel = el("select", {});
     empSel.appendChild(el("option", { value: "" }, ["Alle Mitarbeiter"]));
-    var names = Array.from(new Set(state.reports.map(function (r) { return r.monteur; }).filter(Boolean)));
+    // Ein Auftrag kann jetzt mehrere Monteure haben ("Anna & Bernd", siehe renderMonteurField) —
+    // für den Filter werden die Namen einzeln aufgelistet, damit "Anna" auch Aufträge findet, bei
+    // denen sie nur EINE von mehreren Personen war.
+    var names = Array.from(new Set(state.reports.reduce(function (acc, r) { return acc.concat(monteureAusString(r.monteur)); }, [])));
     names.sort(function (a, b) { return a.localeCompare(b, "de"); });
     names.forEach(function (n) { var o = el("option", { value: n }, [n]); if (archiveFilter.employee === n) o.setAttribute("selected", "selected"); empSel.appendChild(o); });
     empSel.addEventListener("change", function (e) { archiveFilter.employee = e.target.value; render(); });
@@ -3420,7 +3454,7 @@
 
     var q = archiveFilter.q.trim().toLowerCase();
     var list = state.reports.filter(function (r) {
-      if (archiveFilter.employee && r.monteur !== archiveFilter.employee) return false;
+      if (archiveFilter.employee && monteureAusString(r.monteur).indexOf(archiveFilter.employee) === -1) return false;
       if (archiveFilter.type && r.type !== archiveFilter.type) return false;
       if (archiveFilter.status && (r.status || "abgeschlossen") !== archiveFilter.status) return false;
       if (q && [r.auftraggeber, r.baustelle].filter(Boolean).join(" ").toLowerCase().indexOf(q) === -1) return false;
@@ -3489,6 +3523,20 @@
     printBtn.addEventListener("click", function () { printReport(r); });
     actions.appendChild(editBtn);
     actions.appendChild(printBtn);
+    // Endgültiges Löschen eines Auftrags ist ausschließlich dem Chef vorbehalten (isChefUser,
+    // dasselbe Feld wie bei "Stunden"/Konfigurator) — jede andere Person sieht diesen Knopf gar
+    // nicht erst, kann einen Auftrag also höchstens bearbeiten/zurückstellen, nie unwiderruflich
+    // entfernen.
+    if (isChefUser(currentUser)) {
+      var delReportBtn = el("button", { class: "btn btn-danger" }, []);
+      delReportBtn.innerHTML = icon("trash", 16) + "<span>Endgültig löschen</span>";
+      delReportBtn.addEventListener("click", function () {
+        if (!confirm('Auftrag „' + (r.auftraggeber || "ohne Namen") + '" (' + (r.datum || "ohne Datum") + ') wirklich UNWIDERRUFLICH löschen? Das kann nicht rückgängig gemacht werden.')) return;
+        if (!db) { alert("Keine Verbindung zur Datenbank."); return; }
+        db.doc("reports/" + r.id).delete().then(function () { closeModal(); render(); }).catch(function () { alert("Löschen nicht möglich."); });
+      });
+      actions.appendChild(delReportBtn);
+    }
     sheet.appendChild(actions);
 
     backdrop.appendChild(sheet);
