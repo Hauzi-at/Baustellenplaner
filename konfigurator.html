@@ -1194,7 +1194,7 @@ function ColorModal({ open, onClose, current, onSelect, customRal, onCustomRal }
                             " ",
                             r.name))))))))))));
 }
-function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde, einstellungen }) {
+function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde, einstellungen, istChef }) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
     const [tab, setTab] = useState("konfiguration");
     const [params, setParams] = useState(DEFAULT_PARAMS);
@@ -1798,7 +1798,7 @@ function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, default
                             flaecheM2.toFixed(2),
                             " m\u00B2"))),
                 React.createElement("div", { className: "min-w-0" },
-                    React.createElement("div", { className: "flex gap-1 mb-4 border-b border-[#E2DFD3] overflow-x-auto" }, baueTabs(einstellungen, list.length).map(([id, label]) => (React.createElement("button", { key: id, onClick: () => setTab(id), className: `px-3.5 py-2 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${tab === id ? "border-[#E8963B] text-[#1B1F24]" : "border-transparent text-[#8A8F98] hover:text-[#5B6472]"}` }, label)))),
+                    React.createElement("div", { className: "flex gap-1 mb-4 border-b border-[#E2DFD3] overflow-x-auto" }, baueTabs(einstellungen, list.length, istChef).map(([id, label]) => (React.createElement("button", { key: id, onClick: () => setTab(id), className: `px-3.5 py-2 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${tab === id ? "border-[#E8963B] text-[#1B1F24]" : "border-transparent text-[#8A8F98] hover:text-[#5B6472]"}` }, label)))),
                     tab === "konfiguration" && (React.createElement("div", { className: "flex flex-col gap-4" },
                         React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3" },
                             React.createElement(Select, { label: "Ausf\u00FChrung", value: ausfuehrung, onChange: setAusfuehrung, options: [{ value: "einteilig", label: "Einteiliges Element" }, { value: "zweiteilig", label: "Zweiteilig" }, { value: "dreiteilig", label: "Dreiteilig" }], className: "col-span-2" }),
@@ -2722,17 +2722,42 @@ function loadAktiverKunde(setAktiverKunde) {
         setAktiverKunde(r.value); }).catch(() => { });
 }
 function saveAktiverKunde(name) { var _a; (_a = window.storage) === null || _a === void 0 ? void 0 : _a.set("aktiver_kunde_v1", name || "").catch(() => { }); }
-// Baut die Tab-Leiste für alle 6 Konfiguratoren: Produktion/Kalkulation je nach globalen Einstellungen
-// ein-/ausblendbar, "Kunde zuweisen" (Abschluss) und "Liste" sind immer sichtbar.
-function baueTabs(einstellungen, listenAnzahl) {
+// Baut die Tab-Leiste für alle 6 Konfiguratoren: Produktion/Kalkulation sind NUR für die als
+// Chef markierte Person überhaupt sichtbar (istChef, siehe ladeIstChef weiter unten — geprüft
+// über den team-Datensatz der im Baustellenplaner angemeldeten Person), unabhängig vom
+// bestehenden Ein-/Ausschalter in den Einstellungen; der Schalter bleibt zusätzlich bestehen,
+// falls der Chef sich selbst diese Tabs vorübergehend ausblenden möchte. "Kunde zuweisen"
+// (Abschluss) und "Liste" sind für alle sichtbar.
+function baueTabs(einstellungen, listenAnzahl, istChef) {
     const tabs = [["konfiguration", "Konfiguration"]];
-    if ((einstellungen === null || einstellungen === void 0 ? void 0 : einstellungen.produktionSichtbar) !== false)
+    if (istChef && (einstellungen === null || einstellungen === void 0 ? void 0 : einstellungen.produktionSichtbar) !== false)
         tabs.push(["produktion", "Produktion"]);
-    if ((einstellungen === null || einstellungen === void 0 ? void 0 : einstellungen.kalkulationSichtbar) !== false)
+    if (istChef && (einstellungen === null || einstellungen === void 0 ? void 0 : einstellungen.kalkulationSichtbar) !== false)
         tabs.push(["kalkulation", "Kalkulation"]);
     tabs.push(["abschluss", "Kunde zuweisen"]);
     tabs.push(["liste", `Liste (${listenAnzahl})`]);
     return tabs;
+}
+// Prüft, ob die aktuell im Baustellenplaner angemeldete Person (Name in localStorage, derselbe
+// Schlüssel "thbp_user" wie dort — funktioniert, weil Konfigurator und Baustellenplaner auf
+// derselben Domain laufen und sich dieselbe localStorage teilen) als Chef markiert ist (Feld
+// "isChef" auf ihrem team-Datensatz). Wird einmal geladen und im Modul-Cache gehalten; ein
+// Tab-/Seitenwechsel im Konfigurator lädt ihn nicht erneut nach (bei einer Namensänderung hilft
+// ein Neuladen der Seite).
+let __istChefCache = null;
+async function ladeIstChef(setIstChef) {
+    if (__istChefCache !== null) { setIstChef(__istChefCache); return; }
+    let name = "";
+    try { name = localStorage.getItem("thbp_user") || ""; } catch (e) { name = ""; }
+    if (!__thbpClient || !name) { setIstChef(false); return; }
+    try {
+        const res = await __thbpClient.from("team").select("isChef").eq("name", name).maybeSingle();
+        __istChefCache = !!(res && res.data && res.data.isChef);
+    }
+    catch (e) {
+        __istChefCache = false;
+    }
+    setIstChef(__istChefCache);
 }
 // Alle Produkt-Positionslisten, die pro Kunde zusammengeführt werden (für die Kundenübersicht).
 const PRODUKT_LISTEN_KEYS = [
@@ -2868,7 +2893,7 @@ function loadSpannrahmenListe(setListe) {
     }).catch(() => { });
 }
 function saveSpannrahmenListe(l) { var _a; (_a = window.storage) === null || _a === void 0 ? void 0 : _a.set("spannrahmen_liste_v1", JSON.stringify(l)).catch(() => { }); }
-function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde, einstellungen }) {
+function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde, einstellungen, istChef }) {
     const [tab, setTab] = useState("konfiguration");
     const [preise, setPreise] = useState({});
     const [liste, setListe] = useState([]);
@@ -3011,7 +3036,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                     React.createElement("div", { className: "text-[11px] tracking-[0.2em] uppercase text-[#E8963B] font-oswald font-semibold mb-1" }, "TH Sonnenschutz \u2014 Produktion"),
                     React.createElement("h1", { className: "text-[26px] md:text-[32px] font-oswald font-semibold text-[#1B1F24] leading-tight" }, "Spannrahmen-Konfigurator"),
                     React.createElement("p", { className: "text-[13px] text-[#5B6472] mt-1" }, "Insektenschutz-Spannrahmen nach heroal IS Fertigungskatalog (88328 00 01)."))),
-            React.createElement("div", { className: "flex gap-1 mb-4 border-b border-[#E2DFD3] overflow-x-auto" }, baueTabs(einstellungen, liste.length).map(([id, label]) => (React.createElement("button", { key: id, onClick: () => setTab(id), className: `px-3.5 py-2 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${tab === id ? "border-[#E8963B] text-[#1B1F24]" : "border-transparent text-[#8A8F98] hover:text-[#5B6472]"}` }, label)))),
+            React.createElement("div", { className: "flex gap-1 mb-4 border-b border-[#E2DFD3] overflow-x-auto" }, baueTabs(einstellungen, liste.length, istChef).map(([id, label]) => (React.createElement("button", { key: id, onClick: () => setTab(id), className: `px-3.5 py-2 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${tab === id ? "border-[#E8963B] text-[#1B1F24]" : "border-transparent text-[#8A8F98] hover:text-[#5B6472]"}` }, label)))),
             tab === "konfiguration" && (React.createElement("div", { className: "flex flex-col gap-4" },
                 React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3" },
                     React.createElement(Select, { label: "Ausf\u00FChrung", value: profilTyp, onChange: setProfilTyp, options: SPANNRAHMEN_PROFILE.map((p) => ({ value: p.id, label: p.label })), className: "col-span-2" }),
@@ -3403,7 +3428,7 @@ function loadDrehtuerListe(setListe) {
     }).catch(() => { });
 }
 function saveDrehtuerListe(l) { var _a; (_a = window.storage) === null || _a === void 0 ? void 0 : _a.set("drehtuer_liste_v1", JSON.stringify(l)).catch(() => { }); }
-function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde, einstellungen }) {
+function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde, einstellungen, istChef }) {
     const [tab, setTab] = useState("konfiguration");
     const [preise, setPreise] = useState({});
     const [liste, setListe] = useState([]);
@@ -3619,7 +3644,7 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                     React.createElement("div", { className: "text-[11px] tracking-[0.2em] uppercase text-[#E8963B] font-oswald font-semibold mb-1" }, "TH Sonnenschutz \u2014 Produktion"),
                     React.createElement("h1", { className: "text-[26px] md:text-[32px] font-oswald font-semibold text-[#1B1F24] leading-tight" }, "Dreht\u00FCr-Konfigurator"),
                     React.createElement("p", { className: "text-[13px] text-[#5B6472] mt-1" }, "Insektenschutz-Dreht\u00FCr nach heroal IS Fertigungskatalog (88328 00 01)."))),
-            React.createElement("div", { className: "flex gap-1 mb-4 border-b border-[#E2DFD3] overflow-x-auto" }, baueTabs(einstellungen, liste.length).map(([id, label]) => (React.createElement("button", { key: id, onClick: () => setTab(id), className: `px-3.5 py-2 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${tab === id ? "border-[#E8963B] text-[#1B1F24]" : "border-transparent text-[#8A8F98] hover:text-[#5B6472]"}` }, label)))),
+            React.createElement("div", { className: "flex gap-1 mb-4 border-b border-[#E2DFD3] overflow-x-auto" }, baueTabs(einstellungen, liste.length, istChef).map(([id, label]) => (React.createElement("button", { key: id, onClick: () => setTab(id), className: `px-3.5 py-2 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${tab === id ? "border-[#E8963B] text-[#1B1F24]" : "border-transparent text-[#8A8F98] hover:text-[#5B6472]"}` }, label)))),
             tab === "konfiguration" && (React.createElement("div", { className: "flex flex-col gap-4" },
                 React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3" },
                     React.createElement(Select, { label: "Ausf\u00FChrung", value: ausfuehrungTyp, onChange: setAusfuehrungTyp, options: DREHTUER_AUSFUEHRUNG.map((a) => ({ value: a.id, label: a.label })), className: "col-span-2" }),
@@ -4152,7 +4177,7 @@ function loadSchiebetuerListe(setListe) {
     }).catch(() => { });
 }
 function saveSchiebetuerListe(l) { var _a; (_a = window.storage) === null || _a === void 0 ? void 0 : _a.set("schiebetuer_liste_v1", JSON.stringify(l)).catch(() => { }); }
-function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde, einstellungen }) {
+function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde, einstellungen, istChef }) {
     const [tab, setTab] = useState("konfiguration");
     const [preise, setPreise] = useState({});
     const [liste, setListe] = useState([]);
@@ -4295,7 +4320,7 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                     React.createElement("div", { className: "text-[11px] tracking-[0.2em] uppercase text-[#E8963B] font-oswald font-semibold mb-1" }, "TH Sonnenschutz \u2014 Produktion"),
                     React.createElement("h1", { className: "text-[26px] md:text-[32px] font-oswald font-semibold text-[#1B1F24] leading-tight" }, "Schiebet\u00FCr-Konfigurator"),
                     React.createElement("p", { className: "text-[13px] text-[#5B6472] mt-1" }, "Insektenschutz-Schiebet\u00FCr nach heroal IS Fertigungskatalog (88328 00 01)."))),
-            React.createElement("div", { className: "flex gap-1 mb-4 border-b border-[#E2DFD3] overflow-x-auto" }, baueTabs(einstellungen, liste.length).map(([id, label]) => (React.createElement("button", { key: id, onClick: () => setTab(id), className: `px-3.5 py-2 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${tab === id ? "border-[#E8963B] text-[#1B1F24]" : "border-transparent text-[#8A8F98] hover:text-[#5B6472]"}` }, label)))),
+            React.createElement("div", { className: "flex gap-1 mb-4 border-b border-[#E2DFD3] overflow-x-auto" }, baueTabs(einstellungen, liste.length, istChef).map(([id, label]) => (React.createElement("button", { key: id, onClick: () => setTab(id), className: `px-3.5 py-2 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${tab === id ? "border-[#E8963B] text-[#1B1F24]" : "border-transparent text-[#8A8F98] hover:text-[#5B6472]"}` }, label)))),
             tab === "konfiguration" && (React.createElement("div", { className: "flex flex-col gap-4" },
                 React.createElement("div", { className: "border border-[#D8D4C8] rounded-md bg-[#FFF8EF] px-3 py-2 text-[11.5px] text-[#8A6438]" },
                     "Bei der Schiebet\u00FCr gibst du das ",
@@ -4660,7 +4685,7 @@ function loadLichtschachtListe(setListe) {
     }).catch(() => { });
 }
 function saveLichtschachtListe(l) { var _a; (_a = window.storage) === null || _a === void 0 ? void 0 : _a.set("lichtschacht_liste_v1", JSON.stringify(l)).catch(() => { }); }
-function LichtschachtKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde, einstellungen }) {
+function LichtschachtKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde, einstellungen, istChef }) {
     const [tab, setTab] = useState("konfiguration");
     const [preise, setPreise] = useState({});
     const [liste, setListe] = useState([]);
@@ -4778,7 +4803,7 @@ function LichtschachtKonfigurator({ onZurueck, editRequest, onEditConsumed, defa
                     React.createElement("div", { className: "text-[11px] tracking-[0.2em] uppercase text-[#E8963B] font-oswald font-semibold mb-1" }, "TH Sonnenschutz \u2014 Produktion"),
                     React.createElement("h1", { className: "text-[26px] md:text-[32px] font-oswald font-semibold text-[#1B1F24] leading-tight" }, "Lichtschachtabdeckung-Konfigurator"),
                     React.createElement("p", { className: "text-[13px] text-[#5B6472] mt-1" }, "heroal IS Fertigungskatalog (88328 00 01)."))),
-            React.createElement("div", { className: "flex gap-1 mb-4 border-b border-[#E2DFD3] overflow-x-auto" }, baueTabs(einstellungen, liste.length).map(([id, label]) => (React.createElement("button", { key: id, onClick: () => setTab(id), className: `px-3.5 py-2 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${tab === id ? "border-[#E8963B] text-[#1B1F24]" : "border-transparent text-[#8A8F98] hover:text-[#5B6472]"}` }, label)))),
+            React.createElement("div", { className: "flex gap-1 mb-4 border-b border-[#E2DFD3] overflow-x-auto" }, baueTabs(einstellungen, liste.length, istChef).map(([id, label]) => (React.createElement("button", { key: id, onClick: () => setTab(id), className: `px-3.5 py-2 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${tab === id ? "border-[#E8963B] text-[#1B1F24]" : "border-transparent text-[#8A8F98] hover:text-[#5B6472]"}` }, label)))),
             tab === "konfiguration" && (React.createElement("div", { className: "flex flex-col gap-4" },
                 React.createElement("div", { className: "border border-[#D8D4C8] rounded-md bg-[#FFF8EF] px-3 py-2 text-[11.5px] text-[#8A6438]" }, "Rahmenma\u00DF = Bestellma\u00DF, direkt am Lichtschacht gemessen (keine Zuschlagsformel im Katalog hinterlegt)."),
                 React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3" },
@@ -5070,7 +5095,7 @@ function loadKisListe(setListe) {
     }).catch(() => { });
 }
 function saveKisListe(l) { var _a; (_a = window.storage) === null || _a === void 0 ? void 0 : _a.set("kis_liste_v1", JSON.stringify(l)).catch(() => { }); }
-function KisKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde, einstellungen }) {
+function KisKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde, einstellungen, istChef }) {
     const [tab, setTab] = useState("konfiguration");
     const [preise, setPreise] = useState({});
     const [liste, setListe] = useState([]);
@@ -5212,7 +5237,7 @@ function KisKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde,
                     React.createElement("div", { className: "text-[11px] tracking-[0.2em] uppercase text-[#E8963B] font-oswald font-semibold mb-1" }, "TH Sonnenschutz \u2014 Produktion"),
                     React.createElement("h1", { className: "text-[26px] md:text-[32px] font-oswald font-semibold text-[#1B1F24] leading-tight" }, "IS KIS-Konfigurator"),
                     React.createElement("p", { className: "text-[13px] text-[#5B6472] mt-1" }, "Insektengitter Rollo \u2014 heroal IS Fertigungskatalog (88328 00 01), S. 218-219."))),
-            React.createElement("div", { className: "flex gap-1 mb-4 border-b border-[#E2DFD3] overflow-x-auto" }, baueTabs(einstellungen, liste.length).map(([id, label]) => (React.createElement("button", { key: id, onClick: () => setTab(id), className: `px-3.5 py-2 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${tab === id ? "border-[#E8963B] text-[#1B1F24]" : "border-transparent text-[#8A8F98] hover:text-[#5B6472]"}` }, label)))),
+            React.createElement("div", { className: "flex gap-1 mb-4 border-b border-[#E2DFD3] overflow-x-auto" }, baueTabs(einstellungen, liste.length, istChef).map(([id, label]) => (React.createElement("button", { key: id, onClick: () => setTab(id), className: `px-3.5 py-2 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${tab === id ? "border-[#E8963B] text-[#1B1F24]" : "border-transparent text-[#8A8F98] hover:text-[#5B6472]"}` }, label)))),
             tab === "konfiguration" && (React.createElement("div", { className: "flex flex-col gap-4" },
                 React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3" },
                     React.createElement(Num, { label: "Elementbreite (EB)", value: eb, onChange: setEb, unit: "mm", min: 300, allowEmpty: true }),
@@ -5743,6 +5768,8 @@ function App() {
     const kundeFertig = () => { setAktiverKunde(""); saveAktiverKunde(""); };
     const [einstellungen, setEinstellungen] = useState(DEFAULT_EINSTELLUNGEN);
     useEffect(() => { loadEinstellungen(setEinstellungen); }, [produkt]); // bei jedem Produktwechsel neu laden, falls im Einstellungen-Bereich geändert
+    const [istChef, setIstChef] = useState(false);
+    useEffect(() => { ladeIstChef(setIstChef); }, []);
     const bearbeiteAus = (produktRoute, id) => { setEditZiel({ produkt: produktRoute, id }); setProdukt(produktRoute); };
     const editRequestFuer = (name) => (editZiel && editZiel.produkt === name ? { id: editZiel.id } : null);
     const onEditConsumed = () => setEditZiel(null);
@@ -5751,17 +5778,17 @@ function App() {
     if (produkt === "einstellungen")
         return React.createElement(Einstellungen, { onZurueck: () => setProdukt(null) });
     if (produkt === "rollladen")
-        return React.createElement(RollladenKonfigurator, { onZurueck: () => setProdukt(null), editRequest: editRequestFuer("rollladen"), onEditConsumed, defaultKunde: aktiverKunde, einstellungen });
+        return React.createElement(RollladenKonfigurator, { onZurueck: () => setProdukt(null), editRequest: editRequestFuer("rollladen"), onEditConsumed, defaultKunde: aktiverKunde, einstellungen, istChef });
     if (produkt === "spannrahmen")
-        return React.createElement(SpannrahmenKonfigurator, { onZurueck: () => setProdukt(null), editRequest: editRequestFuer("spannrahmen"), onEditConsumed, defaultKunde: aktiverKunde, einstellungen });
+        return React.createElement(SpannrahmenKonfigurator, { onZurueck: () => setProdukt(null), editRequest: editRequestFuer("spannrahmen"), onEditConsumed, defaultKunde: aktiverKunde, einstellungen, istChef });
     if (produkt === "drehtuer")
-        return React.createElement(DrehtuerKonfigurator, { onZurueck: () => setProdukt(null), editRequest: editRequestFuer("drehtuer"), onEditConsumed, defaultKunde: aktiverKunde, einstellungen });
+        return React.createElement(DrehtuerKonfigurator, { onZurueck: () => setProdukt(null), editRequest: editRequestFuer("drehtuer"), onEditConsumed, defaultKunde: aktiverKunde, einstellungen, istChef });
     if (produkt === "schiebetuer")
-        return React.createElement(SchiebetuerKonfigurator, { onZurueck: () => setProdukt(null), editRequest: editRequestFuer("schiebetuer"), onEditConsumed, defaultKunde: aktiverKunde, einstellungen });
+        return React.createElement(SchiebetuerKonfigurator, { onZurueck: () => setProdukt(null), editRequest: editRequestFuer("schiebetuer"), onEditConsumed, defaultKunde: aktiverKunde, einstellungen, istChef });
     if (produkt === "lichtschacht")
-        return React.createElement(LichtschachtKonfigurator, { onZurueck: () => setProdukt(null), editRequest: editRequestFuer("lichtschacht"), onEditConsumed, defaultKunde: aktiverKunde, einstellungen });
+        return React.createElement(LichtschachtKonfigurator, { onZurueck: () => setProdukt(null), editRequest: editRequestFuer("lichtschacht"), onEditConsumed, defaultKunde: aktiverKunde, einstellungen, istChef });
     if (produkt === "kis")
-        return React.createElement(KisKonfigurator, { onZurueck: () => setProdukt(null), editRequest: editRequestFuer("kis"), onEditConsumed, defaultKunde: aktiverKunde, einstellungen });
+        return React.createElement(KisKonfigurator, { onZurueck: () => setProdukt(null), editRequest: editRequestFuer("kis"), onEditConsumed, defaultKunde: aktiverKunde, einstellungen, istChef });
     return React.createElement(Hauptseite, { onSelect: setProdukt, onKunden: () => setProdukt("kunden"), onEinstellungen: () => setProdukt("einstellungen"), aktiverKunde, kundeDetails, onKundeSetzen: kundeSetzen, onKundeFertig: kundeFertig });
 }
 
