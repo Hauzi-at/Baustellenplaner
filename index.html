@@ -2152,11 +2152,12 @@
      Stunden (Zeiterfassung) — Monatskalender je Mitarbeiter, ein Tag kann
      "Arbeit" (mit mehreren Zeit-Blöcken), "Urlaub", "Krank", "Feiertag",
      "Zeitausgleich" oder "Sonderurlaub" sein. Sichtbarkeit: jede Person sieht
-     standardmäßig nur ihre EIGENEN Stunden — nur wenn die Chef-Sperre
-     (settingsUnlocked, siehe openSettingsGate) offen ist, kann zwischen allen
-     Mitarbeitern gewechselt werden. Das ist (wie überall sonst in dieser App)
-     eine Sichtbarkeits-Regel auf UI-Ebene, keine serverseitige Berechtigung —
-     der Datenbankzugriff selbst ist für alle angemeldeten Personen gleich.
+     standardmäßig nur ihre EIGENEN Stunden — nur wer selbst als Chef markiert ist
+     (Feld "isChef" auf dem eigenen team-Datensatz, siehe isChefUser() und
+     renderTeamSettingsCard) kann zwischen allen Mitarbeitern wechseln. Das ist
+     (wie überall sonst in dieser App) eine Sichtbarkeits-Regel auf UI-Ebene,
+     keine serverseitige Berechtigung — der Datenbankzugriff selbst ist für alle
+     angemeldeten Personen gleich.
 
      Datenmodell (Tabelle "hours"): pro Person und Tag EIN Datensatz —
        date, employeeName, type, blocks (jsonb [{start,ende}, …]),
@@ -2187,20 +2188,26 @@
     if (diff < 0) diff += 24 * 60; // falls über Mitternacht (selten)
     return diff;
   }
-  function sollHoursForDate(iso) {
-    var s = getSettings();
+  // Soll-Stunden gelten PRO MITARBEITER und pro Wochentag (Mo–Fr je einzeln in den
+  // Einstellungen > Mitarbeiter hinterlegt) — nicht mehr firmenweit einheitlich, weil manche
+  // Mitarbeiter nur Halbtags oder an einzelnen Tagen weniger arbeiten. Ist für eine Person noch
+  // nichts hinterlegt, gilt die Standard-Vorgabe (8 Std. Mo–Do, 5 Std. Fr).
+  var SOLL_KEY_BY_WEEKDAY = { 1: "sollMo", 2: "sollDi", 3: "sollMi", 4: "sollDo", 5: "sollFr" };
+  function sollHoursForDate(iso, employeeName) {
     var d = new Date(iso + "T00:00:00");
     var dow = d.getDay(); // 0 = Sonntag … 6 = Samstag
     if (dow === 0 || dow === 6) return 0;
-    if (dow === 5) return s.sollFr != null ? Number(s.sollFr) : 5;
-    return s.sollMoDo != null ? Number(s.sollMoDo) : 8;
+    var tm = findTeamMember(employeeName);
+    var key = SOLL_KEY_BY_WEEKDAY[dow];
+    if (tm && tm[key] != null && tm[key] !== "") return Number(tm[key]);
+    return dow === 5 ? 5 : 8; // Standard-Vorgabe für Personen ohne eigene Angabe
   }
   function computeHoursDuration(h) {
     if (!h) return 0;
     if (hoursEntryType(h) !== "Arbeit") {
       // Urlaub/Krank/Feiertag/Zeitausgleich/Sonderurlaub: die Soll-Stunden dieses Tages
       // werden gutgeschrieben, damit an solchen Tagen keine Minusstunden entstehen.
-      return sollHoursForDate(h.date);
+      return sollHoursForDate(h.date, h.employeeName);
     }
     var totalMin = hoursEntryBlocks(h).reduce(function (sum, b) { return sum + blockMinutes(b); }, 0);
     totalMin -= (h.breakMinutes || 0);
@@ -2226,6 +2233,15 @@
   }
   function findTeamMember(name) {
     return state.team.find(function (m) { return m.name === name; }) || null;
+  }
+  // Chef-Status ist jetzt an die PERSON gebunden (Feld "isChef" auf ihrem team-Datensatz), nicht
+  // mehr an das separate Einstellungen-Passwort: wer als Chef markiert ist, sieht überall (auch
+  // im Konfigurator, siehe konfigurator.html) automatisch alles — jede andere Person nie, ganz
+  // gleich ob sie das Einstellungen-Passwort kennt. Das "isChef"-Häkchen selbst kann nur gesetzt
+  // werden, wer die Einstellungen (Chef-Passwort) bereits geöffnet hat (siehe renderTeamSettingsCard).
+  function isChefUser(name) {
+    var tm = findTeamMember(name);
+    return !!(tm && tm.isChef);
   }
   function hoursRowsFor(dateIso, employeeName) {
     return state.hours.filter(function (h) { return h.date === dateIso && h.employeeName === employeeName; });
@@ -2254,32 +2270,35 @@
   // Soll-Stunden des Monats, aber nur bis einschließlich heute (liegt der Monat in der
   // Vergangenheit, zählt er ganz; liegt er in der Zukunft, zählt noch nichts) — so entsteht
   // am 3. eines Monats nicht sofort ein großes Minus für die noch bevorstehenden Tage.
-  function monthSollSoFar(ym) {
+  function monthSollSoFar(ym, employeeName) {
     var today = todayIso(), thisYm = today.slice(0, 7), total = 0;
     daysInMonth(ym).forEach(function (d) {
-      if (ym < thisYm) total += sollHoursForDate(d);
-      else if (ym === thisYm && d <= today) total += sollHoursForDate(d);
+      if (ym < thisYm) total += sollHoursForDate(d, employeeName);
+      else if (ym === thisYm && d <= today) total += sollHoursForDate(d, employeeName);
     });
     return total;
   }
 
   function renderHours() {
-    // Sichtbarkeit defensiv bei jedem Aufruf neu bestimmen — nie eine ältere Auswahl vertrauen,
-    // wenn die Chef-Sperre inzwischen (wieder) geschlossen ist.
-    if (!settingsUnlocked) hoursViewEmployee = currentUser;
+    // Sichtbarkeit defensiv bei jedem Aufruf neu bestimmen — nie eine ältere Auswahl vertrauen.
+    // Wer ist "Chef" wird ausschließlich über das "isChef"-Feld der eingeloggten Person selbst
+    // bestimmt (nicht über die separate Einstellungen-Passwortsperre) — nur diese Person kann auf
+    // andere Mitarbeiter umschalten, jede andere sieht ausnahmslos nur ihre eigenen Stunden.
+    var canViewOthers = isChefUser(currentUser);
+    if (!canViewOthers) hoursViewEmployee = currentUser;
     else if (!hoursViewEmployee) hoursViewEmployee = currentUser;
-    var viewingEmployee = settingsUnlocked ? (hoursViewEmployee || currentUser) : currentUser;
-    var canEdit = settingsUnlocked || viewingEmployee === currentUser;
+    var viewingEmployee = canViewOthers ? (hoursViewEmployee || currentUser) : currentUser;
+    var canEdit = canViewOthers || viewingEmployee === currentUser;
 
     var view = el("div", { class: "view" });
     view.appendChild(el("div", { class: "view-head" }, [
       el("div", {}, [
         el("h1", {}, ["Stunden"]),
-        el("p", {}, [settingsUnlocked ? "Chef-Ansicht — Stunden jedes Mitarbeiters einsehbar." : "Deine eigenen Arbeitsstunden."])
+        el("p", {}, [canViewOthers ? "Chef-Ansicht — Stunden jedes Mitarbeiters einsehbar." : "Deine eigenen Arbeitsstunden."])
       ])
     ]));
 
-    if (settingsUnlocked) {
+    if (canViewOthers) {
       var empField = el("div", { class: "field", style: "max-width:280px;" }, [el("label", {}, ["Mitarbeiter"])]);
       var empSelect = el("select", {});
       teamMemberNames().forEach(function (n) {
@@ -2333,7 +2352,7 @@
     daysInMonth(ym).forEach(function (d) {
       hoursRowsFor(d, employeeName).forEach(function (h) { ist += computeHoursDuration(h); });
     });
-    var soll = monthSollSoFar(ym);
+    var soll = monthSollSoFar(ym, employeeName);
     var diff = ist - soll;
     var card = el("div", { class: "card", style: "display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;" });
     function stat(label, text, colorVar) {
@@ -2397,7 +2416,7 @@
     var dow = dObj.getDay();
     var isWeekend = dow === 0 || dow === 6;
     var isToday = dateIso === todayIso();
-    var soll = sollHoursForDate(dateIso);
+    var soll = sollHoursForDate(dateIso, employeeName);
 
     var row = el("div", { class: "customer-row" + (isToday ? " today" : "") });
     if (isToday) row.style.borderColor = "var(--slate)";
@@ -2457,12 +2476,20 @@
       _legacyIds: rows.map(function (r) { return r.id; })
     };
     render();
+    // Der Editor erscheint oben im Reiter, der Kalendertag (auf den man geklickt hat) kann aber
+    // weit unten in der Liste stehen — ohne dieses Scrollen würde man nach dem Klick auf "+"
+    // scheinbar nichts sehen (die Seite bleibt am gleichen Scroll-Punkt, nur der Inhalt darüber
+    // wird länger). Kurzes Timeout, damit das gerade frisch eingefügte Element schon im DOM ist.
+    setTimeout(function () {
+      var target = $("#hours-day-editor");
+      if (target && target.scrollIntoView) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 30);
   }
 
   function renderHoursDayEditor() {
     var d = hoursDayDraft;
     var dObj = new Date(d.date + "T00:00:00");
-    var card = el("div", { class: "card" });
+    var card = el("div", { class: "card", id: "hours-day-editor" });
     var headLine = WEEKDAYS[(dObj.getDay() + 6) % 7] + ", " + deDateFromIso(d.date) + (d.employeeName !== currentUser ? " — " + d.employeeName : "");
     card.appendChild(el("h3", { style: "margin:0 0 4px;" }, [headLine]));
 
@@ -2540,7 +2567,7 @@
       card.appendChild(ortField);
     } else {
       card.appendChild(el("p", { style: "margin:0;font-size:12.5px;color:var(--muted);" },
-        ["An diesem Tag werden " + sollHoursForDate(d.date).toFixed(2) + " Std. (Soll-Stunden) gutgeschrieben."]));
+        ["An diesem Tag werden " + sollHoursForDate(d.date, d.employeeName).toFixed(2) + " Std. (Soll-Stunden) gutgeschrieben."]));
     }
 
     var noteField = el("div", { class: "field" }, [el("label", {}, ["Notiz (optional)"])]);
@@ -3677,26 +3704,16 @@
     return view;
   }
 
-  // Firmenweite Vorgaben für "Stunden": Soll-Stunden je Wochentag (für Ist/Soll-Vergleich
-  // und die automatische Gutschrift an Urlaub/Krank/Feiertag-Tagen) sowie Standardzeiten zum
-  // schnellen Ausfüllen eines neuen Arbeitstags.
+  // Firmenweite Standardzeiten zum schnellen Ausfüllen eines neuen Arbeitstags. Die
+  // Soll-Stunden selbst sind NICHT mehr firmenweit einheitlich — sie werden je Mitarbeiter und
+  // Wochentag in den Einstellungen > Mitarbeiter hinterlegt (siehe renderTeamSettingsCard),
+  // weil manche Mitarbeiter nur Halbtags oder an einzelnen Tagen kürzer arbeiten.
   function renderSollstundenSettingsCard() {
     var s = getSettings();
     var card = el("div", { class: "card", style: "display:flex;flex-direction:column;gap:12px;" });
-    card.appendChild(el("h3", { style: "margin:0;" }, ["Stunden — Vorgaben"]));
+    card.appendChild(el("h3", { style: "margin:0;" }, ["Zeiterfassung — Standardzeiten"]));
     card.appendChild(el("p", { style: "margin:-6px 0 0;font-size:12.5px;color:var(--muted);" },
-      ["Gilt für alle Mitarbeiter — Soll-Stunden je Wochentag und Standardzeiten zum schnellen Ausfüllen eines Arbeitstags."]));
-
-    var row1 = el("div", { class: "field-row cols-2" });
-    var moDoField = el("div", { class: "field" }, [el("label", {}, ["Soll Mo–Do (Std./Tag)"])]);
-    var moDoInput = el("input", { type: "number", step: "0.5", min: "0", value: s.sollMoDo != null ? s.sollMoDo : 8 });
-    moDoField.appendChild(moDoInput);
-    row1.appendChild(moDoField);
-    var frField = el("div", { class: "field" }, [el("label", {}, ["Soll Freitag (Std.)"])]);
-    var frInput = el("input", { type: "number", step: "0.5", min: "0", value: s.sollFr != null ? s.sollFr : 5 });
-    frField.appendChild(frInput);
-    row1.appendChild(frField);
-    card.appendChild(row1);
+      ["Gilt für alle Mitarbeiter — wird beim Anlegen eines neuen Arbeitstags automatisch vorausgefüllt. Die Soll-Stunden je Wochentag legst du unten bei „Mitarbeiter“ für jede Person einzeln fest."]));
 
     var row2 = el("div", { class: "field-row cols-3" });
     var beginField = el("div", { class: "field" }, [el("label", {}, ["Standard-Beginn"])]);
@@ -3718,8 +3735,6 @@
     saveBtn.addEventListener("click", function () {
       if (!db) { msg.textContent = "Keine Verbindung zur Datenbank."; msg.style.color = "var(--danger)"; return; }
       db.doc("settings/main").update({
-        sollMoDo: parseFloat(moDoInput.value) || 0,
-        sollFr: parseFloat(frInput.value) || 0,
         standardBeginn: beginInput.value || "",
         standardEnde: endInput.value || "",
         standardPause: parseInt(pauseInput.value, 10) || 0,
@@ -3894,6 +3909,7 @@
       var nameInput = el("input", { type: "text", value: m.name, style: "flex:1;" });
       row.appendChild(nameInput);
       if (!m.passwordHash) row.appendChild(el("span", { style: "font-size:11px;color:var(--warn,#b8860b);white-space:nowrap;" }, ["kein Passwort"]));
+      if (m.isChef) row.appendChild(el("span", { class: "tag success" }, ["Chef"]));
       var saveBtn = el("button", { class: "btn btn-icon btn-sm", title: "Umbenennen" }, []);
       saveBtn.innerHTML = icon("check", 15);
       saveBtn.addEventListener("click", function () {
@@ -3913,6 +3929,23 @@
       actions.appendChild(delBtn);
       row.appendChild(actions);
       rowWrap.appendChild(row);
+
+      // "isChef" ist der einzige Schalter, der bestimmt, wer alle Mitarbeiter-Stunden einsehen
+      // und im Konfigurator Produktion/Kalkulation sehen kann (siehe isChefUser()) — unabhängig
+      // vom separaten Einstellungen-Passwort. Nur wer die Einstellungen bereits geöffnet hat
+      // (also das Einstellungen-Passwort kennt), kann dieses Häkchen überhaupt setzen.
+      var chefRow = el("div", { style: "padding:0 8px 6px 52px;" });
+      var chefLabel = el("label", { style: "display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--ink-soft);" }, []);
+      var chefCheckbox = el("input", { type: "checkbox" });
+      chefCheckbox.checked = !!m.isChef;
+      chefCheckbox.addEventListener("change", function (e) {
+        if (!db) return;
+        db.doc("team/" + m.id).update({ isChef: e.target.checked }).catch(function () {});
+      });
+      chefLabel.appendChild(chefCheckbox);
+      chefLabel.appendChild(document.createTextNode(" Chef — sieht alle Mitarbeiter-Stunden und Produktion/Kalkulation im Konfigurator"));
+      chefRow.appendChild(chefLabel);
+      rowWrap.appendChild(chefRow);
 
       // Resturlaub/Zeitausgleich werden hier vom Chef manuell gepflegt (keine automatische
       // Berechnung) — sie erscheinen als "Konten" in der Stunden-Ansicht der jeweiligen Person.
@@ -3935,6 +3968,29 @@
         acctRow.appendChild(numField("Zeitausgleich (Std.)", "zeitausgleichStunden"));
       })(m);
       rowWrap.appendChild(acctRow);
+
+      // Soll-Stunden je Wochentag — pro Person einzeln, damit Halbtags-Kräfte oder Personen mit
+      // einem kürzeren Tag (z. B. nur vormittags am Freitag) korrekt erfasst werden. Ohne eigene
+      // Angabe gilt die Standard-Vorgabe (8 Std. Mo–Do, 5 Std. Fr) — siehe sollHoursForDate().
+      var sollRow = el("div", { style: "display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:0 8px 8px 52px;" });
+      sollRow.appendChild(el("span", { style: "font-size:11px;color:var(--muted);white-space:nowrap;" }, ["Soll-Std./Tag:"]));
+      (function (m) {
+        [["Mo", "sollMo", 8], ["Di", "sollDi", 8], ["Mi", "sollMi", 8], ["Do", "sollDo", 8], ["Fr", "sollFr", 5]].forEach(function (t) {
+          var label = t[0], key = t[1], fallback = t[2];
+          var wrap = el("div", { style: "display:flex;align-items:center;gap:4px;" });
+          wrap.appendChild(el("label", { style: "font-size:11px;color:var(--muted);" }, [label]));
+          var input = el("input", { type: "number", step: "0.5", min: "0", value: m[key] != null ? m[key] : fallback, style: "width:52px;padding:5px 6px;font-size:12.5px;" });
+          input.addEventListener("change", function (e) {
+            var v = e.target.value === "" ? null : parseFloat(e.target.value);
+            if (!db) return;
+            var patch = {}; patch[key] = v;
+            db.doc("team/" + m.id).update(patch).catch(function () {});
+          });
+          wrap.appendChild(input);
+          sollRow.appendChild(wrap);
+        });
+      })(m);
+      rowWrap.appendChild(sollRow);
 
       if (teamPwEditFor === m.id) {
         var pwCard = el("div", { style: "display:flex;flex-direction:column;gap:8px;padding:10px 8px 12px 44px;" });
