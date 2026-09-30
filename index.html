@@ -1198,10 +1198,40 @@
   }
 
   /* ---------------- root render ---------------- */
+  // render() baut #app bei JEDEM Aufruf komplett neu auf (kein Diffing) — das passiert nicht nur
+  // bei eigenen Aktionen, sondern auch automatisch bei JEDER Datenänderung irgendeiner anderen
+  // Person (siehe subscribe()/onSnapshot weiter oben), z. B. wenn ein Kollege einen Auftrag
+  // einteilt oder Stunden einträgt, während man selbst gerade ein Formular ausfüllt. Steht der
+  // Fokus dabei gerade in einem nativen Uhrzeit-/Datums-Feld (type="time"/"date", z. B.
+  // "Ankunft"/"Abfahrt") — deren Browser-eigenes Auswahlrad/Picker fest an das konkrete
+  // DOM-Element hängt — reißt ein kompletter Neuaufbau die laufende Eingabe ab: der Picker
+  // schließt sich bzw. die Auswahl wird verworfen, ohne dass ein change-Event ausgelöst wird.
+  // Für die Person sieht das so aus, als ließe sich das Feld gar nicht ändern. Deshalb: solange
+  // ein solches Feld innerhalb von #app fokussiert ist, wird der Neuaufbau zurückgestellt und
+  // erst nachgeholt, sobald das Feld den Fokus wieder verliert (die Daten im Hintergrund sind ja
+  // trotzdem aktuell — nur die Anzeige wartet kurz). Andere Feldtypen (Text, Checkbox, Auswahl …)
+  // sind davon bewusst NICHT betroffen, da dort teils bestehender Code (z. B. Checkbox-/
+  // Auswahl-Handler) den sofortigen Neuaufbau erwartet, um Folgefelder ein-/auszublenden.
+  var pendingRenderOnBlur = false;
+  function isFragileNativePicker(node) {
+    return !!node && node.tagName === "INPUT" && (node.type === "time" || node.type === "date");
+  }
   function render() {
     applyTheme();
     var app = $("#app");
     if (!currentUser) { app.innerHTML = ""; app.appendChild(renderLogin()); syncKonfiguratorFrame(); return; }
+    var active = document.activeElement;
+    if (active && app.contains(active) && isFragileNativePicker(active)) {
+      if (!pendingRenderOnBlur) {
+        pendingRenderOnBlur = true;
+        active.addEventListener("blur", function onBlur() {
+          active.removeEventListener("blur", onBlur);
+          pendingRenderOnBlur = false;
+          render();
+        }, { once: true });
+      }
+      return;
+    }
     app.innerHTML = "";
     app.appendChild(renderShell());
     renderPrintArea();
