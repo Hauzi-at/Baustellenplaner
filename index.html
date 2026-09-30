@@ -183,6 +183,11 @@
   .navlink.active { background: var(--slate); color: #fff; }
 
   main { flex: 1; min-width: 0; padding: 18px 16px 90px; max-width: 980px; margin: 0 auto; width: 100%; }
+  /* Die Wochenplanung braucht deutlich mehr Breite als der Rest der App (7 Spalten
+     nebeneinander) — sonst wirken Freitag/Samstag/Sonntag auf großen Bildschirmen gequetscht
+     und Buttons wie "+ Frei eintragen" brechen mitten im Wort um. Andere Ansichten (Formulare,
+     Einstellungen) bleiben bei der schmaleren, besser lesbaren Breite. */
+  main.main-wide { max-width: 1500px; }
 
   .bottomnav {
     position: fixed; bottom: 0; left: 0; right: 0;
@@ -401,8 +406,11 @@
   /* Vollbild-Unterschrift — nutzt fast das ganze Display, damit auf dem Handy mehr Platz zum
      Unterschreiben da ist als im kleinen Feld im Formular. */
   .sig-fullscreen { position: fixed; inset: 0; z-index: 80; background: var(--paper); display: flex; flex-direction: column; gap: 12px; padding: 14px; }
-  .sig-fullscreen-head { display: flex; justify-content: space-between; align-items: center; }
-  .sig-fullscreen-head strong { font-size: 16px; }
+  .sig-fullscreen-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .sig-fullscreen-head strong { font-size: 16px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Fertig-Button darf nie schrumpfen/abgeschnitten werden, damit das Häkchen auf schmalen
+     Handy-Bildschirmen immer sichtbar bleibt — der Titel wird stattdessen bei Bedarf gekürzt. */
+  .sig-fullscreen-head .btn { flex-shrink: 0; }
   .sig-fullscreen-pad { flex: 1; min-height: 0; }
   .sig-fullscreen-pad canvas { height: 100%; }
   .sig-fullscreen-actions { flex-shrink: 0; }
@@ -476,42 +484,71 @@
   /* ---------- Print ---------- */
   #print-area { display: none; }
   @media print {
+    /* Kein Rand auf Browser-Ebene — sonst blendet Safari/Chrome dort automatisch Seiten-URL,
+       Datum und Seitenzahl ein. Der eigentliche Rand kommt stattdessen über das Padding von
+       #print-area selbst (16mm/18mm weiter unten). */
+    @page { margin: 0; }
+    /* Die übrige App (u.a. #app) bekommt hier bewusst "display:none" statt nur
+       "visibility:hidden" — sonst bleibt ihre volle (oft sehr lange) Layout-Höhe erhalten und
+       es entstehen zusätzliche, leere Seiten nach dem eigentlichen Ausdruck. */
+    #app, #modal-root, #sig-fullscreen-root, #konfigurator-frame { display: none !important; }
     body * { visibility: hidden; }
     #print-area, #print-area * { visibility: visible; }
     #print-area {
-      display: block !important; position: absolute; top: 0; left: 0; width: 100%; padding: 16mm 18mm;
-      color: #1c2b38; background: #fff; font-family: Arial, sans-serif;
+      display: block !important; position: absolute; top: 0; left: 0; width: 100%; padding: 21mm 18mm 16mm;
+      color: var(--p-ink); background: #fff;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 11px; line-height: 1.55;
       --p-accent: var(--slate-deep, #2f5069);
       --p-accent-soft: var(--slate, #4f7691);
-      --p-tint: #f4f6f5;
-      --p-line: #d8dcd8;
+      --p-tint: #f5f7f6;
+      --p-line: #e3e7e5;
+      --p-ink: #1c2b38;
+      --p-muted: #6c7a80;
     }
-    .p-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-bottom: 3px solid var(--p-accent); padding-bottom: 14px; margin-bottom: 16px; }
-    .p-header img { height: 74px; width: 74px; object-fit: contain; flex-shrink: 0; }
-    .p-header .company-name { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--p-accent-soft); font-weight: 700; margin-bottom: 3px; }
-    .p-header .company { font-size: 10.5px; line-height: 1.55; color: #46596a; }
-    .p-type-badge { display: inline-flex; align-items: center; gap: 7px; background: var(--p-accent); color: #fff; font-size: 12.5px; font-weight: 700; padding: 7px 14px; border-radius: 999px; white-space: nowrap; }
-    .p-type-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; }
-    .p-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; margin-bottom: 4px; }
-    .p-field { border-bottom: 1px solid var(--p-line); padding: 6px 2px; font-size: 12.5px; margin-bottom: 9px; }
-    .p-field .l { font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--p-accent-soft); font-weight: 600; display: block; margin-bottom: 1px; }
-    .p-block { background: var(--p-tint); border-left: 3px solid var(--p-accent); border-radius: 0 6px 6px 0; margin-bottom: 12px; }
-    .p-block .l { font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--p-accent); padding: 8px 12px 0; }
-    .p-block .c { padding: 4px 12px 10px; font-size: 12.5px; min-height: 20px; white-space: pre-wrap; }
-    .p-sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 20px; }
-    .p-sig-box { background: var(--p-tint); border-radius: 6px; padding: 10px 12px 8px; min-height: 96px; display: flex; flex-direction: column; justify-content: flex-end; }
-    .p-sig-box img { height: 110px; display: block; margin-bottom: 2px; object-fit: contain; object-position: left bottom; max-width: 100%; }
-    .p-sig-line { border-top: 1px solid var(--p-accent-soft); padding-top: 5px; font-size: 10.5px; color: #46596a; }
-    /* Stundenliste (Monats-Tabelle) */
-    .p-hours-table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin-top: 4px; }
-    .p-hours-table th { background: var(--p-accent); color: #fff; font-weight: 700; text-align: left; padding: 5px 6px; }
-    .p-hours-table td { padding: 4px 6px; border-bottom: 1px solid var(--p-line); }
+    /* Schlanke, farbige Kopfleiste über die ganze Seitenbreite — gibt dem Ausdruck einen
+       Briefpapier-Charakter, ohne dass dafür Markup geändert werden musste. */
+    #print-area::before {
+      content: ""; position: absolute; top: 0; left: 0; right: 0; height: 6px;
+      background: linear-gradient(90deg, var(--p-accent), var(--p-accent-soft));
+    }
+    .p-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; padding-bottom: 16px; margin-bottom: 22px; border-bottom: 1px solid var(--p-line); }
+    .p-brand { display: flex; align-items: center; gap: 14px; }
+    .p-header img { height: 52px; width: 52px; object-fit: contain; flex-shrink: 0; }
+    .p-header .company-name { font-size: 9.5px; letter-spacing: .15em; text-transform: uppercase; color: var(--p-accent-soft); font-weight: 700; margin-bottom: 4px; }
+    .p-header .company { font-size: 10px; line-height: 1.6; color: var(--p-muted); }
+    .p-doctitle { text-align: right; flex-shrink: 0; }
+    .p-doctitle .t { font-family: 'Barlow Semi Condensed', 'Inter', sans-serif; font-weight: 700; font-size: 23px; letter-spacing: .01em; color: var(--p-accent); line-height: 1.1; white-space: nowrap; }
+    .p-doctitle .d { font-size: 10px; color: var(--p-muted); margin-top: 5px; }
+    /* Alte Klasse bleibt aus Kompatibilitätsgründen erhalten (falls irgendwo noch referenziert),
+       wird aber nicht mehr für das Layout gebraucht. */
+    .p-type-badge { display: none; }
+    .p-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; margin-bottom: 14px; }
+    .p-field { padding: 7px 0; font-size: 12px; }
+    .p-field .l { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: var(--p-accent-soft); font-weight: 600; display: block; margin-bottom: 2px; }
+    .p-block { background: var(--p-tint); border-radius: 9px; margin-bottom: 12px; }
+    .p-block .l { font-weight: 700; font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--p-accent); padding: 10px 13px 0; }
+    .p-block .c { padding: 4px 13px 11px; font-size: 12px; min-height: 20px; white-space: pre-wrap; }
+    .p-sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 22px; }
+    .p-sig-box { background: var(--p-tint); border: 1px solid var(--p-line); border-radius: 9px; padding: 12px 14px 8px; min-height: 148px; display: flex; flex-direction: column; justify-content: flex-end; }
+    .p-sig-box img { height: 160px; display: block; margin-bottom: 2px; object-fit: contain; object-position: left bottom; max-width: 100%; }
+    .p-sig-line { border-top: 1px solid var(--p-line); padding-top: 6px; font-size: 10px; color: var(--p-muted); }
+    .p-doc-title { font-family: 'Barlow Semi Condensed', 'Inter', sans-serif; font-weight: 700; font-size: 19px; color: var(--p-accent); margin: 4px 0 2px; }
+    .p-doc-sub { font-size: 11px; color: var(--p-muted); margin: 0 0 16px; }
+    /* Stundenliste (Monats-Tabelle) — die Rundung sitzt am Wrapper, nicht direkt an <table>:
+       Safari schneidet abgerundete Ecken bei Tabellen-Elementen selbst nicht zuverlässig zu. */
+    .p-hours-table-wrap { border: 1px solid var(--p-line); border-radius: 9px; overflow: hidden; margin-top: 4px; }
+    .p-hours-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+    .p-hours-table th { background: var(--p-accent); color: #fff; font-weight: 600; text-align: left; padding: 6px 7px; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; }
+    .p-hours-table td { padding: 4.5px 7px; border-bottom: 1px solid var(--p-line); }
     .p-hours-table tbody tr:nth-child(even) { background: var(--p-tint); }
     .p-hours-table tr.we td { color: var(--p-accent-soft); }
     .p-hours-summary {
-      border: 1.5px solid var(--p-accent); border-radius: 8px; padding: 10px 14px; margin-top: 14px;
-      font-size: 11.5px; line-height: 1.7; color: #1c2b38;
+      background: var(--p-tint); border-radius: 9px; padding: 12px 15px; margin-top: 16px;
+      font-size: 11.5px; line-height: 1.75; color: var(--p-ink);
     }
+    .p-footer { margin-top: 26px; padding-top: 10px; border-top: 1px solid var(--p-line); font-size: 9px; color: var(--p-muted); display: flex; justify-content: space-between; gap: 10px; }
+    .p-footer .fn { text-transform: uppercase; letter-spacing: .1em; font-weight: 700; color: var(--p-accent-soft); }
   }
 
   [hidden] { display: none !important; }
@@ -1377,7 +1414,7 @@
     var shell = el("div", { class: "shell" });
     shell.appendChild(renderNav("sidenav"));
 
-    var main = el("main", {});
+    var main = el("main", currentTab === "planning" ? { class: "main-wide" } : {});
     if (dbStatus === "unavailable") {
       main.appendChild(el("div", { class: "banner", style: "margin-bottom:14px;" }, [dbStatusMessage()]));
     } else if (!isOnline || pendingSyncCount > 0) {
@@ -1445,7 +1482,7 @@
 
     if (notifPanelOpen) {
       var items = notifReports().slice(0, 12);
-      var panel = el("div", { class: "card notif-panel", style: "position:absolute;right:0;top:calc(100% + 6px);z-index:30;padding:8px;width:300px;max-height:380px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.18);" });
+      var panel = el("div", { class: "card notif-panel", style: "position:absolute;right:0;top:calc(100% + 6px);z-index:30;padding:8px;width:min(300px, calc(100vw - 24px));box-sizing:border-box;max-height:380px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.18);" });
       panel.appendChild(el("div", { style: "font-weight:700;font-size:13px;padding:2px 4px 8px;" }, ["Abgeschlossen / zurückgestellt"]));
       if (items.length === 0) {
         panel.appendChild(el("p", { style: "font-size:12px;color:var(--muted);padding:2px 4px;margin:0;" }, ["Noch nichts."]));
@@ -1468,6 +1505,22 @@
         panel.appendChild(row);
       });
       wrap.appendChild(panel);
+      // Auf schmalen Handy-Bildschirmen kann die Glocke je nach Kopfzeilen-Layout recht weit
+      // links stehen — mit "right:0" würde das Panel dann links über den Bildschirmrand hinaus
+      // aufgehen ("öffnet nach außen"). Deshalb nach dem Einfügen ins DOM die tatsächliche
+      // Position prüfen und bei Bedarf auf beiden Seiten mit etwas Rand ins Sichtfeld rücken.
+      requestAnimationFrame(function () {
+        var margin = 10;
+        var wrapRect = wrap.getBoundingClientRect();
+        var panelRect = panel.getBoundingClientRect();
+        if (panelRect.left < margin) {
+          panel.style.right = "auto";
+          panel.style.left = (margin - wrapRect.left) + "px";
+        } else if (panelRect.right > window.innerWidth - margin) {
+          panel.style.left = "auto";
+          panel.style.right = (wrapRect.right - (window.innerWidth - margin)) + "px";
+        }
+      });
       setTimeout(function () {
         document.addEventListener("click", function closeOnce(ev) {
           document.removeEventListener("click", closeOnce);
@@ -1678,7 +1731,6 @@
       card.appendChild(el("p", { style: "font-size:12px;color:var(--muted);margin:0;" }, ["Keine Einteilung"]));
     }
     dayAssignments.forEach(function (a, idx) {
-      if (planningEditId === a.id) { card.appendChild(renderAssignForm(iso, a)); return; }
       var item = el("div", { class: "assign-item" });
       item.appendChild(el("div", { class: "who" }, [el("span", { class: "num-badge", title: "Reihenfolge" }, [String(idx + 1)]), a.employeeName || "?"]));
       item.appendChild(el("div", { class: "what" }, [a.site || "(keine Baustelle angegeben)"]));
@@ -1692,7 +1744,7 @@
         item.appendChild(linkNote);
       }
       var actions = el("div", { class: "actions" });
-      var editBtn = el("button", { title: "Bearbeiten", onclick: function () { planningEditId = a.id; planningOpenDate = null; render(); } }, []);
+      var editBtn = el("button", { title: "Bearbeiten", onclick: function () { openAssignModal(iso, a); } }, []);
       editBtn.innerHTML = icon("edit", 14);
       var delBtn = el("button", { title: "Löschen", onclick: function () { deleteAssignment(a); } }, []);
       delBtn.innerHTML = icon("trash", 14);
@@ -1702,36 +1754,71 @@
       card.appendChild(item);
     });
 
-    // Frei-Eintragen-Formular für diesen Tag (siehe freeBtn unten) — z. B. für Sub-Einsätze
-    // bei anderen Firmen, die keinen eigenen Auftrag im Archiv haben.
-    if (planningOpenDate === iso) {
-      card.appendChild(renderAssignForm(iso, null));
-    }
-
     // Zwei Wege, einen Tag zu befüllen: "Auftrag zuweisen" führt ins Archiv, wo ein
     // bestehender (eigener) Auftrag ausgewählt und diesem Tag zugewiesen wird. "Frei
-    // eintragen" öffnet direkt hier ein einfaches Formular ohne Auftragsbezug — gedacht für
-    // Subunternehmer-Einsätze bei anderen Firmen (z. B. "Newo", "Rothner"), wo es keinen
-    // eigenen Auftrag/Kunden im Archiv gibt, sondern nur "Tag X ist für Firma Y verplant".
+    // eintragen" öffnet ein Dialogfenster mit einem einfachen Formular ohne Auftragsbezug —
+    // gedacht für Subunternehmer-Einsätze bei anderen Firmen (z. B. "Newo", "Rothner"), wo es
+    // keinen eigenen Auftrag/Kunden im Archiv gibt, sondern nur "Tag X ist für Firma Y verplant".
+    // Das Formular hängt bewusst NICHT mehr inline in der (auf Desktop-Breitbildschirmen immer
+    // noch recht schmalen) Tagesspalte, sondern öffnet als eigenes Dialogfenster (wie z. B. das
+    // Mitarbeiter-Profil) — dort ist genug Platz, ohne dass Eingabefelder gequetscht wirken.
     var addRow = el("div", { style: "display:flex;gap:6px;" });
     var addBtn = el("button", { class: "add-assign-btn", style: "flex:1;" }, ["+ Auftrag zuweisen"]);
     addBtn.addEventListener("click", function () {
       archivePicker = { date: iso, employeeName: "" };
-      planningEditId = null;
-      planningOpenDate = null;
       currentTab = "archive";
       render();
     });
     var freeBtn = el("button", { class: "add-assign-btn", style: "flex:1;" }, ["+ Frei eintragen"]);
-    freeBtn.addEventListener("click", function () {
-      planningOpenDate = iso;
-      planningEditId = null;
-      render();
-    });
+    freeBtn.addEventListener("click", function () { openAssignModal(iso, null); });
     addRow.appendChild(addBtn);
     addRow.appendChild(freeBtn);
     card.appendChild(addRow);
     return card;
+  }
+
+  // Öffnet "Frei eintragen" (existing=null) bzw. "Zuweisung bearbeiten" (existing gesetzt) als
+  // eigenes Dialogfenster statt wie früher inline in der (auf breiten Bildschirmen immer noch
+  // recht schmalen) Tagesspalte — siehe renderDayCard.
+  function openAssignModal(iso, existing) {
+    planningOpenDate = iso;
+    planningEditId = existing ? existing.id : null;
+    renderAssignModal();
+  }
+  function closeAssignModal() {
+    planningOpenDate = null;
+    planningEditId = null;
+    closeAnyModal();
+  }
+  function renderAssignModal() {
+    var iso = planningOpenDate;
+    if (!iso) { closeAnyModal(); return; }
+    // Bei "Bearbeiten" immer den aktuellen Datensatz nachschlagen (nicht die beim Öffnen
+    // übergebene Referenz behalten) — falls sich die Daten zwischenzeitlich geändert haben.
+    var existing = planningEditId ? state.assignments.find(function (a) { return a.id === planningEditId; }) : null;
+    if (planningEditId && !existing) { closeAssignModal(); return; }
+
+    var root = $("#modal-root");
+    root.innerHTML = "";
+    var backdrop = el("div", { class: "modal-backdrop" });
+    backdrop.addEventListener("click", function (e) { if (e.target === backdrop) closeAssignModal(); });
+    var sheet = el("div", { class: "modal-sheet" });
+
+    var head = el("div", { class: "modal-head" });
+    var dateObj = new Date(iso + "T00:00:00");
+    var dateLabel = WEEKDAYS[(dateObj.getDay() + 6) % 7] + ", " + deDateFromIso(iso);
+    var headTitles = el("div", {});
+    headTitles.appendChild(el("h2", { style: "margin:0;" }, [existing ? "Zuweisung bearbeiten" : "Frei eintragen"]));
+    headTitles.appendChild(el("div", { style: "font-size:12.5px;color:var(--muted);margin-top:2px;" }, [dateLabel]));
+    head.appendChild(headTitles);
+    var closeBtn = el("button", {}, []); closeBtn.innerHTML = icon("x", 20); closeBtn.addEventListener("click", closeAssignModal);
+    head.appendChild(closeBtn);
+    sheet.appendChild(head);
+
+    sheet.appendChild(renderAssignForm(iso, existing));
+
+    backdrop.appendChild(sheet);
+    root.appendChild(backdrop);
   }
 
   function renderAssignForm(iso, existing) {
@@ -1770,7 +1857,7 @@
 
     var rowActions = el("div", { class: "row-actions" });
     var cancelBtn = el("button", { class: "btn btn-sm" }, ["Abbrechen"]);
-    cancelBtn.addEventListener("click", function () { planningOpenDate = null; planningEditId = null; render(); });
+    cancelBtn.addEventListener("click", closeAssignModal);
     var saveBtn = el("button", { class: "btn btn-sm btn-primary" }, [existing ? "Speichern" : "Zuweisen"]);
     saveBtn.addEventListener("click", function () {
       var emp = empSelect.value.trim();
@@ -1791,13 +1878,13 @@
     if (!db) { alert("Keine Verbindung zur Datenbank."); return; }
     payload.createdAt = new Date().toISOString();
     db.collection("assignments").add(payload).then(function () {
-      planningOpenDate = null; render();
+      closeAssignModal(); render();
     }).catch(function () { alert("Speichern nicht möglich. Bitte erneut versuchen."); });
   }
   function updateAssignment(existing, payload) {
     if (!db) { alert("Keine Verbindung zur Datenbank."); return; }
     db.doc("assignments/" + existing.id).update(payload).then(function () {
-      planningEditId = null; render();
+      closeAssignModal(); render();
     }).catch(function () { alert("Speichern nicht möglich. Bitte erneut versuchen."); });
   }
   function deleteAssignment(a) {
@@ -1928,6 +2015,7 @@
       "table{width:100%;border-collapse:collapse;font-size:12px;}" +
       "th{text-align:left;padding:6px 8px;border-bottom:2px solid #1B1F24;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#5B6472;}" +
       "td{padding:6px 8px;border-bottom:1px solid #D8D4C8;vertical-align:top;}" +
+      "@page{margin:0;}" +
       "@media print{body{padding:10px;}}" +
       "</style></head><body>" +
       '<div class="kopf"><img src="' + getLogoFull() + '" alt="Logo" /><div><div class="firma">TH Sonnenschutz</div><div class="titel">Kundenliste</div></div></div>' +
@@ -3038,15 +3126,17 @@
     var thisYm = todayIsoVal.slice(0, 7);
 
     var html = "";
-    html += '<div class="p-header">';
+    html += '<div class="p-header"><div class="p-brand">';
     html += '<img src="' + getLogoFull() + '">';
     html += '<div><div class="company-name">' + escapeHtml(COMPANY.name) + '</div><div class="company">' + escapeHtml(COMPANY.street) + " · " + escapeHtml(COMPANY.city) +
       "<br>Tel.: " + escapeHtml(COMPANY.tel) + " · Handy: " + escapeHtml(COMPANY.mobile) + "<br>" + escapeHtml(COMPANY.mail) + '</div></div>';
     html += '</div>';
-    html += '<h2 style="margin:14px 0 2px;">' + escapeHtml(title) + '</h2>';
-    html += '<p style="margin:0 0 14px;font-size:12px;color:#46596a;">Mitarbeiter: ' + escapeHtml(employeeName) + '</p>';
+    html += '<div class="p-doctitle"><div class="t">Stundenliste</div><div class="d">' + escapeHtml(employeeName) + '</div></div>';
+    html += '</div>';
+    html += '<div class="p-doc-title">' + escapeHtml(title) + '</div>';
+    html += '<div class="p-doc-sub">Mitarbeiter: ' + escapeHtml(employeeName) + '</div>';
 
-    html += '<table class="p-hours-table"><thead><tr>' +
+    html += '<div class="p-hours-table-wrap"><table class="p-hours-table"><thead><tr>' +
       '<th>Tag</th><th>Art</th><th>Ort</th><th>Beginn</th><th>Pause</th><th>Ende</th><th>Ist</th><th>Soll</th><th>±</th><th>Notiz</th>' +
       '</tr></thead><tbody>';
 
@@ -3093,7 +3183,7 @@
         '<td>' + (agg ? escapeHtml(agg.note) : "") + '</td>' +
         '</tr>';
     });
-    html += "</tbody></table>";
+    html += "</tbody></table></div>";
 
     var sumSoll = monthSollSoFar(ym, employeeName);
     var ueber = sumIst - sumSoll;
@@ -3109,6 +3199,7 @@
     html += '<div><div class="p-sig-box" style="min-height:40px;"></div><div class="p-sig-line">Datum, Unterschrift Mitarbeiter</div></div>';
     html += '<div><div class="p-sig-box" style="min-height:40px;"></div><div class="p-sig-line">Datum, Unterschrift Firma</div></div>';
     html += '</div>';
+    html += pFooter();
     return html;
   }
 
@@ -3624,8 +3715,8 @@
     var overlay = el("div", { class: "sig-fullscreen" });
     var head = el("div", { class: "sig-fullscreen-head" });
     head.appendChild(el("strong", {}, [title]));
-    var doneBtn = el("button", { class: "btn btn-primary" }, []);
-    doneBtn.innerHTML = icon("check", 18) + "<span>Fertig</span>";
+    var doneBtn = el("button", { class: "btn btn-primary btn-sm" }, []);
+    doneBtn.innerHTML = icon("check", 15) + "<span>Fertig</span>";
     doneBtn.addEventListener("click", function () { sigFullscreenKey = null; render(); });
     head.appendChild(doneBtn);
     overlay.appendChild(head);
@@ -4094,11 +4185,12 @@
     }
     var r = archiveOpenReport;
     var html = "";
-    html += '<div class="p-header">';
+    html += '<div class="p-header"><div class="p-brand">';
     html += '<img src="' + getLogoFull() + '">';
     html += '<div><div class="company-name">' + escapeHtml(COMPANY.name) + '</div><div class="company">' + escapeHtml(COMPANY.street) + " · " + escapeHtml(COMPANY.city) +
       "<br>Tel.: " + escapeHtml(COMPANY.tel) + " · Handy: " + escapeHtml(COMPANY.mobile) + "<br>" + escapeHtml(COMPANY.mail) + '</div></div>';
-    html += '<div class="p-type-badge"><span class="dot"></span>' + escapeHtml(r.type || "Bericht") + '</div>';
+    html += '</div>';
+    html += '<div class="p-doctitle"><div class="t">' + escapeHtml(r.type || "Bericht") + '</div><div class="d">' + escapeHtml(r.datum || "") + '</div></div>';
     html += '</div>';
     html += '<div class="p-grid">';
     html += '<div>';
@@ -4126,8 +4218,9 @@
     html += pBlock("Sonstige Vermerke", r.vermerke);
     html += '<div class="p-sig-grid">';
     html += '<div><div class="p-sig-box">' + (r.sigKunde ? '<img src="' + r.sigKunde + '">' : "") + '</div><div class="p-sig-line">Datum, Unterschrift Kunde — ' + escapeHtml(r.datumUnterschrift || "") + '</div></div>';
-    html += '<div><div class="p-sig-box">' + (r.sigMonteur ? '<img src="' + r.sigMonteur + '">' : "") + '</div><div class="p-sig-line">Unterschrift Monteur — ' + escapeHtml(r.monteur || "") + '</div></div>';
+    html += '<div><div class="p-sig-box">' + (r.sigMonteur ? '<img src="' + r.sigMonteur + '">' : "") + '</div><div class="p-sig-line">Unterschrift Monteur</div></div>';
     html += "</div>";
+    html += pFooter();
     area.innerHTML = html;
   }
   // Leere, nicht ausgefüllte Felder werden gar nicht erst ins Dokument aufgenommen (statt als
@@ -4139,6 +4232,11 @@
   function pBlock(label, value) {
     if (!value) return "";
     return '<div class="p-block"><div class="l">' + escapeHtml(label) + '</div><div class="c">' + escapeHtml(value) + "</div></div>";
+  }
+  // Kleine, dezente Fußzeile am Ende jedes Ausdrucks — ersetzt (optisch) die Browser-eigene
+  // Kopf-/Fußzeile, die wir per @page{margin:0} unterdrücken.
+  function pFooter() {
+    return '<div class="p-footer"><span class="fn">' + escapeHtml(COMPANY.name) + '</span><span>' + escapeHtml(COMPANY.mail) + '</span></div>';
   }
   function printReport(r) {
     archiveOpenReport = r;
@@ -4436,9 +4534,14 @@
       cb(v);
     }).catch(function () { cb(fallback); });
   }
+  // Gibt das Promise des Supabase-Aufrufs zurück (statt es nur mit .catch() verschwinden zu
+  // lassen) — Supabase lehnt einen Schreibvorgang oft nicht per Promise-Reject ab, sondern
+  // liefert stattdessen ganz normal { error: ... } zurück (z. B. bei einer RLS-Regel, die den
+  // Schreibzugriff verweigert). Ohne diese Prüfung wirkte "Speichern" scheinbar erfolgreich,
+  // obwohl in Wahrheit nichts in der Datenbank ankam — genau das war hier das Problem.
   function saveKonfEinstellungen(v) {
-    if (!rawClient) return;
-    rawClient.from("kv_store").upsert({ key: "app_einstellungen_v1", value: JSON.stringify(v), updatedAt: new Date().toISOString() }, { onConflict: "key" }).catch(function () {});
+    if (!rawClient) return Promise.resolve({ error: new Error("Keine Verbindung zur Datenbank.") });
+    return rawClient.from("kv_store").upsert({ key: "app_einstellungen_v1", value: JSON.stringify(v), updatedAt: new Date().toISOString() }, { onConflict: "key" });
   }
   function renderKonfiguratorSettingsCard() {
     var card = el("div", { class: "card", style: "display:flex;flex-direction:column;gap:12px;" });
@@ -4454,14 +4557,18 @@
       return card;
     }
 
+    // Die Checkboxen ändern ab jetzt nur noch den lokalen Entwurf (konfEinstellungen) — erst
+    // ein Klick auf "Speichern" schreibt ihn tatsächlich in die Datenbank. So ist immer klar
+    // ersichtlich, ob eine Änderung schon übernommen wurde oder noch aussteht.
+    var msg = el("p", { style: "margin:0;font-size:12.5px;color:var(--muted);" }, [""]);
     function toggleRow(label, key) {
       var row = el("label", { style: "display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:500;" }, []);
       var box = el("input", { type: "checkbox" });
       box.checked = konfEinstellungen[key] !== false;
       box.addEventListener("change", function (e) {
         konfEinstellungen[key] = e.target.checked;
-        saveKonfEinstellungen(konfEinstellungen);
-        render();
+        msg.textContent = "Noch nicht gespeichert — bitte „Speichern“ klicken.";
+        msg.style.color = "var(--warn)";
       });
       row.appendChild(box);
       row.appendChild(document.createTextNode(" " + label));
@@ -4469,6 +4576,26 @@
     }
     card.appendChild(toggleRow("Produktion sichtbar", "produktionSichtbar"));
     card.appendChild(toggleRow("Kalkulation sichtbar", "kalkulationSichtbar"));
+
+    var saveBtn = el("button", { class: "btn btn-primary", style: "align-self:flex-end;" }, ["Speichern"]);
+    saveBtn.addEventListener("click", function () {
+      msg.textContent = "Speichert …";
+      msg.style.color = "var(--muted)";
+      saveKonfEinstellungen(konfEinstellungen).then(function (res) {
+        if (res && res.error) {
+          msg.textContent = "Speichern nicht möglich: " + (res.error.message || "Unbekannter Fehler.");
+          msg.style.color = "var(--danger)";
+          return;
+        }
+        msg.textContent = "Gespeichert.";
+        msg.style.color = "var(--success)";
+      }).catch(function () {
+        msg.textContent = "Speichern nicht möglich.";
+        msg.style.color = "var(--danger)";
+      });
+    });
+    card.appendChild(saveBtn);
+    card.appendChild(msg);
     return card;
   }
 
