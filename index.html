@@ -645,6 +645,7 @@
 
   var isOnline = (typeof navigator !== "undefined" && "onLine" in navigator) ? navigator.onLine : true;
   var pendingSyncCount = 0; // Anzahl noch nicht hochgeladener Änderungen (Offline-Warteschlange)
+  var pendingSyncError = null; // Fehlermeldung des zuletzt dauerhaft fehlgeschlagenen Sync-Versuchs (falls vorhanden)
   var rawClient = null; // direkter Supabase-Client (für kv_store-Zugriffe, die die Offline-DB-Schicht nicht abbildet)
   var konfEinstellungen = null; // { produktionSichtbar, kalkulationSichtbar } — geteilt mit dem Konfigurator
   var konfEinstellungenLoading = false;
@@ -826,7 +827,15 @@
     if (!isOnline) {
       return "Kein Empfang — du arbeitest offline weiter. Deine Eingaben werden gespeichert und automatisch hochgeladen, sobald wieder Verbindung besteht.";
     }
-    return pendingSyncCount + " Änderung" + (plural ? "en" : "") + " " + (plural ? "werden" : "wird") + " gerade hochgeladen …";
+    var basisText = pendingSyncCount + " Änderung" + (plural ? "en" : "") + " " + (plural ? "werden" : "wird") + " gerade hochgeladen …";
+    // Bleibt der Zähler ungewöhnlich lange stehen, liegt das fast immer daran, dass EIN
+    // Eintrag dauerhaft fehlschlägt (z. B. Berechtigungsfehler, ungültige Daten) — ohne diesen
+    // Hinweis sieht die Person nur "wird hochgeladen …", ohne je zu erfahren, dass da etwas
+    // hakt. Der eigentliche Fehlertext von Supabase wird deshalb mit angezeigt.
+    if (pendingSyncError) {
+      basisText += " Mindestens eine Änderung schlägt dabei wiederholt fehl (" + pendingSyncError + ") — bitte bei Tom melden, die übrigen Änderungen werden davon nicht blockiert.";
+    }
+    return basisText;
   }
 
   function dbStatusMessage() {
@@ -852,8 +861,9 @@
     try {
       var client = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
       rawClient = client;
-      db = createOfflineDb(client, function (count) {
+      db = createOfflineDb(client, function (count, errorMsg) {
         pendingSyncCount = count;
+        pendingSyncError = errorMsg || null;
         render();
       });
       dbStatus = "ready";
@@ -977,6 +987,8 @@
     var listenersByTable = {}; // table -> [{ next, err }]
     var localCache = {}; // table -> array of rows (letzter an die App gemeldeter Stand)
     var pendingCount = 0;
+    var lastSyncError = null; // Fehlermeldung des zuletzt dauerhaft fehlgeschlagenen Eintrags (falls vorhanden)
+    var lastReportedError = null;
     var channelCounter = 0;
 
     function idbAll(store) {
@@ -1051,9 +1063,10 @@
         // sonst würde der Hintergrund-Sync-Check (alle 20 Sek., siehe setInterval unten) beim
         // Tippen ständig einen komplett neuen Bildschirmaufbau auslösen und den Eingabefokus
         // aus dem Feld reißen, obwohl sich gar nichts geändert hat.
-        var changed = items.length !== pendingCount;
+        var changed = items.length !== pendingCount || lastSyncError !== lastReportedError;
         pendingCount = items.length;
-        if (changed && typeof onPendingChange === "function") onPendingChange(pendingCount);
+        lastReportedError = lastSyncError;
+        if (changed && typeof onPendingChange === "function") onPendingChange(pendingCount, lastSyncError);
       });
     }
 
@@ -1105,31 +1118,53 @@
       });
     }
 
+    // Lädt die Warteschlange hoch. WICHTIG: früher liefen ALLE Einträge der Warteschlange in
+    // EINER einzigen Kette ab, streng der Reihe nach. Blieb ein einziger Eintrag dauerhaft
+    // hängen (z. B. wegen eines Berechtigungsfehlers oder ungültiger Daten), ist die komplette
+    // Kette dort abgebrochen — sämtliche NACHFOLGENDEN Einträge (egal ob völlig unabhängige
+    // Aufträge, Stunden oder Einteilungen anderer Mitarbeiter) wurden dadurch für immer
+    // blockiert und nie hochgeladen, obwohl an ihnen selbst nichts falsch war. Für die Person
+    // sah das endlos nach "X Änderungen werden gerade hochgeladen …" aus, ohne dass je etwas
+    // ankam. Jetzt wird pro Datensatz (Tabelle+ID) eine eigene, unabhängige Kette gebildet:
+    // mehrere Änderungen AM SELBEN Datensatz bleiben in der richtigen Reihenfolge, aber ein
+    // hängender Datensatz blockiert nicht mehr alle anderen, unabhängigen Datensätze.
     function trySyncOutbox() {
       if (!navigator.onLine) return Promise.resolve();
       return idbAll("outbox").then(function (items) {
         items.sort(function (a, b) { return a.seq - b.seq; });
-        var touched = {};
-        var chain = Promise.resolve();
+        var groups = {};
+        var groupOrder = [];
         items.forEach(function (item) {
-          chain = chain.then(function () {
-            var req;
-            if (item.op === "insert") req = client.from(item.table).insert(Object.assign({ id: item.id }, item.data));
-            else if (item.op === "update") req = client.from(item.table).update(item.data).eq("id", item.id);
-            else req = client.from(item.table).delete().eq("id", item.id);
-            return req.then(function (res) {
-              if (res.error) throw res.error;
-              return idbDeleteOutbox(item.seq);
-            }).then(function () { touched[item.table] = true; });
-          });
+          var key = item.table + ":" + item.id;
+          if (!groups[key]) { groups[key] = []; groupOrder.push(key); }
+          groups[key].push(item);
         });
-        return chain.then(function () {
+        var touched = {};
+        var firstError = null;
+        var groupPromises = groupOrder.map(function (key) {
+          var chain = Promise.resolve(false); // false = bisher kein Eintrag dieser Gruppe hängengeblieben
+          groups[key].forEach(function (item) {
+            chain = chain.then(function (stopped) {
+              if (stopped) return true; // vorheriger Eintrag DIESES Datensatzes ist fehlgeschlagen — Reihenfolge wahren, Rest zurückstellen
+              var req;
+              if (item.op === "insert") req = client.from(item.table).insert(Object.assign({ id: item.id }, item.data));
+              else if (item.op === "update") req = client.from(item.table).update(item.data).eq("id", item.id);
+              else req = client.from(item.table).delete().eq("id", item.id);
+              return req.then(function (res) {
+                if (res.error) throw res.error;
+                return idbDeleteOutbox(item.seq);
+              }).then(function () { touched[item.table] = true; return false; }).catch(function (e) {
+                if (!firstError) firstError = (e && e.message) || "Unbekannter Fehler";
+                return true;
+              });
+            });
+          });
+          return chain;
+        });
+        return Promise.all(groupPromises).then(function () {
+          lastSyncError = firstError;
           updatePendingBadge();
           return Promise.all(Object.keys(touched).map(fetchAndEmit));
-        }).catch(function () {
-          // Ein Eintrag ist fehlgeschlagen (z.B. Verbindung gerade weg) — Reihenfolge bleibt
-          // erhalten, der Rest wird beim nächsten Versuch erneut probiert.
-          updatePendingBadge();
         });
       });
     }
