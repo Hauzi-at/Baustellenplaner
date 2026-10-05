@@ -247,6 +247,23 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
 @media (min-width: 640px) {
   .sm\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* Pull-to-refresh: an der Spitze der Seite nach unten ziehen, um den Konfigurator neu zu laden
+   (siehe setupPullToRefresh weiter unten). Läuft hier separat vom Baustellenplaner (index.html),
+   weil der Konfigurator meist in einem eigenen <iframe> eingebettet ist — Touch-Events aus einem
+   <iframe> erreichen das übergeordnete Dokument nie, daher braucht der Konfigurator sein eigenes
+   Zieh-Symbol. */
+.ptr-indicator {
+  position: fixed; left: 50%; top: 10px; z-index: 60;
+  width: 40px; height: 40px; border-radius: 999px;
+  background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.12), 0 6px 20px rgba(0,0,0,0.14);
+  display: flex; align-items: center; justify-content: center;
+  color: #5B6472;
+  transform: translate(-50%, -70px);
+  opacity: 0;
+  pointer-events: none;
+}
+.ptr-indicator.ptr-spin svg { animation: ptr-spin 0.7s linear infinite; }
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -260,6 +277,79 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
 // ohne den Baustellenplaner drumherum geöffnet wird und kein/schlechter Empfang
 // besteht.
 if ("serviceWorker" in navigator) { navigator.serviceWorker.register("sw.js").catch(function () {}); }
+</script>
+<div id="ptr-indicator" class="ptr-indicator"></div>
+<script>
+/* Pull-to-refresh für den Konfigurator selbst: Der Konfigurator läuft meist eingebettet in einem
+   <iframe> im Baustellenplaner (index.html) — Touch-Gesten dort INNERHALB des iframes erreichen
+   das übergeordnete Dokument nie (Browser liefern Touch-Events nie über eine iframe-Grenze
+   hinweg), daher hat der dortige Zieh-nach-unten-Neuladen (siehe index.html) hier keine Wirkung.
+   Deshalb bekommt der Konfigurator dieselbe Geste noch einmal, eigenständig. Lädt bei Erfolg nur
+   sich selbst (dieses Dokument) neu, mit Cache-Buster gegen den Service-Worker-Zwischenspeicher
+   (stale-while-revalidate, siehe sw.js) — wie beim Baustellenplaner. */
+(function () {
+  function setup() {
+    var el = document.getElementById("ptr-indicator");
+    if (!el) return;
+    el.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8 8 0 0 0 6.3 6.3L4 8.5"/><path d="M4 4v4.5h4.5"/><path d="M4 13a8 8 0 0 0 13.7 4.7L20 15.5"/><path d="M20 20v-4.5h-4.5"/></svg>';
+    var startY = null, pulling = false, triggered = false;
+    var THRESHOLD = 70, MAX_PULL = 110;
+    function atTop() {
+      return (document.documentElement.scrollTop || document.body.scrollTop || window.scrollY || 0) <= 0;
+    }
+    function blockedByOverlay(target) {
+      return !!(target.closest && target.closest(".z-50"));
+    }
+    function setIndicator(pullPx, spinning) {
+      var progress = Math.min(1, pullPx / THRESHOLD);
+      var y = -70 + Math.min(pullPx, MAX_PULL) * 0.9;
+      el.style.transition = spinning ? "transform .15s ease" : "none";
+      el.style.transform = "translate(-50%, " + y + "px) rotate(" + (progress * 360) + "deg)";
+      el.style.opacity = String(Math.min(1, progress + 0.15));
+      el.classList.toggle("ptr-spin", !!spinning);
+    }
+    function reset() {
+      el.style.transition = "transform .2s ease, opacity .2s ease";
+      el.style.transform = "translate(-50%, -70px)";
+      el.style.opacity = "0";
+      el.classList.remove("ptr-spin");
+      pulling = false; triggered = false; startY = null;
+    }
+    function doRefresh() {
+      el.style.transition = "transform .15s ease";
+      el.style.transform = "translate(-50%, 16px)";
+      el.style.opacity = "1";
+      el.classList.add("ptr-spin");
+      var url = new URL(window.location.href);
+      url.searchParams.set("_r", String(Date.now()));
+      window.location.replace(url.toString());
+    }
+    document.addEventListener("touchstart", function (e) {
+      if (e.touches.length !== 1) return;
+      if (!atTop() || blockedByOverlay(e.target)) { startY = null; return; }
+      startY = e.touches[0].clientY;
+      pulling = true; triggered = false;
+    }, { passive: true });
+    document.addEventListener("touchmove", function (e) {
+      if (!pulling || startY === null || triggered) return;
+      var dy = e.touches[0].clientY - startY;
+      if (dy <= 0) { setIndicator(0, false); return; }
+      if (!atTop()) { reset(); return; }
+      setIndicator(dy, false);
+      if (dy > THRESHOLD * 1.4) { triggered = true; doRefresh(); }
+    }, { passive: true });
+    document.addEventListener("touchend", function () {
+      if (!pulling || triggered) return;
+      reset();
+    }, { passive: true });
+    document.addEventListener("touchcancel", function () {
+      if (!pulling || triggered) return;
+      reset();
+    }, { passive: true });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", setup);
+  else setup();
+})();
 </script>
 <div id="root"></div>
 <script>
