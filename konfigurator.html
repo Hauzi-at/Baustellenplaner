@@ -2781,14 +2781,20 @@ const PRODUKT_LISTEN_KEYS = [
     { key: "lichtschacht_liste_v1", label: "Lichtschachtabdeckung", produktRoute: "lichtschacht" },
     { key: "kis_liste_v1", label: "IS KIS", produktRoute: "kis" },
 ];
-// Dropdown zur Kundenauswahl mit Inline-"Neuer Kunde"-Option. Wird von allen 6 Konfiguratoren geteilt.
+// Such-Auswahl f\u00fcr Kunden mit Inline-"Neuer Kunde"-Option. Wird von allen 6 Konfiguratoren
+// geteilt. Fr\u00fcher ein reines <select> mit allen Kunden alphabetisch \u2014 bei vielen Kunden musste
+// man das komplette Dropdown durchscrollen, um jemanden zu finden. Jetzt ein Suchfeld: tippen
+// filtert die Liste sofort, Klick w\u00e4hlt aus; ohne Treffer kann direkt aus dem Suchtext heraus
+// ein neuer Kunde angelegt werden.
 function KundenAuswahl({ value, onChange }) {
     const [kunden, setKunden] = useState([]);
     const [neuModus, setNeuModus] = useState(false);
     const [neuName, setNeuName] = useState("");
+    const [offen, setOffen] = useState(false);
+    const [suchtext, setSuchtext] = useState("");
     useEffect(() => { loadKunden(setKunden); }, []);
-    const kundeAnlegen = () => {
-        const name = neuName.trim();
+    const kundeAnlegen = (nameOverride) => {
+        const name = (nameOverride !== undefined ? nameOverride : neuName).trim();
         if (!name)
             return;
         if (!kunden.includes(name)) {
@@ -2799,26 +2805,41 @@ function KundenAuswahl({ value, onChange }) {
         onChange(name);
         setNeuModus(false);
         setNeuName("");
+        setSuchtext("");
+        setOffen(false);
     };
     if (neuModus) {
         return (React.createElement("div", { className: "flex flex-col gap-1" },
             React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Neuer Kunde"),
             React.createElement("div", { className: "flex gap-1.5" },
                 React.createElement("input", { autoFocus: true, value: neuName, onChange: (e) => setNeuName(e.target.value), onKeyDown: (e) => e.key === "Enter" && kundeAnlegen(), placeholder: "Name", className: "flex-1 border border-[#D8D4C8] rounded-md px-2.5 py-1.5 text-[14px] outline-none focus:border-[#E8963B]" }),
-                React.createElement("button", { onClick: kundeAnlegen, className: "px-3 py-1.5 rounded-md bg-[#E8963B] text-white text-[13px] font-semibold" }, "OK"),
+                React.createElement("button", { onClick: () => kundeAnlegen(), className: "px-3 py-1.5 rounded-md bg-[#E8963B] text-white text-[13px] font-semibold" }, "OK"),
                 React.createElement("button", { onClick: () => { setNeuModus(false); setNeuName(""); }, className: "px-2.5 py-1.5 rounded-md border border-[#D8D4C8] text-[#5B6472] text-[13px]" }, "\u2715"))));
     }
+    const suchtextGetrimmt = suchtext.trim();
+    const gefiltert = suchtextGetrimmt
+        ? kunden.filter((k) => k.toLowerCase().includes(suchtextGetrimmt.toLowerCase()))
+        : kunden;
+    const waehle = (name) => { onChange(name); setSuchtext(""); setOffen(false); };
     return (React.createElement("label", { className: "flex flex-col gap-1" },
         React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Kunde"),
-        React.createElement("select", { value: value, onFocus: () => loadKunden(setKunden), onChange: (e) => { if (e.target.value === "__neu__") {
-                setNeuModus(true);
-            }
-            else {
-                onChange(e.target.value);
-            } }, className: "border border-[#D8D4C8] rounded-md px-2.5 py-1.5 text-[14px] outline-none focus:border-[#E8963B] bg-white" },
-            React.createElement("option", { value: "" }, "\u2014 kein Kunde \u2014"),
-            kunden.map((k) => (React.createElement("option", { key: k, value: k }, k))),
-            React.createElement("option", { value: "__neu__" }, "+ Neuer Kunde\u2026"))));
+        React.createElement("div", { className: "relative" },
+            React.createElement("div", { className: "relative" },
+                React.createElement(Search, { size: 14, className: "absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8A8F98] pointer-events-none" }),
+                React.createElement("input", { type: "text", value: offen ? suchtext : (value || ""), placeholder: offen ? "Kunde suchen\u2026" : "\u2014 kein Kunde \u2014", onFocus: (e) => { setOffen(true); setSuchtext(""); loadKunden(setKunden); e.target.select && e.target.select(); }, onChange: (e) => { setSuchtext(e.target.value); setOffen(true); }, onBlur: () => { setTimeout(() => setOffen(false), 150); }, onKeyDown: (e) => {
+                        if (e.key === "Escape") { setOffen(false); e.currentTarget.blur(); }
+                        else if (e.key === "Enter") {
+                            e.preventDefault();
+                            if (gefiltert.length >= 1) waehle(gefiltert[0]);
+                            else if (suchtextGetrimmt) kundeAnlegen(suchtextGetrimmt);
+                        }
+                    }, className: "w-full border border-[#D8D4C8] rounded-md pl-8 pr-2.5 py-1.5 text-[14px] outline-none focus:border-[#E8963B] bg-white" })),
+            offen && React.createElement("div", { className: "absolute z-20 left-0 right-0 mt-1 border border-[#D8D4C8] rounded-md bg-white shadow-lg max-h-[240px] overflow-y-auto" },
+                !suchtextGetrimmt && React.createElement("button", { type: "button", onMouseDown: (e) => e.preventDefault(), onClick: () => waehle(""), className: "w-full text-left px-3 py-2 text-[13.5px] text-[#5B6472] hover:bg-[#F5F4EF] border-b border-[#E2DFD3]" }, "\u2014 kein Kunde \u2014"),
+                gefiltert.length === 0
+                    ? React.createElement("div", { className: "px-3 py-2 text-[13px] text-[#8A8F98]" }, "Keine Treffer.")
+                    : gefiltert.map((k) => (React.createElement("button", { key: k, type: "button", onMouseDown: (e) => e.preventDefault(), onClick: () => waehle(k), className: "w-full text-left px-3 py-2 text-[14px] text-[#1B1F24] hover:bg-[#FFF8EF]" }, k))),
+                React.createElement("button", { type: "button", onMouseDown: (e) => e.preventDefault(), onClick: () => { setNeuName(suchtextGetrimmt); setNeuModus(true); }, className: "w-full text-left px-3 py-2 text-[13.5px] text-[#E8963B] font-medium border-t border-[#E2DFD3] hover:bg-[#FFF8EF]" }, suchtextGetrimmt ? `+ \u201e${suchtextGetrimmt}\u201c als neuen Kunden anlegen` : "+ Neuer Kunde\u2026")))));
 }
 // (Der frühere eigene App-PIN-Screen "PasswordGate" entfällt — siehe Hinweis oben.)
 // ============================================================
@@ -5700,11 +5721,40 @@ function Einstellungen({ onZurueck }) {
 }
 function KundenUebersicht({ onZurueck, onBearbeiten }) {
     const [kunden, setKunden] = useState([]);
+    const [suchtext, setSuchtext] = useState("");
+    // Anzahl Positionen je Kunde, über alle 6 Produkte hinweg — einmal beim Öffnen geladen, damit
+    // schon in der Liste sichtbar ist, bei wem überhaupt etwas angelegt wurde, ohne jeden Kunden
+    // einzeln anklicken zu müssen.
+    const [anzahlProKunde, setAnzahlProKunde] = useState({});
     const [ausgewaehlt, setAusgewaehlt] = useState(null);
     const [kundeAdresse, setKundeAdresse] = useState(null); // {street, city, phone, email, isBusiness, uid} — für den Briefkopf im Ausdruck
     const [positionen, setPositionen] = useState([]); // [{produktKey, produktLabel, item}]
     const [ladeStatus, setLadeStatus] = useState("idle");
-    useEffect(() => { loadKunden(setKunden); }, []);
+    useEffect(() => {
+        loadKunden(setKunden);
+        (async () => {
+            var _a;
+            const zaehler = {};
+            for (const { key } of PRODUKT_LISTEN_KEYS) {
+                try {
+                    const r = await ((_a = window.storage) === null || _a === void 0 ? void 0 : _a.get(key));
+                    if (r === null || r === void 0 ? void 0 : r.value) {
+                        const liste = JSON.parse(r.value);
+                        for (const item of liste) {
+                            if (!item.kunde || item.kunde === "—")
+                                continue;
+                            zaehler[item.kunde] = (zaehler[item.kunde] || 0) + 1;
+                        }
+                    }
+                }
+                catch (_b) { }
+            }
+            setAnzahlProKunde(zaehler);
+        })();
+    }, []);
+    const kundenGefiltert = suchtext.trim()
+        ? kunden.filter((k) => k.toLowerCase().includes(suchtext.trim().toLowerCase()))
+        : kunden;
     const ladePositionen = async (kundeName) => {
         var _a;
         setLadeStatus("laedt");
@@ -5743,8 +5793,18 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
                     React.createElement("div", { className: "text-[11px] tracking-[0.2em] uppercase text-[#E8963B] font-oswald font-semibold mb-1" }, "TH Sonnenschutz \u2014 Produktion"),
                     React.createElement("h1", { className: "text-[26px] md:text-[32px] font-oswald font-semibold text-[#1B1F24] leading-tight" }, "Kunden\u00FCbersicht"),
                     React.createElement("p", { className: "text-[13px] text-[#5B6472] mt-1" }, "Alle Produkte eines Kunden auf einen Blick \u2014 produkt\u00FCbergreifend."))),
-            !ausgewaehlt && (React.createElement("div", { className: "flex flex-col gap-2" }, kunden.length === 0 ? (React.createElement("div", { className: "text-center py-10 text-[13px] text-[#8A8F98] border border-dashed border-[#D8D4C8] rounded-lg" }, "Noch keine Kunden angelegt. Lege einen Kunden bei \u201EKunde\" in einem der Konfiguratoren an (+ Neuer Kunde\u2026).")) : kunden.map((k) => (React.createElement("button", { key: k, onClick: () => kundeWaehlen(k), className: "text-left border border-[#D8D4C8] rounded-lg bg-white px-4 py-3 hover:border-[#E8963B] transition-colors" },
-                React.createElement("span", { className: "text-[15px] font-medium text-[#1B1F24]" }, k)))))),
+            !ausgewaehlt && (React.createElement("div", { className: "flex flex-col gap-2" },
+                kunden.length > 0 && React.createElement("div", { className: "relative mb-1" },
+                    React.createElement(Search, { size: 15, className: "absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8F98] pointer-events-none" }),
+                    React.createElement("input", { type: "text", value: suchtext, onChange: (e) => setSuchtext(e.target.value), placeholder: "Kunde suchen\u2026", className: "w-full border border-[#D8D4C8] rounded-md pl-9 pr-3 py-2.5 text-[14px] outline-none focus:border-[#E8963B] bg-white" })),
+                kunden.length === 0 ? (React.createElement("div", { className: "text-center py-10 text-[13px] text-[#8A8F98] border border-dashed border-[#D8D4C8] rounded-lg" }, "Noch keine Kunden angelegt. Lege einen Kunden bei \u201EKunde\" in einem der Konfiguratoren an (+ Neuer Kunde\u2026).")) :
+                kundenGefiltert.length === 0 ? (React.createElement("div", { className: "text-center py-10 text-[13px] text-[#8A8F98] border border-dashed border-[#D8D4C8] rounded-lg" }, `Keine Kunden gefunden f\u00FCr \u201E${suchtext.trim()}\u201C.`)) :
+                kundenGefiltert.map((k) => {
+                    const anzahl = anzahlProKunde[k] || 0;
+                    return (React.createElement("button", { key: k, onClick: () => kundeWaehlen(k), className: "flex items-center justify-between text-left border border-[#D8D4C8] rounded-lg bg-white px-4 py-3 hover:border-[#E8963B] transition-colors" },
+                        React.createElement("span", { className: "text-[15px] font-medium text-[#1B1F24]" }, k),
+                        React.createElement("span", { className: `text-[11.5px] font-medium px-2.5 py-1 rounded-full ${anzahl > 0 ? "bg-[#FFF8EF] text-[#B96A16]" : "bg-[#F0EEE4] text-[#8A8F98]"}` }, anzahl === 0 ? "keine Positionen" : anzahl === 1 ? "1 Position" : `${anzahl} Positionen`)));
+                }))),
             ausgewaehlt && (React.createElement("div", { className: "flex flex-col gap-4" },
                 React.createElement("div", null,
                     React.createElement("h2", { className: "text-[19px] font-oswald font-semibold text-[#1B1F24]" }, ausgewaehlt),
