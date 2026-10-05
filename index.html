@@ -133,6 +133,21 @@
     .topbar .title-block .app-date { display: none; }
     .topbar { gap: 8px; padding: 10px 12px; }
   }
+  /* Pull-to-refresh: an der Spitze der Seite nach unten ziehen, um die App neu zu laden (siehe
+     setupPullToRefresh weiter unten). Das Icon liegt fix über allem anderen und wird rein per
+     JS (transform/rotation) animiert — hier nur das ruhende Aussehen. */
+  .ptr-indicator {
+    position: fixed; left: 50%; top: 10px; z-index: 60;
+    width: 40px; height: 40px; border-radius: 999px;
+    background: var(--card); box-shadow: var(--shadow);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--slate-deep);
+    transform: translate(-50%, -70px);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .ptr-indicator.ptr-spin svg { animation: ptr-spin 0.7s linear infinite; }
+  @keyframes ptr-spin { to { transform: rotate(360deg); } }
   .user-chip .avatar {
     width: 24px; height: 24px; border-radius: 50%;
     background: var(--slate); color: #fff;
@@ -579,6 +594,7 @@
 <div id="modal-root"></div>
 <div id="sig-fullscreen-root"></div>
 <div id="print-area"></div>
+<div id="ptr-indicator" class="ptr-indicator"></div>
 <iframe id="konfigurator-frame" src="konfigurator.html" title="Konfigurator"></iframe>
 
 <script>
@@ -817,6 +833,77 @@
       // grundsätzlich ab — dann einfach ohne Offline-Zwischenspeicher weiterlaufen.
       navigator.serviceWorker.register("sw.js").catch(function () {});
     }
+    setupPullToRefresh();
+  }
+
+  /* -------- Pull-to-refresh: ganz oben nach unten ziehen lädt die App frisch neu --------
+     Die Datei-Updates (neue index.html) werden von sw.js per "stale-while-revalidate"
+     zwischengespeichert: ein normales Neuladen zeigt deshalb oft noch die VORHERIGE Version,
+     und erst der übernächste Aufruf die aktuelle. Damit ein Zug nach unten zuverlässig die
+     wirklich neueste Version lädt, hängt der Refresh hier einen Cache-Buster an die URL an —
+     das lässt den Service Worker (und auch den normalen HTTP-Cache) diese eine Anfrage
+     verlässlich verfehlen, sodass direkt frisch vom Server geladen wird. */
+  function setupPullToRefresh() {
+    var el = document.getElementById("ptr-indicator");
+    if (!el) return;
+    el.innerHTML = icon("refresh", 19);
+    var startY = null, pulling = false, triggered = false;
+    var THRESHOLD = 70, MAX_PULL = 110;
+
+    function atTop() {
+      return (document.documentElement.scrollTop || document.body.scrollTop || window.scrollY || 0) <= 0;
+    }
+    function blockedByOverlay(target) {
+      // Innerhalb eines Modals, der Vollbild-Unterschrift oder der Glocken-Dropdown soll ein
+      // Wisch nach unten NICHT die ganze App neu laden, sondern wie gewohnt funktionieren.
+      return !!(target.closest && target.closest(".modal-backdrop, .sig-fullscreen, .notif-panel"));
+    }
+    function setIndicator(pullPx, spinning) {
+      var progress = Math.min(1, pullPx / THRESHOLD);
+      var y = -70 + Math.min(pullPx, MAX_PULL) * 0.9;
+      el.style.transition = spinning ? "transform .15s ease" : "none";
+      el.style.transform = "translate(-50%, " + y + "px) rotate(" + (progress * 360) + "deg)";
+      el.style.opacity = String(Math.min(1, progress + 0.15));
+      el.classList.toggle("ptr-spin", !!spinning);
+    }
+    function reset() {
+      el.style.transition = "transform .2s ease, opacity .2s ease";
+      el.style.transform = "translate(-50%, -70px)";
+      el.style.opacity = "0";
+      el.classList.remove("ptr-spin");
+      pulling = false; triggered = false; startY = null;
+    }
+    function doRefresh() {
+      el.style.transition = "transform .15s ease";
+      el.style.transform = "translate(-50%, 16px)";
+      el.style.opacity = "1";
+      el.classList.add("ptr-spin");
+      var url = new URL(window.location.href);
+      url.searchParams.set("_r", String(Date.now()));
+      window.location.replace(url.toString());
+    }
+    document.addEventListener("touchstart", function (e) {
+      if (e.touches.length !== 1) return;
+      if (!atTop() || blockedByOverlay(e.target)) { startY = null; return; }
+      startY = e.touches[0].clientY;
+      pulling = true; triggered = false;
+    }, { passive: true });
+    document.addEventListener("touchmove", function (e) {
+      if (!pulling || startY === null || triggered) return;
+      var dy = e.touches[0].clientY - startY;
+      if (dy <= 0) { setIndicator(0, false); return; }
+      if (!atTop()) { reset(); return; } // inzwischen weitergescrollt — abbrechen
+      setIndicator(dy, false);
+      if (dy > THRESHOLD * 1.4) { triggered = true; doRefresh(); }
+    }, { passive: true });
+    document.addEventListener("touchend", function () {
+      if (!pulling || triggered) return;
+      reset();
+    }, { passive: true });
+    document.addEventListener("touchcancel", function () {
+      if (!pulling || triggered) return;
+      reset();
+    }, { passive: true });
   }
 
   function offlineBannerText() {
