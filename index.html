@@ -826,6 +826,17 @@
     render();
     connectDb();
     window.addEventListener("resize", syncKonfiguratorFrame);
+    // Mobile Browser (v.a. iOS Safari) blenden beim Scrollen die Adressleiste ein/aus — das
+    // ändert die sichtbare Höhe, löst aber oft KEIN "resize"-Event am window aus (anders als am
+    // Desktop). Ohne diesen zusätzlichen Listener bleibt das Konfigurator-iframe (siehe
+    // syncKonfiguratorFrame) dann auf der zuletzt berechneten Position/Größe stehen und
+    // überlappt mit der Kopfzeile, sobald sich die Adressleiste wieder einblendet — z. B. direkt
+    // nach dem Zieh-nach-unten-Neuladen (siehe setupPullToRefresh). visualViewport bildet genau
+    // diese Änderungen zuverlässig ab.
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", syncKonfiguratorFrame);
+      window.visualViewport.addEventListener("scroll", syncKonfiguratorFrame);
+    }
     window.addEventListener("online", function () { isOnline = true; render(); });
     window.addEventListener("offline", function () { isOnline = false; render(); });
     if ("serviceWorker" in navigator) {
@@ -872,6 +883,10 @@
       el.style.opacity = "0";
       el.classList.remove("ptr-spin");
       pulling = false; triggered = false; startY = null;
+      // Das Ziehen selbst kann in mobilen Browsern (v.a. iOS Safari) die Adressleiste
+      // ein-/ausblenden, auch wenn am Ende gar nicht neu geladen wird (abgebrochener Zug).
+      // Einmal neu einmessen, damit das Konfigurator-iframe nicht mit der Kopfzeile überlappt.
+      setTimeout(syncKonfiguratorFrame, 50);
     }
     function doRefresh() {
       el.style.transition = "transform .15s ease";
