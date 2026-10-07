@@ -1784,7 +1784,13 @@ function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, default
     });
     // --- Blueprint preview geometry ---
     const previewW = 320, previewH = 380;
-    const ratio = eb / eh;
+    // Solange Elementbreite/-höhe noch leer sind (allowEmpty-Felder, Startzustand bzw. nach jedem
+    // "In den Warenkorb"), wäre eb/eh hier null -> ratio würde NaN, was die komplette SVG-Vorschau
+    // unten mit lauter ungültigen Koordinaten ("NaN") zum Absturz bringt (leere Zeichenfläche,
+    // Konsole voller Fehler). Bis echte Maße eingegeben sind, zeigen wir stattdessen einen
+    // generischen Platzhalter-Umriss im Standard-Seitenverhältnis.
+    const massEingegeben = !!(eb && eh);
+    const ratio = massEingegeben ? eb / eh : 0.8;
     let boxW = 200, boxH = boxW / ratio;
     if (boxH > 240) {
         boxH = 240;
@@ -1882,14 +1888,15 @@ function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, default
                             " \u00B7 ",
                             austrittCode)),
                     React.createElement("div", { className: "px-4 pb-4 pt-1 flex justify-between text-[11px] text-[#8FD3FFAA] font-['IBM_Plex_Mono']" },
-                        React.createElement("span", null,
+                        React.createElement("span", null, massEingegeben ? [
                             "Behang ",
                             Math.round(behangbreite1),
                             behangbreite2 ? ` + ${Math.round(behangbreite2)}` : "",
                             "\u00D7",
-                            Math.round(behanghoehe)),
+                            Math.round(behanghoehe)
+                        ] : "Behang \u2014 \u00D7 \u2014"),
                         React.createElement("span", null,
-                            flaecheM2.toFixed(2),
+                            massEingegeben ? flaecheM2.toFixed(2) : "\u2014",
                             " m\u00B2"))),
                 React.createElement("div", { className: "min-w-0" },
                     React.createElement("div", { className: "flex gap-1 mb-4 border-b border-[#E2DFD3] overflow-x-auto" }, baueTabs(einstellungen, list.length, istChef).map(([id, label]) => (React.createElement("button", { key: id, onClick: () => setTab(id), className: `px-3.5 py-2 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${tab === id ? "border-[#E8963B] text-[#1B1F24]" : "border-transparent text-[#8A8F98] hover:text-[#5B6472]"}` }, label)))),
@@ -5856,9 +5863,15 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
             setAnzahlProKunde(zaehler);
         })();
     }, []);
+    // "kunden" kommt rein aus der Online-Abfrage der gemeinsamen "customers"-Tabelle (loadKunden)
+    // und bleibt bei fehlendem Empfang leer bzw. veraltet. Ein offline neu angelegter Kunde (siehe
+    // kundeInDbAnlegen -> Outbox) ist aber sofort in den lokal gespeicherten Positionslisten zu
+    // finden (anzahlProKunde oben) — ohne diese Ergänzung wären seine Positionen hier unauffindbar,
+    // bis wieder Netz da ist und die Seite neu geladen wurde.
+    const alleKundenNamen = Array.from(new Set([...kunden, ...Object.keys(anzahlProKunde)])).sort((a, b) => a.localeCompare(b, "de"));
     const kundenGefiltert = suchtext.trim()
-        ? kunden.filter((k) => k.toLowerCase().includes(suchtext.trim().toLowerCase()))
-        : kunden;
+        ? alleKundenNamen.filter((k) => k.toLowerCase().includes(suchtext.trim().toLowerCase()))
+        : alleKundenNamen;
     const ladePositionen = async (kundeName) => {
         var _a;
         setLadeStatus("laedt");
@@ -5898,10 +5911,10 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
                     React.createElement("h1", { className: "text-[26px] md:text-[32px] font-oswald font-semibold text-[#1B1F24] leading-tight" }, "Kunden\u00FCbersicht"),
                     React.createElement("p", { className: "text-[13px] text-[#5B6472] mt-1" }, "Alle Produkte eines Kunden auf einen Blick \u2014 produkt\u00FCbergreifend."))),
             !ausgewaehlt && (React.createElement("div", { className: "flex flex-col gap-2" },
-                kunden.length > 0 && React.createElement("div", { className: "relative mb-1" },
+                alleKundenNamen.length > 0 && React.createElement("div", { className: "relative mb-1" },
                     React.createElement(Search, { size: 15, className: "absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8F98] pointer-events-none" }),
                     React.createElement("input", { type: "text", value: suchtext, onChange: (e) => setSuchtext(e.target.value), placeholder: "Kunde suchen\u2026", className: "w-full border border-[#D8D4C8] rounded-md pl-9 pr-3 py-2.5 text-[14px] outline-none focus:border-[#E8963B] bg-white" })),
-                kunden.length === 0 ? (React.createElement("div", { className: "text-center py-10 text-[13px] text-[#8A8F98] border border-dashed border-[#D8D4C8] rounded-lg" }, "Noch keine Kunden angelegt. Lege einen Kunden bei \u201EKunde\" in einem der Konfiguratoren an (+ Neuer Kunde\u2026).")) :
+                alleKundenNamen.length === 0 ? (React.createElement("div", { className: "text-center py-10 text-[13px] text-[#8A8F98] border border-dashed border-[#D8D4C8] rounded-lg" }, "Noch keine Kunden angelegt. Lege einen Kunden bei \u201EKunde\" in einem der Konfiguratoren an (+ Neuer Kunde\u2026).")) :
                 kundenGefiltert.length === 0 ? (React.createElement("div", { className: "text-center py-10 text-[13px] text-[#8A8F98] border border-dashed border-[#D8D4C8] rounded-lg" }, `Keine Kunden gefunden f\u00FCr \u201E${suchtext.trim()}\u201C.`)) :
                 kundenGefiltert.map((k) => {
                     const anzahl = anzahlProKunde[k] || 0;
