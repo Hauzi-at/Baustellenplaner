@@ -1093,12 +1093,22 @@
      hoch, sobald wieder eine Verbindung besteht ("Ausgangskorb"/Outbox).
      ===================================================================== */
   var IDB_NAME = "thbp_offline_v1";
-  var IDB_TABLES = ["customers", "assignments", "reports", "team", "settings", "hours"];
+  // "push_subscriptions" fehlte hier, obwohl connectDb() diese Tabelle über dieselbe subscribe()-
+  // Funktion wie alle anderen lädt (siehe subscribe("push_subscriptions", "pushSubscriptions")
+  // weiter oben) — jeder Ladeversuch löste dadurch beim lokalen IndexedDB-Zugriff einen Fehler
+  // aus ("One of the specified object stores was not found"), weil es dafür gar keinen Speicher
+  // gab. Das passiert unabhängig vom Netzstatus, also auch bei bestehender Verbindung, und
+  // verhindert, dass Push-Abo-Daten je aus dem lokalen Cache gelesen werden können.
+  var IDB_TABLES = ["customers", "assignments", "reports", "team", "settings", "hours", "push_subscriptions"];
 
   function openOfflineDb() {
     return new Promise(function (resolve, reject) {
       if (!window.indexedDB) { reject(new Error("IndexedDB nicht verfügbar")); return; }
-      var req = indexedDB.open(IDB_NAME, 1);
+      // Version von 1 auf 2 angehoben, damit bei Personen mit bereits bestehender lokaler
+      // Datenbank (Version 1, ohne "push_subscriptions") onupgradeneeded erneut läuft und den
+      // fehlenden Speicher nachträglich anlegt — sonst bliebe der Fehler bei ihnen trotz Update
+      // bestehen, da IndexedDB ohne Versionssprung kein erneutes Upgrade anstößt.
+      var req = indexedDB.open(IDB_NAME, 2);
       req.onupgradeneeded = function (e) {
         var d = e.target.result;
         IDB_TABLES.forEach(function (t) {
