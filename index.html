@@ -510,59 +510,86 @@
     body * { visibility: hidden; }
     #print-area, #print-area * { visibility: visible; }
     #print-area {
-      display: block !important; position: absolute; top: 0; left: 0; width: 100%; padding: 21mm 18mm 16mm;
+      display: block !important; position: absolute; top: 0; left: 0; width: 100%; padding: 16mm 18mm 16mm;
       color: var(--p-ink); background: #fff;
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 11px; line-height: 1.55;
       --p-accent: var(--slate-deep, #2f5069);
       --p-accent-soft: var(--slate, #4f7691);
-      --p-tint: #f5f7f6;
+      --p-accent-tint: #eaf1f6;
+      --p-tint: #f6f7f6;
       --p-line: #e3e7e5;
       --p-ink: #1c2b38;
       --p-muted: #6c7a80;
+      --p-shadow: 0 1px 2px rgba(28,43,56,0.05), 0 6px 18px rgba(28,43,56,0.07);
     }
-    /* Schlanke, farbige Kopfleiste über die ganze Seitenbreite — gibt dem Ausdruck einen
+    /* Schlanke, zweifarbige Kopfleiste über die ganze Seitenbreite — gibt dem Ausdruck einen
        Briefpapier-Charakter, ohne dass dafür Markup geändert werden musste. */
     #print-area::before {
-      content: ""; position: absolute; top: 0; left: 0; right: 0; height: 6px;
+      content: ""; position: absolute; top: 0; left: 0; right: 0; height: 7px;
       background: linear-gradient(90deg, var(--p-accent), var(--p-accent-soft));
     }
-    .p-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; padding-bottom: 16px; margin-bottom: 22px; border-bottom: 1px solid var(--p-line); }
+    /* Kopfbereich als eigener, dezent getönter "Briefkopf"-Block statt einer schlichten
+       Trennlinie — zieht bis an die Seitenränder, damit er wie echtes Briefpapier wirkt. */
+    .p-header {
+      display: flex; justify-content: space-between; align-items: center; gap: 18px;
+      margin: -16mm -18mm 20px; padding: 14mm 18mm 16px;
+      background: var(--p-accent-tint);
+      border-bottom: 1px solid var(--p-line);
+    }
     .p-brand { display: flex; align-items: center; gap: 14px; }
-    .p-header img { height: 52px; width: 52px; object-fit: contain; flex-shrink: 0; }
+    .p-header img { height: 54px; width: 54px; object-fit: contain; flex-shrink: 0; border-radius: 50%; background: #fff; box-shadow: var(--p-shadow); }
     .p-header .company-name { font-size: 9.5px; letter-spacing: .15em; text-transform: uppercase; color: var(--p-accent-soft); font-weight: 700; margin-bottom: 4px; }
-    .p-header .company { font-size: 10px; line-height: 1.6; color: var(--p-muted); }
+    .p-header .company { font-size: 10px; line-height: 1.65; color: var(--p-muted); }
     .p-doctitle { text-align: right; flex-shrink: 0; }
-    .p-doctitle .t { font-family: 'Barlow Semi Condensed', 'Inter', sans-serif; font-weight: 700; font-size: 23px; letter-spacing: .01em; color: var(--p-accent); line-height: 1.1; white-space: nowrap; }
-    .p-doctitle .d { font-size: 10px; color: var(--p-muted); margin-top: 5px; }
+    .p-doctitle .t { font-family: 'Barlow Semi Condensed', 'Inter', sans-serif; font-weight: 700; font-size: 25px; letter-spacing: .01em; color: var(--p-accent); line-height: 1.1; white-space: nowrap; }
+    .p-doctitle .d { font-size: 10.5px; color: var(--p-muted); margin-top: 6px; font-weight: 600; }
     /* Alte Klasse bleibt aus Kompatibilitätsgründen erhalten (falls irgendwo noch referenziert),
        wird aber nicht mehr für das Layout gebraucht. */
     .p-type-badge { display: none; }
-    .p-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; margin-bottom: 14px; }
-    .p-field { padding: 7px 0; font-size: 12px; }
-    .p-field .l { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: var(--p-accent-soft); font-weight: 600; display: block; margin-bottom: 2px; }
-    .p-block { background: var(--p-tint); border-radius: 9px; margin-bottom: 12px; }
-    .p-block .l { font-weight: 700; font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--p-accent); padding: 10px 13px 0; }
-    .p-block .c { padding: 4px 13px 11px; font-size: 12px; min-height: 20px; white-space: pre-wrap; }
-    .p-sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 22px; }
-    .p-sig-box { background: var(--p-tint); border: 1px solid var(--p-line); border-radius: 9px; padding: 12px 14px 8px; min-height: 148px; display: flex; flex-direction: column; justify-content: flex-end; }
-    .p-sig-box img { height: 160px; display: block; margin-bottom: 2px; object-fit: contain; object-position: left bottom; max-width: 100%; }
+    /* Kerndaten (Auftraggeber/Baustelle/Datum/Monteur) als eigene Karte statt freistehender
+       Felder — fasst sie optisch zu einer Einheit zusammen und grenzt sie klar vom Fließtext
+       darunter ab. */
+    .p-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; margin-bottom: 16px; background: #fff; border: 1px solid var(--p-line); border-radius: 10px; padding: 4px 16px; box-shadow: var(--p-shadow); }
+    .p-field { padding: 8px 0; font-size: 12px; border-bottom: 1px solid var(--p-line); }
+    .p-field:last-child { border-bottom: none; }
+    .p-field .l { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: var(--p-accent-soft); font-weight: 700; display: block; margin-bottom: 3px; }
+    /* Inhaltsblöcke (Beschreibung, Vermerke, Material) als Karte mit farbigem Akzentstreifen
+       links — macht auf einen Blick klar, wo ein neuer Abschnitt beginnt, statt reinem
+       Hintergrund-Ton. */
+    .p-block { background: var(--p-tint); border-radius: 0 9px 9px 0; border-left: 3px solid var(--p-accent-soft); margin-bottom: 12px; }
+    .p-block .l { font-weight: 700; font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--p-accent); padding: 10px 14px 0; }
+    .p-block .c { padding: 4px 14px 12px; font-size: 12px; min-height: 20px; white-space: pre-wrap; }
+    .p-sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 24px; }
+    .p-sig-box {
+      position: relative; background: #fdfdfc; border: 1.3px dashed var(--p-line); border-radius: 9px;
+      padding: 26px 14px 8px; min-height: 148px; display: flex; flex-direction: column; justify-content: flex-end;
+    }
+    /* Beschriftung, welche Unterschrift hier hin soll — sitzt direkt IM Kästchen, nicht nur in
+       der Zeile darunter, damit ein noch leeres Feld nicht wie ein kaputtes Element aussieht,
+       sondern klar als "hier unterschreiben" erkennbar ist. */
+    .p-sig-box .p-sig-label {
+      position: absolute; top: 10px; left: 14px; font-size: 9px; text-transform: uppercase;
+      letter-spacing: .08em; font-weight: 700; color: var(--p-accent-soft);
+    }
+    .p-sig-box.filled { border-style: solid; background: #fff; box-shadow: var(--p-shadow); }
+    .p-sig-box img { height: 150px; display: block; margin-bottom: 2px; object-fit: contain; object-position: left bottom; max-width: 100%; }
     .p-sig-line { border-top: 1px solid var(--p-line); padding-top: 6px; font-size: 10px; color: var(--p-muted); }
     .p-doc-title { font-family: 'Barlow Semi Condensed', 'Inter', sans-serif; font-weight: 700; font-size: 19px; color: var(--p-accent); margin: 4px 0 2px; }
     .p-doc-sub { font-size: 11px; color: var(--p-muted); margin: 0 0 16px; }
     /* Stundenliste (Monats-Tabelle) — die Rundung sitzt am Wrapper, nicht direkt an <table>:
        Safari schneidet abgerundete Ecken bei Tabellen-Elementen selbst nicht zuverlässig zu. */
-    .p-hours-table-wrap { border: 1px solid var(--p-line); border-radius: 9px; overflow: hidden; margin-top: 4px; }
+    .p-hours-table-wrap { border: 1px solid var(--p-line); border-radius: 9px; overflow: hidden; margin-top: 4px; box-shadow: var(--p-shadow); }
     .p-hours-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
     .p-hours-table th { background: var(--p-accent); color: #fff; font-weight: 600; text-align: left; padding: 6px 7px; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; }
     .p-hours-table td { padding: 4.5px 7px; border-bottom: 1px solid var(--p-line); }
     .p-hours-table tbody tr:nth-child(even) { background: var(--p-tint); }
     .p-hours-table tr.we td { color: var(--p-accent-soft); }
     .p-hours-summary {
-      background: var(--p-tint); border-radius: 9px; padding: 12px 15px; margin-top: 16px;
+      background: var(--p-tint); border-left: 3px solid var(--p-accent-soft); border-radius: 0 9px 9px 0; padding: 12px 16px; margin-top: 16px;
       font-size: 11.5px; line-height: 1.75; color: var(--p-ink);
     }
-    .p-footer { margin-top: 26px; padding-top: 10px; border-top: 1px solid var(--p-line); font-size: 9px; color: var(--p-muted); display: flex; justify-content: space-between; gap: 10px; }
+    .p-footer { margin-top: 28px; padding-top: 10px; border-top: 1px solid var(--p-line); font-size: 9px; color: var(--p-muted); display: flex; justify-content: space-between; gap: 10px; }
     .p-footer .fn { text-transform: uppercase; letter-spacing: .1em; font-weight: 700; color: var(--p-accent-soft); }
   }
 
@@ -3363,8 +3390,8 @@
     html += '</div>';
 
     html += '<div class="p-sig-grid">';
-    html += '<div><div class="p-sig-box" style="min-height:40px;"></div><div class="p-sig-line">Datum, Unterschrift Mitarbeiter</div></div>';
-    html += '<div><div class="p-sig-box" style="min-height:40px;"></div><div class="p-sig-line">Datum, Unterschrift Firma</div></div>';
+    html += '<div><div class="p-sig-box" style="min-height:52px;"><span class="p-sig-label">Mitarbeiter</span></div><div class="p-sig-line">Datum, Unterschrift Mitarbeiter</div></div>';
+    html += '<div><div class="p-sig-box" style="min-height:52px;"><span class="p-sig-label">Firma</span></div><div class="p-sig-line">Datum, Unterschrift Firma</div></div>';
     html += '</div>';
     html += pFooter();
     return html;
@@ -4384,8 +4411,8 @@
     if (fahrtFelder || materialBlock) html += '<div class="p-grid"><div>' + fahrtFelder + "</div><div>" + materialBlock + "</div></div>";
     html += pBlock("Sonstige Vermerke", r.vermerke);
     html += '<div class="p-sig-grid">';
-    html += '<div><div class="p-sig-box">' + (r.sigKunde ? '<img src="' + r.sigKunde + '">' : "") + '</div><div class="p-sig-line">Datum, Unterschrift Kunde — ' + escapeHtml(r.datumUnterschrift || "") + '</div></div>';
-    html += '<div><div class="p-sig-box">' + (r.sigMonteur ? '<img src="' + r.sigMonteur + '">' : "") + '</div><div class="p-sig-line">Unterschrift Monteur</div></div>';
+    html += '<div><div class="p-sig-box' + (r.sigKunde ? ' filled' : '') + '"><span class="p-sig-label">Unterschrift Kunde</span>' + (r.sigKunde ? '<img src="' + r.sigKunde + '">' : "") + '</div><div class="p-sig-line">Datum, Unterschrift Kunde — ' + escapeHtml(r.datumUnterschrift || "") + '</div></div>';
+    html += '<div><div class="p-sig-box' + (r.sigMonteur ? ' filled' : '') + '"><span class="p-sig-label">Unterschrift Monteur</span>' + (r.sigMonteur ? '<img src="' + r.sigMonteur + '">' : "") + '</div><div class="p-sig-line">Unterschrift Monteur</div></div>';
     html += "</div>";
     html += pFooter();
     area.innerHTML = html;
