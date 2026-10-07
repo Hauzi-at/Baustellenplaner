@@ -2478,15 +2478,15 @@ function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, default
                             React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-2" }, BEHANG_TYPEN.map((t) => (React.createElement(Num, { key: t.id, label: `Gewicht ${t.label}`, value: getPreis(`gewicht_${t.id}`) || t.gewichtKgM2, onChange: (v) => setPreis(`gewicht_${t.id}`, v), unit: "kg/m\u00B2", min: 0.1, step: 0.1 }))))),
                         React.createElement(Section, { title: "Preisparameter", defaultOpen: false },
                             React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3" },
-                                React.createElement(Num, { label: "Sonderfarbe Aufpreis", value: params.sonderfarbeAufpreisPct, onChange: (v) => updateParam("sonderfarbeAufpreisPct", v), unit: "%" }),
-                                React.createElement(Num, { label: "Kleinteile", value: params.fixkostenKleinteile, onChange: (v) => updateParam("fixkostenKleinteile", v), unit: "\u20AC" }),
-                                React.createElement(Num, { label: "Insektenschutz", value: params.insektenschutzPreis, onChange: (v) => updateParam("insektenschutzPreis", v), unit: "\u20AC" }),
-                                React.createElement(Num, { label: "Notentriegelung", value: params.notentriegelungPreis, onChange: (v) => updateParam("notentriegelungPreis", v), unit: "\u20AC" }),
-                                React.createElement(Num, { label: "Stundensatz", value: params.stundensatz, onChange: (v) => updateParam("stundensatz", v), unit: "\u20AC/h" }),
-                                React.createElement(Num, { label: "Basis-Montagezeit", value: params.basisStunden, onChange: (v) => updateParam("basisStunden", v), unit: "h", step: 0.1 }),
-                                React.createElement(Num, { label: "Zeitfaktor pro m\u00B2", value: params.stundenFaktorProM2, onChange: (v) => updateParam("stundenFaktorProM2", v), unit: "h/m\u00B2", step: 0.05 }),
-                                React.createElement(Num, { label: "Aufschlag / Marge", value: params.marge, onChange: (v) => updateParam("marge", v), unit: "%" }),
-                                React.createElement(Num, { label: "MwSt", value: params.mwst, onChange: (v) => updateParam("mwst", v), unit: "%" })),
+                                React.createElement(Num, { label: "Sonderfarbe Aufpreis", value: params.sonderfarbeAufpreisPct, onChange: (v) => updateParam("sonderfarbeAufpreisPct", v), unit: "%", min: 0 }),
+                                React.createElement(Num, { label: "Kleinteile", value: params.fixkostenKleinteile, onChange: (v) => updateParam("fixkostenKleinteile", v), unit: "\u20AC", min: 0 }),
+                                React.createElement(Num, { label: "Insektenschutz", value: params.insektenschutzPreis, onChange: (v) => updateParam("insektenschutzPreis", v), unit: "\u20AC", min: 0 }),
+                                React.createElement(Num, { label: "Notentriegelung", value: params.notentriegelungPreis, onChange: (v) => updateParam("notentriegelungPreis", v), unit: "\u20AC", min: 0 }),
+                                React.createElement(Num, { label: "Stundensatz", value: params.stundensatz, onChange: (v) => updateParam("stundensatz", v), unit: "\u20AC/h", min: 0 }),
+                                React.createElement(Num, { label: "Basis-Montagezeit", value: params.basisStunden, onChange: (v) => updateParam("basisStunden", v), unit: "h", min: 0, step: 0.1 }),
+                                React.createElement(Num, { label: "Zeitfaktor pro m\u00B2", value: params.stundenFaktorProM2, onChange: (v) => updateParam("stundenFaktorProM2", v), unit: "h/m\u00B2", min: 0, step: 0.05 }),
+                                React.createElement(Num, { label: "Aufschlag / Marge", value: params.marge, onChange: (v) => updateParam("marge", v), unit: "%", min: 0 }),
+                                React.createElement(Num, { label: "MwSt", value: params.mwst, onChange: (v) => updateParam("mwst", v), unit: "%", min: 0 })),
                             React.createElement("div", { className: "flex items-center gap-3 mt-4" },
                                 React.createElement("button", { onClick: handleSaveParams, className: "flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[#1B1F24] text-white text-[13px] font-medium hover:bg-[#333] transition-colors" },
                                     React.createElement(Save, { size: 14 }),
@@ -2520,6 +2520,7 @@ function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, default
                             React.createElement("table", { className: "w-full text-[12.5px]" },
                                 React.createElement("thead", null,
                                     React.createElement("tr", { className: "bg-[#F0EEE4] text-[10.5px] uppercase tracking-wide text-[#5B6472]" },
+                                        React.createElement("th", { className: "text-right px-2 py-2 font-medium w-8" }, "#"),
                                         React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Position"),
                                         React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Kunde"),
                                         React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Ma\u00DFe"),
@@ -2528,11 +2529,12 @@ function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, default
                                         kostenSichtbar && React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "EK"),
                                         React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "VK (brutto)"),
                                         React.createElement("th", { className: "px-2 py-2" }))),
-                                React.createElement("tbody", null, listeAktuellerKunde.map((i) => {
+                                React.createElement("tbody", null, listeAktuellerKunde.map((i, __posIdx) => {
                                     var _a;
                                     const textOffen = offenerPositionstext === i.id;
                                     return (React.createElement(React.Fragment, { key: i.id },
                                     React.createElement("tr", { className: "border-t border-[#E2DFD3]" },
+                                        React.createElement("td", { className: "px-2 py-2 text-right font-['IBM_Plex_Mono'] text-[#8A8F98]" }, __posIdx + 1),
                                         React.createElement("td", { className: "px-2 py-1.5" },
                                             React.createElement("input", { type: "text", value: i.position || "", onChange: (e) => setPosition(i.id, e.target.value), placeholder: "Pos.", className: "w-full min-w-[70px] border border-[#D8D4C8] rounded px-1.5 py-1 text-[12px] outline-none focus:border-[#E8963B]" })),
                                         React.createElement("td", { className: "px-3 py-2 text-[#1B1F24]" }, i.kunde),
@@ -2571,7 +2573,7 @@ function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, default
                                             React.createElement("button", { onClick: () => removeFromList(i.id), className: "text-[#8A8F98] hover:text-[#C0392B]" },
                                                 React.createElement(Trash2, { size: 14 })))),
                                     textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
-                                        React.createElement("td", { colSpan: kostenSichtbar ? 8 : 7, className: "px-3 py-3" },
+                                        React.createElement("td", { colSpan: kostenSichtbar ? 9 : 8, className: "px-3 py-3" },
                                             React.createElement("div", { className: "flex items-start justify-between gap-3" },
                                                 React.createElement("pre", { className: "whitespace-pre-wrap flex-1 m-0 text-[12px] font-['IBM_Plex_Mono'] text-[#1B1F24]" }, i.positionstext),
                                                 React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1B1F24] text-white text-[12px] font-medium hover:bg-[#333] transition-colors" }, "Kopieren"))))));
@@ -2703,12 +2705,14 @@ function druckeUebersicht(titel, kunde, zeilen, hinweis) {
 // Ausdruck als richtiges Auftragsdokument taugt statt nur als interne Zuschnitt-Notiz.
 function druckeKundenauftrag(kunde, kundeAdresse, positionen, gesamtEk, gesamtBrutto) {
     const heute = new Date().toLocaleDateString("de-AT");
-    const zeilenHtml = positionen.map((p) => {
+    const zeilenHtml = positionen.map((p, idx) => {
         var _a;
         const ekWert = (((_a = p.item.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * p.item.menge).toFixed(2);
         const vkWert = (p.item.preisBrutto * p.item.menge).toFixed(2);
         return `
     <tr>
+      <td style="padding:7px 4px;color:#8A8F98;text-align:right;border-bottom:1px solid #D8D4C8;">${idx + 1}</td>
+      <td style="padding:7px 4px;color:#1B1F24;border-bottom:1px solid #D8D4C8;">${p.item.position || "—"}</td>
       <td style="padding:7px 4px;color:#1B1F24;font-weight:600;border-bottom:1px solid #D8D4C8;">${p.produktLabel}</td>
       <td style="padding:7px 4px;color:#5B6472;border-bottom:1px solid #D8D4C8;">${positionKurzbeschreibung(p.produktKey, p.item)}</td>
       <td style="padding:7px 4px;color:#5B6472;text-align:right;border-bottom:1px solid #D8D4C8;">${p.item.menge}×</td>
@@ -2755,10 +2759,10 @@ function druckeKundenauftrag(kunde, kundeAdresse, positionen, gesamtEk, gesamtBr
         ${(kundeAdresse === null || kundeAdresse === void 0 ? void 0 : kundeAdresse.isBusiness) && (kundeAdresse === null || kundeAdresse === void 0 ? void 0 : kundeAdresse.uid) ? `<div class="adresse">UID: ${kundeAdresse.uid}</div>` : ""}
       </div>
       <table>
-        <thead><tr><th>Produkt</th><th>Beschreibung</th><th style="text-align:right;">Menge</th><th style="text-align:right;">EK</th><th style="text-align:right;">VK (brutto)</th></tr></thead>
+        <thead><tr><th style="text-align:right;">#</th><th>Position</th><th>Produkt</th><th>Beschreibung</th><th style="text-align:right;">Menge</th><th style="text-align:right;">EK</th><th style="text-align:right;">VK (brutto)</th></tr></thead>
         <tbody>${zeilenHtml}</tbody>
         <tfoot>
-          <tr><td colspan="3"></td><td style="text-align:right;color:#8A8F98;">${gesamtEk.toFixed(2)} €</td><td style="text-align:right;font-size:15px;">${gesamtBrutto.toFixed(2)} €</td></tr>
+          <tr><td colspan="5"></td><td style="text-align:right;color:#8A8F98;">${gesamtEk.toFixed(2)} €</td><td style="text-align:right;font-size:15px;">${gesamtBrutto.toFixed(2)} €</td></tr>
         </tfoot>
       </table>
       <p class="hinweis">${positionen.length} Position(en) über alle Produkte.</p>
@@ -3408,6 +3412,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                     React.createElement("table", { className: "w-full text-[12.5px]" },
                         React.createElement("thead", null,
                             React.createElement("tr", { className: "bg-[#F0EEE4] text-[10.5px] uppercase tracking-wide text-[#5B6472]" },
+                                React.createElement("th", { className: "text-right px-2 py-2 font-medium w-8" }, "#"),
                                 React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Position"),
                                 React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Kunde"),
                                 React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Ma\u00DFe"),
@@ -3416,11 +3421,12 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                                 kostenSichtbar && React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "EK"),
                                 React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "VK (brutto)"),
                                 React.createElement("th", { className: "px-2 py-2" }))),
-                        React.createElement("tbody", null, listeAktuellerKunde.map((i) => {
+                        React.createElement("tbody", null, listeAktuellerKunde.map((i, __posIdx) => {
                             var _a;
                             const textOffen = offenerPositionstext === i.id;
                             return (React.createElement(React.Fragment, { key: i.id },
                             React.createElement("tr", { className: "border-t border-[#E2DFD3]" },
+                                React.createElement("td", { className: "px-2 py-2 text-right font-['IBM_Plex_Mono'] text-[#8A8F98]" }, __posIdx + 1),
                                 React.createElement("td", { className: "px-2 py-1.5" },
                                     React.createElement("input", { type: "text", value: i.position || "", onChange: (e) => setPosition(i.id, e.target.value), placeholder: "Pos.", className: "w-full min-w-[70px] border border-[#D8D4C8] rounded px-1.5 py-1 text-[12px] outline-none focus:border-[#E8963B]" })),
                                 React.createElement("td", { className: "px-3 py-2 text-[#1B1F24]" }, i.kunde),
@@ -3449,7 +3455,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                                     React.createElement("button", { onClick: () => removeFromListe(i.id), className: "text-[#8A8F98] hover:text-[#C0392B]" },
                                         React.createElement(Trash2, { size: 14 })))),
                                 textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
-                                    React.createElement("td", { colSpan: kostenSichtbar ? 8 : 7, className: "px-3 py-3" },
+                                    React.createElement("td", { colSpan: kostenSichtbar ? 9 : 8, className: "px-3 py-3" },
                                         React.createElement("div", { className: "flex items-start justify-between gap-3" },
                                             React.createElement("pre", { className: "whitespace-pre-wrap flex-1 m-0 text-[12px] font-['IBM_Plex_Mono'] text-[#1B1F24]" }, i.positionstext),
                                             React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1B1F24] text-white text-[12px] font-medium hover:bg-[#333] transition-colors" }, "Kopieren"))))));
@@ -4192,6 +4198,7 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                     React.createElement("table", { className: "w-full text-[12.5px]" },
                         React.createElement("thead", null,
                             React.createElement("tr", { className: "bg-[#F0EEE4] text-[10.5px] uppercase tracking-wide text-[#5B6472]" },
+                                React.createElement("th", { className: "text-right px-2 py-2 font-medium w-8" }, "#"),
                                 React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Position"),
                                 React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Kunde"),
                                 React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Ma\u00DFe"),
@@ -4200,11 +4207,12 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                                 kostenSichtbar && React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "EK"),
                                 React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "VK (brutto)"),
                                 React.createElement("th", { className: "px-2 py-2" }))),
-                        React.createElement("tbody", null, listeAktuellerKunde.map((i) => {
+                        React.createElement("tbody", null, listeAktuellerKunde.map((i, __posIdx) => {
                             var _a;
                             const textOffen = offenerPositionstext === i.id;
                             return (React.createElement(React.Fragment, { key: i.id },
                             React.createElement("tr", { className: "border-t border-[#E2DFD3]" },
+                                React.createElement("td", { className: "px-2 py-2 text-right font-['IBM_Plex_Mono'] text-[#8A8F98]" }, __posIdx + 1),
                                 React.createElement("td", { className: "px-2 py-1.5" },
                                     React.createElement("input", { type: "text", value: i.position || "", onChange: (e) => setPosition(i.id, e.target.value), placeholder: "Pos.", className: "w-full min-w-[70px] border border-[#D8D4C8] rounded px-1.5 py-1 text-[12px] outline-none focus:border-[#E8963B]" })),
                                 React.createElement("td", { className: "px-3 py-2 text-[#1B1F24]" }, i.kunde),
@@ -4236,7 +4244,7 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                                     React.createElement("button", { onClick: () => removeFromListe(i.id), className: "text-[#8A8F98] hover:text-[#C0392B]" },
                                         React.createElement(Trash2, { size: 14 })))),
                                 textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
-                                    React.createElement("td", { colSpan: kostenSichtbar ? 8 : 7, className: "px-3 py-3" },
+                                    React.createElement("td", { colSpan: kostenSichtbar ? 9 : 8, className: "px-3 py-3" },
                                         React.createElement("div", { className: "flex items-start justify-between gap-3" },
                                             React.createElement("pre", { className: "whitespace-pre-wrap flex-1 m-0 text-[12px] font-['IBM_Plex_Mono'] text-[#1B1F24]" }, i.positionstext),
                                             React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1B1F24] text-white text-[12px] font-medium hover:bg-[#333] transition-colors" }, "Kopieren"))))));
@@ -4735,6 +4743,7 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                     React.createElement("table", { className: "w-full text-[12.5px]" },
                         React.createElement("thead", null,
                             React.createElement("tr", { className: "bg-[#F0EEE4] text-[10.5px] uppercase tracking-wide text-[#5B6472]" },
+                                React.createElement("th", { className: "text-right px-2 py-2 font-medium w-8" }, "#"),
                                 React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Position"),
                                 React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Kunde"),
                                 React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Rahmenma\u00DF"),
@@ -4743,11 +4752,12 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                                 kostenSichtbar && React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "EK"),
                                 React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "VK (brutto)"),
                                 React.createElement("th", { className: "px-2 py-2" }))),
-                        React.createElement("tbody", null, listeAktuellerKunde.map((i) => {
+                        React.createElement("tbody", null, listeAktuellerKunde.map((i, __posIdx) => {
                             var _a;
                             const textOffen = offenerPositionstext === i.id;
                             return (React.createElement(React.Fragment, { key: i.id },
                             React.createElement("tr", { className: "border-t border-[#E2DFD3]" },
+                                React.createElement("td", { className: "px-2 py-2 text-right font-['IBM_Plex_Mono'] text-[#8A8F98]" }, __posIdx + 1),
                                 React.createElement("td", { className: "px-2 py-1.5" },
                                     React.createElement("input", { type: "text", value: i.position || "", onChange: (e) => setPosition(i.id, e.target.value), placeholder: "Pos.", className: "w-full min-w-[70px] border border-[#D8D4C8] rounded px-1.5 py-1 text-[12px] outline-none focus:border-[#E8963B]" })),
                                 React.createElement("td", { className: "px-3 py-2 text-[#1B1F24]" }, i.kunde),
@@ -4779,7 +4789,7 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                                     React.createElement("button", { onClick: () => removeFromListe(i.id), className: "text-[#8A8F98] hover:text-[#C0392B]" },
                                         React.createElement(Trash2, { size: 14 })))),
                                 textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
-                                    React.createElement("td", { colSpan: kostenSichtbar ? 8 : 7, className: "px-3 py-3" },
+                                    React.createElement("td", { colSpan: kostenSichtbar ? 9 : 8, className: "px-3 py-3" },
                                         React.createElement("div", { className: "flex items-start justify-between gap-3" },
                                             React.createElement("pre", { className: "whitespace-pre-wrap flex-1 m-0 text-[12px] font-['IBM_Plex_Mono'] text-[#1B1F24]" }, i.positionstext),
                                             React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1B1F24] text-white text-[12px] font-medium hover:bg-[#333] transition-colors" }, "Kopieren"))))));
@@ -5148,6 +5158,7 @@ function LichtschachtKonfigurator({ onZurueck, editRequest, onEditConsumed, defa
                     React.createElement("table", { className: "w-full text-[12.5px]" },
                         React.createElement("thead", null,
                             React.createElement("tr", { className: "bg-[#F0EEE4] text-[10.5px] uppercase tracking-wide text-[#5B6472]" },
+                                React.createElement("th", { className: "text-right px-2 py-2 font-medium w-8" }, "#"),
                                 React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Position"),
                                 React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Kunde"),
                                 React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Ma\u00DFe"),
@@ -5156,11 +5167,12 @@ function LichtschachtKonfigurator({ onZurueck, editRequest, onEditConsumed, defa
                                 kostenSichtbar && React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "EK"),
                                 React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "VK (brutto)"),
                                 React.createElement("th", { className: "px-2 py-2" }))),
-                        React.createElement("tbody", null, listeAktuellerKunde.map((i) => {
+                        React.createElement("tbody", null, listeAktuellerKunde.map((i, __posIdx) => {
                             var _a;
                             const textOffen = offenerPositionstext === i.id;
                             return (React.createElement(React.Fragment, { key: i.id },
                             React.createElement("tr", { className: "border-t border-[#E2DFD3]" },
+                                React.createElement("td", { className: "px-2 py-2 text-right font-['IBM_Plex_Mono'] text-[#8A8F98]" }, __posIdx + 1),
                                 React.createElement("td", { className: "px-2 py-1.5" },
                                     React.createElement("input", { type: "text", value: i.position || "", onChange: (e) => setPosition(i.id, e.target.value), placeholder: "Pos.", className: "w-full min-w-[70px] border border-[#D8D4C8] rounded px-1.5 py-1 text-[12px] outline-none focus:border-[#E8963B]" })),
                                 React.createElement("td", { className: "px-3 py-2 text-[#1B1F24]" }, i.kunde),
@@ -5189,7 +5201,7 @@ function LichtschachtKonfigurator({ onZurueck, editRequest, onEditConsumed, defa
                                     React.createElement("button", { onClick: () => removeFromListe(i.id), className: "text-[#8A8F98] hover:text-[#C0392B]" },
                                         React.createElement(Trash2, { size: 14 })))),
                                 textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
-                                    React.createElement("td", { colSpan: kostenSichtbar ? 8 : 7, className: "px-3 py-3" },
+                                    React.createElement("td", { colSpan: kostenSichtbar ? 9 : 8, className: "px-3 py-3" },
                                         React.createElement("div", { className: "flex items-start justify-between gap-3" },
                                             React.createElement("pre", { className: "whitespace-pre-wrap flex-1 m-0 text-[12px] font-['IBM_Plex_Mono'] text-[#1B1F24]" }, i.positionstext),
                                             React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1B1F24] text-white text-[12px] font-medium hover:bg-[#333] transition-colors" }, "Kopieren"))))));
@@ -5657,6 +5669,7 @@ function KisKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde,
                     React.createElement("table", { className: "w-full text-[12.5px]" },
                         React.createElement("thead", null,
                             React.createElement("tr", { className: "bg-[#F0EEE4] text-[10.5px] uppercase tracking-wide text-[#5B6472]" },
+                                React.createElement("th", { className: "text-right px-2 py-2 font-medium w-8" }, "#"),
                                 React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Position"),
                                 React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Kunde"),
                                 React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Ma\u00DFe"),
@@ -5665,11 +5678,12 @@ function KisKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde,
                                 kostenSichtbar && React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "EK"),
                                 React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "VK (brutto)"),
                                 React.createElement("th", { className: "px-2 py-2" }))),
-                        React.createElement("tbody", null, listeAktuellerKunde.map((i) => {
+                        React.createElement("tbody", null, listeAktuellerKunde.map((i, __posIdx) => {
                             var _a;
                             const textOffen = offenerPositionstext === i.id;
                             return (React.createElement(React.Fragment, { key: i.id },
                             React.createElement("tr", { className: "border-t border-[#E2DFD3]" },
+                                React.createElement("td", { className: "px-2 py-2 text-right font-['IBM_Plex_Mono'] text-[#8A8F98]" }, __posIdx + 1),
                                 React.createElement("td", { className: "px-2 py-1.5" },
                                     React.createElement("input", { type: "text", value: i.position || "", onChange: (e) => setPosition(i.id, e.target.value), placeholder: "Pos.", className: "w-full min-w-[70px] border border-[#D8D4C8] rounded px-1.5 py-1 text-[12px] outline-none focus:border-[#E8963B]" })),
                                 React.createElement("td", { className: "px-3 py-2 text-[#1B1F24]" }, i.kunde),
@@ -5695,7 +5709,7 @@ function KisKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde,
                                     React.createElement("button", { onClick: () => removeFromListe(i.id), className: "text-[#8A8F98] hover:text-[#C0392B]" },
                                         React.createElement(Trash2, { size: 14 })))),
                                 textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
-                                    React.createElement("td", { colSpan: kostenSichtbar ? 8 : 7, className: "px-3 py-3" },
+                                    React.createElement("td", { colSpan: kostenSichtbar ? 9 : 8, className: "px-3 py-3" },
                                         React.createElement("div", { className: "flex items-start justify-between gap-3" },
                                             React.createElement("pre", { className: "whitespace-pre-wrap flex-1 m-0 text-[12px] font-['IBM_Plex_Mono'] text-[#1B1F24]" }, i.positionstext),
                                             React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1B1F24] text-white text-[12px] font-medium hover:bg-[#333] transition-colors" }, "Kopieren"))))));
@@ -5906,6 +5920,8 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
                         React.createElement("table", { className: "w-full text-[12.5px]" },
                             React.createElement("thead", null,
                                 React.createElement("tr", { className: "bg-[#F0EEE4] text-[10.5px] uppercase tracking-wide text-[#5B6472]" },
+                                    React.createElement("th", { className: "text-right px-2 py-2 font-medium w-8" }, "#"),
+                                    React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Position"),
                                     React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Produkt"),
                                     React.createElement("th", { className: "text-left px-3 py-2 font-medium" }, "Beschreibung"),
                                     React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "Menge"),
@@ -5915,6 +5931,8 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
                             React.createElement("tbody", null, positionen.map((p, i) => {
                                 var _a;
                                 return (React.createElement("tr", { key: i, className: "border-t border-[#E2DFD3]" },
+                                    React.createElement("td", { className: "px-2 py-2 text-right font-['IBM_Plex_Mono'] text-[#8A8F98]" }, i + 1),
+                                    React.createElement("td", { className: "px-3 py-2 text-[#1B1F24]" }, p.item.position || "—"),
                                     React.createElement("td", { className: "px-3 py-2 text-[#1B1F24] font-medium" }, p.produktLabel),
                                     React.createElement("td", { className: "px-3 py-2 text-[#5B6472]" }, positionKurzbeschreibung(p.produktKey, p.item)),
                                     React.createElement("td", { className: "px-3 py-2 text-right font-['IBM_Plex_Mono']" }, p.item.menge),
