@@ -2882,6 +2882,43 @@ const PRODUKT_LISTEN_KEYS = [
     { key: "lichtschacht_liste_v1", label: "Lichtschachtabdeckung", produktRoute: "lichtschacht" },
     { key: "kis_liste_v1", label: "IS KIS", produktRoute: "kis" },
 ];
+// Lädt alle Positionen eines einzelnen Kunden über alle 6 Produkte hinweg — Basis für den
+// Mini-Warenkorb auf der Hauptseite (Produkt wählen) sowie für die Kundenübersicht.
+async function ladePositionenFuerKunde(kundeName) {
+    var _a;
+    const alle = [];
+    if (!kundeName)
+        return alle;
+    for (const { key, label } of PRODUKT_LISTEN_KEYS) {
+        try {
+            const r = await ((_a = window.storage) === null || _a === void 0 ? void 0 : _a.get(key));
+            if (r === null || r === void 0 ? void 0 : r.value) {
+                const liste = JSON.parse(r.value);
+                for (const item of liste) {
+                    if (item.kunde === kundeName)
+                        alle.push({ produktKey: key, produktLabel: label, item });
+                }
+            }
+        }
+        catch (_b) { }
+    }
+    return alle;
+}
+// Entfernt eine einzelne Position aus der lokalen Liste eines Produkts (per id) — genutzt vom
+// Mini-Warenkorb auf der Hauptseite, damit eine Position auch ohne Umweg über den jeweiligen
+// Konfigurator gelöscht werden kann.
+async function entfernePositionAusListe(produktKey, id) {
+    var _a;
+    try {
+        const r = await ((_a = window.storage) === null || _a === void 0 ? void 0 : _a.get(produktKey));
+        if (!(r === null || r === void 0 ? void 0 : r.value))
+            return;
+        const liste = JSON.parse(r.value);
+        const next = liste.filter((i) => i.id !== id);
+        await window.storage.set(produktKey, JSON.stringify(next));
+    }
+    catch (_b) { }
+}
 // Such-Auswahl f\u00fcr Kunden mit Inline-"Neuer Kunde"-Option. Wird von allen 6 Konfiguratoren
 // geteilt. Fr\u00fcher ein reines <select> mit allen Kunden alphabetisch \u2014 bei vielen Kunden musste
 // man das komplette Dropdown durchscrollen, um jemanden zu finden. Jetzt ein Suchfeld: tippen
@@ -5980,7 +6017,33 @@ const PRODUKTE = [
     { id: "lichtschacht", label: "Lichtschachtabdeckung", beschreibung: "heroal IS Lichtschachtabdeckung", verfuegbar: true },
     { id: "kis", label: "IS KIS", beschreibung: "Insektengitter Rollo (heroal IS Katalog S. 218-219)", verfuegbar: true },
 ];
-function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, kundeDetails, onKundeSetzen, onKundeFertig }) {
+function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, kundeDetails, onKundeSetzen, onKundeFertig, onBearbeiten }) {
+    // Mini-Warenkorb: alle bereits angelegten Positionen des aktuellen Kunden, direkt auf der
+    // Hauptseite sichtbar — ohne Umweg über die Kundenübersicht. Lädt neu bei jedem Kundenwechsel
+    // und bei jedem erneuten Anzeigen dieser Seite (z. B. nach Rückkehr aus einem Konfigurator).
+    const [warenkorb, setWarenkorb] = useState([]);
+    const [warenkorbStatus, setWarenkorbStatus] = useState("idle");
+    useEffect(() => {
+        if (!aktiverKunde) {
+            setWarenkorb([]);
+            setWarenkorbStatus("idle");
+            return;
+        }
+        let aktuell = true;
+        setWarenkorbStatus("laedt");
+        ladePositionenFuerKunde(aktiverKunde).then((liste) => {
+            if (aktuell) {
+                setWarenkorb(liste);
+                setWarenkorbStatus("fertig");
+            }
+        });
+        return () => { aktuell = false; };
+    }, [aktiverKunde]);
+    const warenkorbEntfernen = async (produktKey, id) => {
+        setWarenkorb((prev) => prev.filter((p) => !(p.produktKey === produktKey && p.item.id === id)));
+        await entfernePositionAusListe(produktKey, id);
+    };
+    const warenkorbGesamtBrutto = warenkorb.reduce((s, p) => { var _a; return s + ((_a = p.item.preisBrutto) !== null && _a !== void 0 ? _a : 0) * p.item.menge; }, 0);
     return (React.createElement("div", { className: "min-h-screen w-full overflow-x-hidden", style: { background: "#F5F4EF" } },
         React.createElement("style", null, `* { font-family: 'Inter', -apple-system, sans-serif; } .font-oswald { font-family: 'Oswald', sans-serif; }`),
         React.createElement("div", { className: "max-w-5xl mx-auto px-4 py-8 md:py-14" },
@@ -6005,6 +6068,28 @@ function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, kundeDe
                     " zugeordnet. Beliebig viele Produkte nacheinander hinzuf\u00FCgen m\u00F6glich."))) : (React.createElement("div", { className: "border border-[#D8D4C8] rounded-xl bg-white p-5 mb-6" },
                 React.createElement("div", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium mb-2" }, "Zuerst Kunde anlegen oder w\u00E4hlen"),
                 React.createElement(KundenAuswahl, { value: "", onChange: onKundeSetzen }))),
+            aktiverKunde && (React.createElement("div", { className: "border border-[#D8D4C8] rounded-xl bg-white p-5 mb-6" },
+                React.createElement("div", { className: "flex items-center justify-between gap-3 mb-1" },
+                    React.createElement("div", { className: "flex items-center gap-2" },
+                        React.createElement(ShoppingBag, { size: 16, className: "text-[#5B6472]" }),
+                        React.createElement("span", { className: "text-[15px] font-oswald font-semibold text-[#1B1F24]" }, "Warenkorb")),
+                    warenkorb.length > 0 && React.createElement("span", { className: "text-[11.5px] font-medium px-2.5 py-1 rounded-full bg-[#FFF8EF] text-[#B96A16]" }, warenkorb.length === 1 ? "1 Position" : `${warenkorb.length} Positionen`)),
+                warenkorbStatus === "laedt" && React.createElement("p", { className: "text-[13px] text-[#8A8F98] mt-2" }, "Lade Positionen…"),
+                warenkorbStatus === "fertig" && warenkorb.length === 0 && (React.createElement("p", { className: "text-[13px] text-[#8A8F98] mt-2" }, `Für ${aktiverKunde} sind noch keine Positionen angelegt. Wähle unten ein Produkt.`)),
+                warenkorb.length > 0 && (React.createElement(React.Fragment, null,
+                    React.createElement("div", { className: "flex flex-col gap-2 mt-3 mb-3" }, warenkorb.map((p) => (React.createElement("div", { key: `${p.produktKey}-${p.item.id}`, className: "flex items-center justify-between gap-2 border border-[#E2DFD3] rounded-lg px-3 py-2" },
+                        React.createElement("div", { className: "min-w-0" },
+                            React.createElement("div", { className: "text-[13.5px] font-medium text-[#1B1F24] truncate" }, p.produktLabel + (p.item.position ? ` — ${p.item.position}` : "")),
+                            React.createElement("div", { className: "text-[12px] text-[#8A8F98] truncate" }, positionKurzbeschreibung(p.produktKey, p.item))),
+                        React.createElement("div", { className: "flex items-center gap-2 shrink-0" },
+                            React.createElement("span", { className: "text-[13px] font-['IBM_Plex_Mono'] text-[#1B1F24]" }, `${(p.item.preisBrutto * p.item.menge).toFixed(2)} €`),
+                            React.createElement("button", { onClick: () => { var _a; return onBearbeiten((_a = PRODUKT_LISTEN_KEYS.find((pl) => pl.key === p.produktKey)) === null || _a === void 0 ? void 0 : _a.produktRoute, p.item.id); }, className: "text-[#8A8F98] hover:text-[#1B1F24]", title: "Bearbeiten" },
+                                React.createElement(Pencil, { size: 14 })),
+                            React.createElement("button", { onClick: () => warenkorbEntfernen(p.produktKey, p.item.id), className: "text-[#8A8F98] hover:text-[#C0392B]", title: "Entfernen" },
+                                React.createElement(X, { size: 14 }))))))),
+                    React.createElement("div", { className: "flex justify-end items-center gap-3 pt-2 border-t border-[#E2DFD3]" },
+                        React.createElement("span", { className: "text-[13px] text-[#5B6472]" }, "Gesamt (brutto)"),
+                        React.createElement("span", { className: "text-[17px] font-['IBM_Plex_Mono'] font-semibold text-[#1B1F24]" }, `${warenkorbGesamtBrutto.toFixed(2)} €`)))))),
             React.createElement("button", { onClick: onKunden, className: "w-full text-left border-2 border-[#1B1F24] rounded-xl bg-[#1B1F24] p-5 mb-6 hover:bg-[#333] transition-colors" },
                 React.createElement("span", { className: "text-[17px] font-oswald font-semibold text-white block mb-1" }, "\uD83D\uDC64 Kunden\u00FCbersicht"),
                 React.createElement("p", { className: "text-[13px] text-[#B8BEC7]" }, "Alle Positionen eines Kunden aus allen Produkten zusammen ansehen und drucken")),
@@ -6048,7 +6133,7 @@ function App() {
         return React.createElement(LichtschachtKonfigurator, { onZurueck: () => setProdukt(null), editRequest: editRequestFuer("lichtschacht"), onEditConsumed, defaultKunde: aktiverKunde, einstellungen, istChef });
     if (produkt === "kis")
         return React.createElement(KisKonfigurator, { onZurueck: () => setProdukt(null), editRequest: editRequestFuer("kis"), onEditConsumed, defaultKunde: aktiverKunde, einstellungen, istChef });
-    return React.createElement(Hauptseite, { onSelect: setProdukt, onKunden: () => setProdukt("kunden"), onEinstellungen: () => setProdukt("einstellungen"), aktiverKunde, kundeDetails, onKundeSetzen: kundeSetzen, onKundeFertig: kundeFertig });
+    return React.createElement(Hauptseite, { onSelect: setProdukt, onKunden: () => setProdukt("kunden"), onEinstellungen: () => setProdukt("einstellungen"), aktiverKunde, kundeDetails, onKundeSetzen: kundeSetzen, onKundeFertig: kundeFertig, onBearbeiten: bearbeiteAus });
 }
 
 ReactDOM.render(React.createElement(App), document.getElementById("root"));
