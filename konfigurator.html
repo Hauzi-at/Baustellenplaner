@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>TH Sonnenschutz — Konfiguratoren</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -22,6 +22,18 @@ a { color: inherit; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 
 body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+
+/* iOS Safari zoomt automatisch in die ganze Seite hinein, sobald ein Eingabefeld mit
+   Schriftgröße UNTER 16px fokussiert wird — unabhängig vom user-scalable-Meta-Tag oben. Viele
+   der kompakten Preis-/Positionsfelder hier sind bewusst kleiner gesetzt (text-[11px] bis
+   text-[15px]), damit auf dem Handy mehr nebeneinander passt. Auf schmalen Bildschirmen wird die
+   Schrift beim Fokussieren daher auf 16px angehoben (mit !important, da die einzelnen
+   text-[…]-Klassen sonst gewinnen) — Tabellen mit vielen Spalten sind ohnehin per
+   overflow-x-auto horizontal scrollbar angelegt, das bisschen mehr Breite durch die größere
+   Schrift bricht dort also nichts auf. Auf Tablet/Desktop bleibt das Design unverändert. */
+@media (max-width: 640px) {
+  input, select, textarea { font-size: 16px !important; }
+}
 
 .-bottom-1\.5 { bottom: -0.375rem; }
 .-mb-px { margin-bottom: -1px; }

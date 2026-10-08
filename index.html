@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no">
 <title>TH Baustellenplaner</title>
 <style>
   :root {
@@ -91,6 +91,19 @@
   input:focus, select:focus, textarea:focus, button:focus-visible {
     outline: 2px solid var(--focus);
     outline-offset: 1px;
+  }
+  /* iOS Safari zoomt die ganze Seite automatisch hinein, sobald ein Eingabefeld mit
+     Schriftgröße UNTER 16px fokussiert wird (eigener Mechanismus, unabhängig vom
+     user-scalable-Meta-Tag oben) — das ist der Haupteffekt, der sich für Nutzer wie
+     "die App lässt sich zoomen" anfühlt, weil man danach herausgezoomt stehen bleibt, bis man
+     manuell wieder zurückzoomt. Einige Felder (Such-/Archivfilter, Wochentage-Raster bei
+     "Mitarbeiter bearbeiten") sind bewusst kleiner gesetzt, um auf dem Handy mehr nebeneinander
+     unterzubringen — hier wird die Schrift NUR auf schmalen Bildschirmen auf 16px angehoben
+     (mit !important, da die spezifischeren Regeln oben sonst gewinnen würden), auf Tablet/Desktop
+     bleibt das Design unverändert.
+  */
+  @media (max-width: 640px) {
+    input, select, textarea { font-size: 16px !important; }
   }
   ::placeholder { color: var(--muted); opacity: 1; }
 
@@ -489,8 +502,13 @@
   .mode-choice.checked { border-color: var(--slate); background: var(--slate); color: #fff; }
   .weekday-field-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
   @media (min-width: 460px) { .weekday-field-grid { grid-template-columns: repeat(7, 1fr); } }
+  /* Ohne min-width:0 bleibt jede Grid-Spur mindestens so breit wie der intrinsische
+     Default eines <input> (~170px) — bei 4 erzwungenen Spalten auf schmalen Handys reißt das
+     den Grid dann über den sichtbaren Bereich hinaus (3./4. Spalte wird abgeschnitten), obwohl
+     hier nur ein- bis zweistellige Stundenzahlen reinpassen müssen. */
+  .weekday-field-grid .field { min-width: 0; }
   .weekday-field-grid .field label { text-align: center; }
-  .weekday-field-grid input { padding: 6px 4px; text-align: center; font-size: 12.5px; }
+  .weekday-field-grid input { padding: 6px 4px; text-align: center; font-size: 12.5px; min-width: 0; width: 100%; }
   .konto-preview { display: flex; align-items: baseline; justify-content: space-between; background: var(--card-raised); border-radius: 9px; padding: 9px 12px; font-size: 13px; }
   .konto-preview strong { font-size: 16px; font-family: 'Barlow Semi Condensed', sans-serif; }
   .zeitausgleich-input-row { display: flex; gap: 6px; align-items: center; }
@@ -860,9 +878,17 @@
     // überlappt mit der Kopfzeile, sobald sich die Adressleiste wieder einblendet — z. B. direkt
     // nach dem Zieh-nach-unten-Neuladen (siehe setupPullToRefresh). visualViewport bildet genau
     // diese Änderungen zuverlässig ab.
+    // WICHTIG: nur "resize" abonniert, bewusst NICHT "scroll". Öffnet man am Handy die
+    // Bildschirmtastatur für ein Zahlenfeld IM Konfigurator-iframe (z. B. beim Eintippen eines
+    // Preises), verschiebt/verkleinert das den sichtbaren Bereich fortlaufend während der
+    // Tastatur-Animation — jede einzelne Zwischenstufe hätte hier einen "scroll"-Event am
+    // visualViewport ausgelöst und sofort einen Neuaufbau der iframe-Position erzwungen. Das
+    // Zusammenspiel mit dem Browser, der den fokussierten Eingabewert dabei selbst laufend ins
+    // Bild zu rücken versucht, konnte sich so hochschaukeln: die App "sprang auf und ab", sobald
+    // man im Konfigurator etwas eintippte. "resize" allein (einmalig beim Ein-/Ausblenden der
+    // Tastatur bzw. der Adressleiste) deckt den eigentlichen Anlass dieses Listeners weiterhin ab.
     if (window.visualViewport) {
       window.visualViewport.addEventListener("resize", syncKonfiguratorFrame);
-      window.visualViewport.addEventListener("scroll", syncKonfiguratorFrame);
     }
     window.addEventListener("online", function () { isOnline = true; render(); });
     window.addEventListener("offline", function () { isOnline = false; render(); });
@@ -1390,6 +1416,31 @@
   function isFragileNativePicker(node) {
     return !!node && node.tagName === "INPUT" && (node.type === "time" || node.type === "date");
   }
+  // Live-Suchfelder (z. B. "Kunde suchen", Archiv-Suche) lösen bei jeder Eingabe render() aus,
+  // damit die gefilterte Liste sofort mitwächst — anders als beim Datum/Zeit-Picker oben darf der
+  // Neuaufbau hier NICHT zurückgestellt werden, sonst bliebe die Liste während des Tippens stehen.
+  // Der komplette Neuaufbau von #app ersetzt aber auch das <input>-Element selbst durch ein neues
+  // DOM-Element, das den Fokus nicht automatisch erbt. Auf dem Smartphone bedeutet Fokusverlust:
+  // die Bildschirmtastatur schließt sich sofort wieder — nach jedem einzelnen Buchstaben, weil die
+  // debounce()-Verzögerung (120ms) ausreicht, dass der Neuaufbau noch während des Tippens feuert.
+  // Fix: Vor dem Neuaufbau merken, WELCHES mit "data-focus-key" markierte Feld fokussiert war samt
+  // Cursorposition, danach das gleichnamige neue Element wiederfinden und Fokus + Cursor restaurieren.
+  function captureFocusKey(app) {
+    var active = document.activeElement;
+    if (!active || !app.contains(active)) return null;
+    var key = active.getAttribute && active.getAttribute("data-focus-key");
+    if (!key) return null;
+    var info = { key: key, selStart: null, selEnd: null };
+    try { info.selStart = active.selectionStart; info.selEnd = active.selectionEnd; } catch (e) { }
+    return info;
+  }
+  function restoreFocusKey(app, info) {
+    if (!info) return;
+    var next = app.querySelector("[data-focus-key='" + info.key + "']");
+    if (!next) return;
+    next.focus({ preventScroll: true });
+    try { if (info.selStart != null) next.setSelectionRange(info.selStart, info.selEnd); } catch (e) { }
+  }
   function render() {
     applyTheme();
     var app = $("#app");
@@ -1406,8 +1457,10 @@
       }
       return;
     }
+    var focusInfo = captureFocusKey(app);
     app.innerHTML = "";
     app.appendChild(renderShell());
+    restoreFocusKey(app, focusInfo);
     renderPrintArea();
     renderSigFullscreen();
     syncKonfiguratorFrame();
@@ -1429,15 +1482,27 @@
     var top = topbar ? topbar.getBoundingClientRect().bottom : 0;
     var left = (sidenav && getComputedStyle(sidenav).display !== "none") ? sidenav.getBoundingClientRect().width : 0;
     var bottom = (bottomnav && getComputedStyle(bottomnav).display !== "none") ? bottomnav.getBoundingClientRect().height : 0;
+    // Ein <iframe> ist ein "replaced element" — bei position:fixed reicht das Setzen von
+    // top/left/right/bottom allein NICHT aus, um es zu strecken (anders als bei normalen
+    // <div>s); Breite/Höhe müssen zusätzlich explizit in Pixel berechnet werden.
+    var width = Math.max(0, window.innerWidth - left);
+    var height = Math.max(0, window.innerHeight - top - bottom);
+    // Nur tatsächlich SCHREIBEN, wenn sich etwas geändert hat. syncKonfiguratorFrame kann durch
+    // mehrere Listener (window-resize, visualViewport-resize, render(), Pull-to-Refresh-reset)
+    // kurz hintereinander für denselben Zustand aufgerufen werden — jeder Schreibzugriff auf
+    // frame.style zwingt den Browser zu einem Reflow, auch wenn sich der Wert gar nicht ändert.
+    // Das unnötig zu vermeiden macht mehrfaches Aufrufen "billig" und verhindert, dass sich
+    // minimale Rundungsschwankungen zwischen zwei getBoundingClientRect()-Aufrufen zu einem
+    // sichtbaren Zittern aufschaukeln können.
+    var next = top + "|" + left + "|" + bottom + "|" + width + "|" + height;
+    if (frame.dataset.syncKey === next) return;
+    frame.dataset.syncKey = next;
     frame.style.top = top + "px";
     frame.style.left = left + "px";
     frame.style.right = "0px";
     frame.style.bottom = bottom + "px";
-    // Ein <iframe> ist ein "replaced element" — bei position:fixed reicht das Setzen von
-    // top/left/right/bottom allein NICHT aus, um es zu strecken (anders als bei normalen
-    // <div>s); Breite/Höhe müssen zusätzlich explizit in Pixel berechnet werden.
-    frame.style.width = Math.max(0, window.innerWidth - left) + "px";
-    frame.style.height = Math.max(0, window.innerHeight - top - bottom) + "px";
+    frame.style.width = width + "px";
+    frame.style.height = height + "px";
   }
 
   /* ---------------- login / switch user ---------------- */
@@ -2126,7 +2191,7 @@
 
     var searchWrap = el("div", { class: "search-input-wrap" });
     searchWrap.innerHTML = icon("search", 16);
-    var searchInput = el("input", { type: "search", placeholder: "Kunde suchen (Name, Ort, Telefon) …", value: customerQuery });
+    var searchInput = el("input", { type: "search", placeholder: "Kunde suchen (Name, Ort, Telefon) …", value: customerQuery, "data-focus-key": "customer-search" });
     searchInput.addEventListener("input", debounce(function (e) { customerQuery = e.target.value; render(); }, 120));
     searchWrap.appendChild(searchInput);
     view.appendChild(searchWrap);
@@ -4219,7 +4284,7 @@
     if (archivePicker) view.appendChild(renderArchivePickerBanner());
 
     var filters = el("div", { class: "archive-filters" });
-    var searchInput = el("input", { type: "search", placeholder: "Suche (Kunde, Baustelle) …", value: archiveFilter.q, style: "flex:1;min-width:160px;" });
+    var searchInput = el("input", { type: "search", placeholder: "Suche (Kunde, Baustelle) …", value: archiveFilter.q, style: "flex:1;min-width:160px;", "data-focus-key": "archive-search" });
     searchInput.addEventListener("input", debounce(function (e) { archiveFilter.q = e.target.value; render(); }, 120));
     filters.appendChild(searchInput);
 
