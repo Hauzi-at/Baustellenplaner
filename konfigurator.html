@@ -2796,6 +2796,72 @@ function druckeKundenauftrag(kunde, kundeAdresse, positionen, gesamtEk, gesamtBr
     fenster.onload = () => { fenster.focus(); fenster.print(); };
     setTimeout(() => { fenster.focus(); fenster.print(); }, 400); // Fallback falls onload nicht feuert
 }
+// Reine Werkstatt-/Fertigungsliste (keine Preise) für ALLE Positionen eines Kunden über alle
+// Produkte hinweg — nutzt dieselbe "positionstext"-Angabe, die jeder der 6 Konfiguratoren beim
+// Speichern einer Position ohnehin schon als fertigen, mehrzeiligen Maß-/Zuschnitt-/Artikeltext
+// ablegt (siehe z. B. Rollladen "const positionstext = buildPositionstext();"). Dadurch muss hier
+// nichts neu berechnet werden — jede Position bringt ihre Fertigungsangaben schon fix und fertig mit.
+function druckeProduktionsliste(kunde, kundeAdresse, positionen) {
+    const heute = new Date().toLocaleDateString("de-AT");
+    const positionenHtml = positionen.map((p, idx) => {
+        const zeilenHtml = (p.item.positionstext || "—").split("\n").map((z) => `<div style="padding:3px 0;border-bottom:1px solid #EEEBE0;">${z}</div>`).join("");
+        return `
+    <div style="border:1px solid #D8D4C8;border-radius:8px;padding:12px 14px;margin-bottom:12px;break-inside:avoid;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;gap:10px;">
+        <div><span style="color:#8A8F98;font-size:11px;">#${idx + 1}</span> <span style="font-weight:700;font-size:14.5px;">${p.item.position || "—"}</span></div>
+        <div style="text-align:right;flex-shrink:0;">
+          <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#E8963B;font-weight:600;">${p.produktLabel}</div>
+          <div style="font-size:12px;color:#5B6472;">Menge: ${p.item.menge}×</div>
+        </div>
+      </div>
+      <div style="font-size:12.5px;font-family:monospace;color:#1B1F24;">${zeilenHtml}</div>
+    </div>`;
+    }).join("");
+    const adressZeile = [kundeAdresse === null || kundeAdresse === void 0 ? void 0 : kundeAdresse.street, kundeAdresse === null || kundeAdresse === void 0 ? void 0 : kundeAdresse.city].filter(Boolean).join(", ");
+    const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>Produktionsliste — ${kunde} — Druckübersicht</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 28px; color: #1B1F24; margin: 0; }
+      .kopf { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; border-bottom: 2px solid #1B1F24; padding-bottom: 14px; margin-bottom: 18px; }
+      .kopf-links { display: flex; align-items: center; gap: 14px; }
+      .kopf img { width: 56px; height: 56px; }
+      .firma { font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: #E8963B; font-weight: 600; }
+      .titel { font-size: 20px; font-weight: 700; }
+      .firma-adresse { font-size: 11px; color: #5B6472; text-align: right; line-height: 1.5; }
+      .kunde-block { background: #F5F4EF; border: 1px solid #E2DFD3; border-radius: 6px; padding: 12px 16px; margin-bottom: 18px; }
+      .kunde-block .label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #8A8F98; margin-bottom: 3px; }
+      .kunde-block .name { font-size: 16px; font-weight: 700; }
+      .kunde-block .adresse { font-size: 12.5px; color: #5B6472; margin-top: 2px; }
+      .meta { display: flex; justify-content: flex-end; font-size: 12.5px; color: #5B6472; margin-bottom: 10px; }
+      .hinweis { font-size: 11px; color: #8A8F98; margin-top: 18px; }
+      @media print { body { padding: 10px; } }
+    </style></head>
+    <body>
+      <div class="kopf">
+        <div class="kopf-links">
+          <img src="${LOGO_IMAGE}" alt="Logo" />
+          <div><div class="firma">${FIRMA.name} — Produktion</div><div class="titel">Produktionsliste</div></div>
+        </div>
+        <div class="firma-adresse">${FIRMA.street}<br>${FIRMA.city}<br>Tel.: ${FIRMA.tel} · ${FIRMA.mobile}<br>${FIRMA.mail}</div>
+      </div>
+      <div class="meta"><span><b>Datum:</b>&nbsp;${heute}</span></div>
+      <div class="kunde-block">
+        <div class="label">Auftraggeber</div>
+        <div class="name">${kunde || "—"}</div>
+        ${adressZeile ? `<div class="adresse">${adressZeile}</div>` : ""}
+      </div>
+      ${positionenHtml}
+      <p class="hinweis">${positionen.length} Position(en) über alle Produkte — reine Fertigungsliste, ohne Preise.</p>
+    </body></html>`;
+    const fenster = window.open("", "_blank");
+    if (!fenster) {
+        alert("Bitte Pop-ups für diese Seite erlauben, um drucken zu können.");
+        return;
+    }
+    fenster.document.write(html);
+    fenster.document.close();
+    fenster.onload = () => { fenster.focus(); fenster.print(); };
+    setTimeout(() => { fenster.focus(); fenster.print(); }, 400); // Fallback falls onload nicht feuert
+}
 // ============================================================
 // GEMEINSAME KUNDENVERWALTUNG (produktübergreifend, alle 6 Konfiguratoren teilen sich diese Liste)
 // ============================================================
@@ -5989,6 +6055,9 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
     const alleDrucken = () => {
         druckeKundenauftrag(ausgewaehlt, kundeAdresse, positionen, gesamtEk, gesamtBrutto);
     };
+    const produktionDrucken = () => {
+        druckeProduktionsliste(ausgewaehlt, kundeAdresse, positionen);
+    };
     return (React.createElement("div", { className: "min-h-screen w-full overflow-x-hidden", style: { background: "#F5F4EF" } },
         React.createElement("style", null, `* { font-family: 'Inter', -apple-system, sans-serif; } .font-oswald { font-family: 'Oswald', sans-serif; }`),
         React.createElement("div", { className: "max-w-5xl mx-auto px-4 py-6 md:py-10" },
@@ -6060,7 +6129,9 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
                         React.createElement("span", { className: "text-[18px] font-['IBM_Plex_Mono'] font-semibold text-[#1B1F24]" },
                             gesamtBrutto.toFixed(2),
                             " \u20AC")),
-                    React.createElement("button", { onClick: alleDrucken, className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333] transition-colors" }, "Kompletten Kundenauftrag drucken"))))))));
+                    React.createElement("div", { className: "flex flex-wrap justify-end gap-2" },
+                        React.createElement("button", { onClick: produktionDrucken, className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[13px] font-semibold hover:border-[#E8963B] transition-colors" }, "Produktionsliste drucken"),
+                        React.createElement("button", { onClick: alleDrucken, className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333] transition-colors" }, "Kompletten Kundenauftrag drucken")))))))));
 }
 // --- Produkt-Hub (Hauptseite) ---
 const PRODUKTE = [
@@ -6098,6 +6169,9 @@ function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, kundeDe
         await entfernePositionAusListe(produktKey, id);
     };
     const warenkorbGesamtBrutto = warenkorb.reduce((s, p) => { var _a; return s + ((_a = p.item.preisBrutto) !== null && _a !== void 0 ? _a : 0) * p.item.menge; }, 0);
+    const warenkorbProduktionDrucken = () => {
+        druckeProduktionsliste(aktiverKunde, kundeDetails, warenkorb);
+    };
     return (React.createElement("div", { className: "min-h-screen w-full overflow-x-hidden", style: { background: "#F5F4EF" } },
         React.createElement("style", null, `* { font-family: 'Inter', -apple-system, sans-serif; } .font-oswald { font-family: 'Oswald', sans-serif; }`),
         React.createElement("div", { className: "max-w-5xl mx-auto px-4 py-8 md:py-14" },
@@ -6142,6 +6216,7 @@ function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, kundeDe
                             React.createElement("button", { onClick: () => warenkorbEntfernen(p.produktKey, p.item.id), className: "text-[#8A8F98] hover:text-[#C0392B]", title: "Entfernen" },
                                 React.createElement(X, { size: 14 }))))))),
                     React.createElement("div", { className: "flex justify-end items-center gap-3 pt-2 border-t border-[#E2DFD3]" },
+                        React.createElement("button", { onClick: warenkorbProduktionDrucken, className: "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[12.5px] font-medium hover:border-[#E8963B] transition-colors mr-auto" }, "Produktionsliste drucken"),
                         React.createElement("span", { className: "text-[13px] text-[#5B6472]" }, "Gesamt (brutto)"),
                         React.createElement("span", { className: "text-[17px] font-['IBM_Plex_Mono'] font-semibold text-[#1B1F24]" }, `${warenkorbGesamtBrutto.toFixed(2)} €`)))))),
             React.createElement("button", { onClick: onKunden, className: "w-full text-left border-2 border-[#1B1F24] rounded-xl bg-[#1B1F24] p-5 mb-6 hover:bg-[#333] transition-colors" },
