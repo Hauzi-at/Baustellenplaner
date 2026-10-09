@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no">
 <title>TH Baustellenplaner</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Baustellenplaner">
 <style>
   :root {
     --ink: #1c2b38;
@@ -2031,14 +2034,20 @@
     // Das Formular hängt bewusst NICHT mehr inline in der (auf Desktop-Breitbildschirmen immer
     // noch recht schmalen) Tagesspalte, sondern öffnet als eigenes Dialogfenster (wie z. B. das
     // Mitarbeiter-Profil) — dort ist genug Platz, ohne dass Eingabefelder gequetscht wirken.
-    var addRow = el("div", { style: "display:flex;gap:6px;" });
-    var addBtn = el("button", { class: "add-assign-btn", style: "flex:1;" }, ["+ Auftrag zuweisen"]);
+    // flex-wrap + min-width:0 wie bei .assign-form .row-actions oben: In einer schmalen
+    // Tagesspalte (z. B. 7 Spalten nebeneinander auf einem iPad) passen "+ Auftrag zuweisen" und
+    // "+ Frei eintragen" nicht nebeneinander — ohne min-width:0 behalten Flex-Buttons aber ihre
+    // Mindestbreite (bestimmt durch das längste Wort) und die Zeile läuft dann über die Spalte
+    // hinaus in die Nachbarspalte hinein, statt zu umbrechen. Mit flex-wrap rutscht der zweite
+    // Button bei Platzmangel einfach in eine eigene Zeile darunter.
+    var addRow = el("div", { style: "display:flex;flex-wrap:wrap;gap:6px;" });
+    var addBtn = el("button", { class: "add-assign-btn", style: "flex:1 1 120px;min-width:0;" }, ["+ Auftrag zuweisen"]);
     addBtn.addEventListener("click", function () {
       archivePicker = { date: iso, employeeName: "" };
       currentTab = "archive";
       render();
     });
-    var freeBtn = el("button", { class: "add-assign-btn", style: "flex:1;" }, ["+ Frei eintragen"]);
+    var freeBtn = el("button", { class: "add-assign-btn", style: "flex:1 1 120px;min-width:0;" }, ["+ Frei eintragen"]);
     freeBtn.addEventListener("click", function () { openAssignModal(iso, null); });
     addRow.appendChild(addBtn);
     addRow.appendChild(freeBtn);
@@ -2572,6 +2581,97 @@
     actions.appendChild(saveBtn);
     card.appendChild(actions);
     return card;
+  }
+
+  // Modal-Variante der Kundenanlage: wird aus anderen Bereichen heraus geöffnet (aktuell "Neuer
+  // Auftrag" — Auftraggeber-Suche, "+ ... als neuen Kunden anlegen"), wo man mitten in einem
+  // anderen Formular steckt und nicht erst zu "Kunden" wechseln soll. Zeigt dieselben Felder wie
+  // renderCustomerEditor() (Name, Adresse, Telefon, E-Mail, Geschäftskunde/UID), aber als
+  // eigenständiges Overlay über #modal-root — unabhängig vom gerade aktiven Tab. "onCreated" wird
+  // mit dem neu angelegten Kunden (inkl. id) aufgerufen, sobald gespeichert wurde.
+  function openNewCustomerModal(prefillName, onCreated) {
+    var draft = { name: prefillName || "", street: "", city: "", plz: "", ort: "", phone: "", email: "", isBusiness: false, uid: "" };
+    renderNewCustomerModal(draft, onCreated);
+  }
+  function renderNewCustomerModal(draft, onCreated) {
+    var root = $("#modal-root");
+    root.innerHTML = "";
+    var backdrop = el("div", { class: "modal-backdrop" });
+    backdrop.addEventListener("click", function (e) { if (e.target === backdrop) closeAnyModal(); });
+    var sheet = el("div", { class: "modal-sheet" });
+
+    var head = el("div", { class: "modal-head" });
+    head.appendChild(el("h2", {}, ["Neuer Kunde"]));
+    var closeBtn = el("button", {}, []); closeBtn.innerHTML = icon("x", 20); closeBtn.addEventListener("click", closeAnyModal);
+    head.appendChild(closeBtn);
+    sheet.appendChild(head);
+
+    var nameField = fieldInput("Name / Auftraggeber", "name", draft.name, "Vor- und Nachname oder Firma");
+    nameField.input.addEventListener("input", function (e) { draft.name = e.target.value; });
+    sheet.appendChild(nameField.wrap);
+
+    var streetField = fieldInput("Straße", "street", draft.street, "Musterstraße 12");
+    streetField.input.addEventListener("input", function (e) { draft.street = e.target.value; });
+    sheet.appendChild(streetField.wrap);
+    sheet.appendChild(plzOrtFieldRow(draft, "city", "plz", "ort"));
+
+    var row2 = el("div", { class: "field-row cols-2" });
+    var phoneField = fieldInput("Telefon", "phone", draft.phone, "0664 1234567");
+    phoneField.input.addEventListener("input", function (e) { draft.phone = e.target.value; });
+    var emailField = fieldInput("E-Mail", "email", draft.email, "kunde@beispiel.at");
+    emailField.input.type = "email";
+    emailField.input.addEventListener("input", function (e) { draft.email = e.target.value; });
+    row2.appendChild(phoneField.wrap);
+    row2.appendChild(emailField.wrap);
+    sheet.appendChild(row2);
+
+    var bizField = el("div", { class: "field", style: "margin-top:2px;" });
+    var bizLabel = el("label", { style: "display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500;" }, []);
+    var bizCheckbox = el("input", { type: "checkbox" });
+    bizCheckbox.checked = !!draft.isBusiness;
+    bizCheckbox.addEventListener("change", function (e) { draft.isBusiness = e.target.checked; renderNewCustomerModal(draft, onCreated); });
+    bizLabel.appendChild(bizCheckbox);
+    bizLabel.appendChild(document.createTextNode(" Geschäftskunde"));
+    bizField.appendChild(bizLabel);
+    sheet.appendChild(bizField);
+
+    if (draft.isBusiness) {
+      var uidField = fieldInput("UID-Nr.", "uid", draft.uid, "ATU12345678");
+      uidField.input.addEventListener("input", function (e) { draft.uid = e.target.value; });
+      sheet.appendChild(uidField.wrap);
+    }
+
+    var errBox = el("div", { class: "banner", style: "background:var(--danger-bg);color:var(--danger);display:none;" }, [""]);
+    sheet.appendChild(errBox);
+
+    var actions = el("div", { style: "display:flex;justify-content:flex-end;gap:8px;" });
+    var cancelBtn = el("button", { class: "btn" }, ["Abbrechen"]);
+    cancelBtn.addEventListener("click", closeAnyModal);
+    actions.appendChild(cancelBtn);
+    var saveBtn = el("button", { class: "btn btn-primary" }, ["Kunde anlegen"]);
+    saveBtn.addEventListener("click", function () {
+      var name = nameField.input.value.trim();
+      if (!name) { nameField.input.focus(); return; }
+      if (!db) { errBox.textContent = "Keine Verbindung zur Datenbank."; errBox.style.display = "flex"; return; }
+      var payload = {
+        name: name,
+        street: streetField.input.value.trim(),
+        city: (draft.city || "").trim(),
+        phone: phoneField.input.value.trim(),
+        email: emailField.input.value.trim(),
+        isBusiness: !!bizCheckbox.checked,
+        uid: bizCheckbox.checked && uidField ? uidField.input.value.trim() : ""
+      };
+      db.collection("customers").add(Object.assign({}, payload, { createdAt: new Date().toISOString() })).then(function (ref) {
+        closeAnyModal();
+        if (onCreated) onCreated(Object.assign({ id: ref && ref.id }, payload));
+      }).catch(function () { errBox.textContent = "Anlegen nicht möglich."; errBox.style.display = "flex"; });
+    });
+    actions.appendChild(saveBtn);
+    sheet.appendChild(actions);
+
+    backdrop.appendChild(sheet);
+    root.appendChild(backdrop);
   }
 
   function fieldInput(label, key, value, placeholder) {
@@ -3708,12 +3808,18 @@
         var addItem = el("div", { class: "suggest-item add-new" }, ['+ "' + reportDraft.auftraggeber + '" als neuen Kunden anlegen']);
         addItem.addEventListener("mousedown", function (e) {
           e.preventDefault();
-          if (!db) { alert("Keine Verbindung zur Datenbank."); return; }
-          db.collection("customers").add({ name: reportDraft.auftraggeber.trim(), street: "", city: "", phone: "", createdAt: new Date().toISOString() }).then(function (ref) {
-            reportDraft.customerId = ref.id;
-            reportSuggestOpen = false;
+          reportSuggestOpen = false;
+          openNewCustomerModal(reportDraft.auftraggeber.trim(), function (created) {
+            reportDraft.customerId = created.id;
+            reportDraft.auftraggeber = created.name || "";
+            reportDraft.strasse = created.street || "";
+            reportDraft.telefon = created.phone || "";
+            var pickedPlzOrt = splitPlzOrt(created.city || "");
+            reportDraft.plz = pickedPlzOrt.plz;
+            reportDraft.ortOnly = pickedPlzOrt.ort;
+            reportDraft.ort = created.city || "";
             render();
-          }).catch(function () { alert("Anlegen nicht möglich."); });
+          });
         });
         sList.appendChild(addItem);
       }
