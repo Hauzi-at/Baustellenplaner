@@ -331,11 +331,11 @@
     display: flex; flex-direction: column; gap: 12px;
   }
   @media (min-width: 880px) {
-    /* Alle 7 Tage nebeneinander OHNE horizontales Scrollen — die Spalten passen sich der
-       tatsächlich verfügbaren Breite an, statt eine feste Mindestbreite von 1000px zu
-       erzwingen (das führte am PC dazu, dass Freitag/Samstag/Sonntag abgeschnitten wirkten). */
+    /* Nur Montag–Freitag (5 Tage) nebeneinander OHNE horizontales Scrollen — die Spalten passen
+       sich der tatsächlich verfügbaren Breite an, statt eine feste Mindestbreite zu erzwingen
+       (das führte am PC früher dazu, dass die letzte Spalte abgeschnitten wirkte). */
     .week-grid-scroll { overflow-x: auto; padding-bottom: 4px; }
-    .week-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; align-items: start; }
+    .week-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; align-items: start; }
   }
   /* Tagesansicht: EIN Tag, deutlich breiter als eine einzelne Wochenspalte. */
   .day-view-single { max-width: 480px; }
@@ -802,6 +802,14 @@
   function addDays(d, n) {
     var r = new Date(d);
     r.setDate(r.getDate() + n);
+    return r;
+  }
+  // Samstag/Sonntag werden in der Planung nicht gebraucht (nur Montag–Freitag) — überspringt
+  // beim Vor-/Zurückblättern in der Tagesansicht ein Wochenende in die angegebene Richtung
+  // (dir: +1 oder -1), statt einen Planungstag dafür anzuzeigen.
+  function skipWeekend(d, dir) {
+    var r = new Date(d);
+    while (r.getDay() === 0 || r.getDay() === 6) { r.setDate(r.getDate() + dir); }
     return r;
   }
   function isoDate(d) {
@@ -1405,10 +1413,11 @@
   // bei eigenen Aktionen, sondern auch automatisch bei JEDER Datenänderung irgendeiner anderen
   // Person (siehe subscribe()/onSnapshot weiter oben), z. B. wenn ein Kollege einen Auftrag
   // einteilt oder Stunden einträgt, während man selbst gerade ein Formular ausfüllt. Steht der
-  // Fokus dabei gerade in einem nativen Uhrzeit-/Datums-Feld (type="time"/"date", z. B.
-  // "Ankunft"/"Abfahrt") — deren Browser-eigenes Auswahlrad/Picker fest an das konkrete
-  // DOM-Element hängt — reißt ein kompletter Neuaufbau die laufende Eingabe ab: der Picker
-  // schließt sich bzw. die Auswahl wird verworfen, ohne dass ein change-Event ausgelöst wird.
+  // Fokus dabei gerade in einem nativen Uhrzeit-/Datums-/Farb-Feld (type="time"/"date"/"color",
+  // z. B. "Ankunft"/"Abfahrt" oder die Akzent-/Hintergrundfarbe in den Einstellungen) — deren
+  // Browser-eigenes Auswahlrad/Picker fest an das konkrete DOM-Element hängt — reißt ein
+  // kompletter Neuaufbau die laufende Eingabe ab: der Picker schließt sich bzw. die Auswahl wird
+  // verworfen, ohne dass ein change-Event ausgelöst wird.
   // Für die Person sieht das so aus, als ließe sich das Feld gar nicht ändern. Deshalb: solange
   // ein solches Feld innerhalb von #app fokussiert ist, wird der Neuaufbau zurückgestellt und
   // erst nachgeholt, sobald das Feld den Fokus wieder verliert (die Daten im Hintergrund sind ja
@@ -1417,7 +1426,7 @@
   // Auswahl-Handler) den sofortigen Neuaufbau erwartet, um Folgefelder ein-/auszublenden.
   var pendingRenderOnBlur = false;
   function isFragileNativePicker(node) {
-    return !!node && node.tagName === "INPUT" && (node.type === "time" || node.type === "date");
+    return !!node && node.tagName === "INPUT" && (node.type === "time" || node.type === "date" || node.type === "color");
   }
   // Live-Suchfelder (z. B. "Kunde suchen", Archiv-Suche) lösen bei jeder Eingabe render() aus,
   // damit die gefilterte Liste sofort mitwächst — anders als beim Datum/Zeit-Picker oben darf der
@@ -1886,7 +1895,7 @@
   var planningOpenDate = null; // date (iso) with the add-form open
   var planningEditId = null;
   var planningViewMode = "week"; // "week" | "day" — Umschalter Wochen-/Tagesansicht
-  var planningDayDate = new Date(); // aktuell angezeigter Tag in der Tagesansicht
+  var planningDayDate = skipWeekend(new Date(), 1); // aktuell angezeigter Tag in der Tagesansicht (Mo–Fr)
   // Aktiv, während im Archiv ein Auftrag für einen bestimmten Tag ausgewählt wird
   // (ausgelöst über "+ Zuweisen" in der Planung) — { date: iso, employeeName }.
   var archivePicker = null;
@@ -1918,13 +1927,13 @@
     if (planningViewMode === "day") {
       var prevD = el("button", { class: "btn btn-icon", title: "Vorheriger Tag" }, []);
       prevD.innerHTML = icon("chevronL", 18);
-      prevD.addEventListener("click", function () { planningDayDate = addDays(planningDayDate, -1); render(); });
+      prevD.addEventListener("click", function () { planningDayDate = skipWeekend(addDays(planningDayDate, -1), -1); render(); });
       var nextD = el("button", { class: "btn btn-icon", title: "Nächster Tag" }, []);
       nextD.innerHTML = icon("chevronR", 18);
-      nextD.addEventListener("click", function () { planningDayDate = addDays(planningDayDate, 1); render(); });
+      nextD.addEventListener("click", function () { planningDayDate = skipWeekend(addDays(planningDayDate, 1), 1); render(); });
       var dayLabel = WEEKDAYS[(planningDayDate.getDay() + 6) % 7] + ", " + planningDayDate.getDate() + ". " + MONTHS[planningDayDate.getMonth()] + " " + planningDayDate.getFullYear();
       var todayBtnD = el("button", { class: "btn btn-sm", style: "margin-left:8px;" }, ["Heute"]);
-      todayBtnD.addEventListener("click", function () { planningDayDate = new Date(); render(); });
+      todayBtnD.addEventListener("click", function () { planningDayDate = skipWeekend(new Date(), 1); render(); });
       nav.appendChild(prevD);
       nav.appendChild(el("span", { class: "label" }, [dayLabel]));
       nav.appendChild(nextD);
@@ -1936,7 +1945,7 @@
       var next = el("button", { class: "btn btn-icon", title: "Nächste Woche" }, []);
       next.innerHTML = icon("chevronR", 18);
       next.addEventListener("click", function () { weekStart = addDays(weekStart, 7); render(); });
-      var weekEnd = addDays(weekStart, 6);
+      var weekEnd = addDays(weekStart, 4);
       var label = fmtRange(weekStart, weekEnd);
       var todayBtn = el("button", { class: "btn btn-sm", style: "margin-left:8px;" }, ["Heute"]);
       todayBtn.addEventListener("click", function () { weekStart = startOfWeek(new Date()); render(); });
@@ -1956,7 +1965,7 @@
       view.appendChild(dayWrap);
     } else {
       var grid = el("div", { class: "week-grid" });
-      for (var i = 0; i < 7; i++) {
+      for (var i = 0; i < 5; i++) {
         grid.appendChild(renderDayCard(addDays(weekStart, i)));
       }
       var scrollWrap = el("div", { class: "week-grid-scroll" }, [grid]);
@@ -4974,6 +4983,15 @@
     return card;
   }
 
+  // Die zuletzt im Farbwähler ausgewählten, aber noch nicht gespeicherten Werte — unabhängig
+  // von getSettings() gehalten. Grund: renderColorSettingsCard() wird bei jedem render() komplett
+  // neu aufgebaut (siehe Kommentar oben bei render()), auch z. B. direkt beim Verlassen des
+  // Farbfelds (Fokusverlust nach dem Schließen des nativen Farbwählers). Ohne diesen Zwischenspeicher
+  // würde ein solcher Neuaufbau das <input type="color"> wieder mit dem alten, gespeicherten Wert
+  // befüllen und die gerade getroffene (aber noch nicht per "Farbe speichern" bestätigte) Auswahl
+  // optisch verwerfen — für die Person sähe das so aus, als ließe sich die Farbe gar nicht ändern.
+  var colorDraftAccent = null;
+  var colorDraftBg = null;
   function renderColorSettingsCard() {
     var s = getSettings();
     var card = el("div", { class: "card", style: "display:flex;flex-direction:column;gap:12px;" });
@@ -4983,13 +5001,17 @@
     var row = el("div", { class: "field-row cols-2" });
     var accentField = el("div", { class: "field" });
     accentField.appendChild(el("label", {}, ["Akzentfarbe (Knöpfe, Hervorhebungen)"]));
-    var accentInput = el("input", { type: "color", value: s.accentColor || "#4f7691", style: "height:42px;padding:4px;" });
+    var accentValue = colorDraftAccent != null ? colorDraftAccent : (s.accentColor || "#4f7691");
+    var accentInput = el("input", { type: "color", value: accentValue, style: "height:42px;padding:4px;" });
+    accentInput.addEventListener("input", function () { colorDraftAccent = accentInput.value; });
     accentField.appendChild(accentInput);
     row.appendChild(accentField);
 
     var bgField = el("div", { class: "field" });
     bgField.appendChild(el("label", {}, ["Hintergrundfarbe"]));
-    var bgInput = el("input", { type: "color", value: s.bgColor || "#f2f0ea", style: "height:42px;padding:4px;" });
+    var bgValue = colorDraftBg != null ? colorDraftBg : (s.bgColor || "#f2f0ea");
+    var bgInput = el("input", { type: "color", value: bgValue, style: "height:42px;padding:4px;" });
+    bgInput.addEventListener("input", function () { colorDraftBg = bgInput.value; });
     bgField.appendChild(bgInput);
     row.appendChild(bgField);
     card.appendChild(row);
@@ -4998,12 +5020,18 @@
     var resetBtn = el("button", { class: "btn" }, ["Zurücksetzen"]);
     resetBtn.addEventListener("click", function () {
       if (!db) return;
+      colorDraftAccent = null;
+      colorDraftBg = null;
       db.doc("settings/main").update({ accentColor: null, bgColor: null, updatedAt: new Date().toISOString() }).catch(function () {});
     });
     var saveBtn = el("button", { class: "btn btn-primary" }, ["Farbe speichern"]);
     saveBtn.addEventListener("click", function () {
       if (!db) { alert("Keine Verbindung zur Datenbank."); return; }
-      db.doc("settings/main").update({ accentColor: accentInput.value, bgColor: bgInput.value, updatedAt: new Date().toISOString() }).catch(function () { alert("Speichern nicht möglich."); });
+      var toSave = { accentColor: accentInput.value, bgColor: bgInput.value, updatedAt: new Date().toISOString() };
+      db.doc("settings/main").update(toSave).then(function () {
+        colorDraftAccent = null;
+        colorDraftBg = null;
+      }).catch(function () { alert("Speichern nicht möglich."); });
     });
     actions.appendChild(resetBtn);
     actions.appendChild(saveBtn);

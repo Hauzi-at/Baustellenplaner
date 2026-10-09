@@ -445,7 +445,7 @@ function __trySyncOutbox() {
       var req;
       if (item.type === "kv-set") req = __thbpClient.from("kv_store").upsert({ key: item.key, value: item.value, updatedAt: new Date().toISOString() }, { onConflict: "key" });
       else if (item.type === "kv-delete") req = __thbpClient.from("kv_store").delete().eq("key", item.key);
-      else if (item.type === "customer-insert") req = __thbpClient.from("customers").insert({ name: item.name, street: "", city: "", phone: "", createdAt: new Date().toISOString() });
+      else if (item.type === "customer-insert") req = __thbpClient.from("customers").insert({ name: item.name, street: item.street || "", city: item.city || "", phone: item.phone || "", email: item.email || "", isBusiness: !!item.isBusiness, uid: item.uid || "", createdAt: new Date().toISOString() });
       else req = Promise.resolve({ error: null });
       return req.then(function (res) {
         if (res.error) throw res.error;
@@ -2827,17 +2827,30 @@ function loadKundeVollDetails(name, cb) {
         cb((res && res.data) || null);
     }).catch(() => cb(null));
 }
-// Legt bei Bedarf einen neuen Kunden in der gemeinsamen Kundendatenbank an (nur mit Namen —
-// Adresse/Telefon können später jederzeit im Baustellenplaner unter "Kunden" ergänzt werden).
-function kundeInDbAnlegen(name) {
+// Legt einen neuen Kunden in der gemeinsamen Kundendatenbank an — inkl. Adresse/Telefon/E-Mail/
+// Geschäftskunde-Angaben, falls beim Anlegen gleich mit ausgefüllt (siehe KundenAuswahl weiter
+// unten). "payload" kann auch nur { name } sein (z. B. von altem Aufrufcode) — fehlende Felder
+// werden dann als leer angelegt und können jederzeit im Baustellenplaner unter "Kunden" ergänzt
+// werden.
+function kundeInDbAnlegen(payload) {
     if (!__thbpClient) return Promise.resolve();
-    return __thbpClient.from("customers").insert({ name: name, street: "", city: "", phone: "", createdAt: new Date().toISOString() }).then((res) => {
+    const row = {
+        name: payload.name,
+        street: payload.street || "",
+        city: payload.city || "",
+        phone: payload.phone || "",
+        email: payload.email || "",
+        isBusiness: !!payload.isBusiness,
+        uid: payload.uid || "",
+        createdAt: new Date().toISOString(),
+    };
+    return __thbpClient.from("customers").insert(row).then((res) => {
         if (res && res.error) throw res.error;
     }).catch(() => {
         // Kein Empfang (oder Server-Fehler): Kunde ist lokal trotzdem sofort nutzbar (siehe
-        // kundeAnlegen()); der Eintrag in der gemeinsamen Kundendatenbank wird nachgeholt,
-        // sobald wieder Netz da ist.
-        __pushOutbox({ type: "customer-insert", name: name });
+        // kundeAnlegen()); der Eintrag in der gemeinsamen Kundendatenbank wird mit allen Feldern
+        // nachgeholt, sobald wieder Netz da ist (siehe __trySyncOutbox).
+        __pushOutbox(Object.assign({ type: "customer-insert" }, row));
     });
 }
 // Aktiver Kunde — produktübergreifend, damit man erst den Kunden wählt und dann mehrere Produkte
@@ -2940,31 +2953,60 @@ function KundenAuswahl({ value, onChange }) {
     const [kunden, setKunden] = useState([]);
     const [neuModus, setNeuModus] = useState(false);
     const [neuName, setNeuName] = useState("");
+    const [neuStrasse, setNeuStrasse] = useState("");
+    const [neuOrt, setNeuOrt] = useState("");
+    const [neuTelefon, setNeuTelefon] = useState("");
+    const [neuEmail, setNeuEmail] = useState("");
+    const [neuGeschaeftskunde, setNeuGeschaeftskunde] = useState(false);
+    const [neuUid, setNeuUid] = useState("");
     const [offen, setOffen] = useState(false);
     const [suchtext, setSuchtext] = useState("");
     useEffect(() => { loadKunden(setKunden); }, []);
-    const kundeAnlegen = (nameOverride) => {
-        const name = (nameOverride !== undefined ? nameOverride : neuName).trim();
+    const neuFormOeffnen = (nameVorausgefuellt) => {
+        setNeuName(nameVorausgefuellt || "");
+        setNeuStrasse(""); setNeuOrt(""); setNeuTelefon(""); setNeuEmail(""); setNeuGeschaeftskunde(false); setNeuUid("");
+        setNeuModus(true);
+    };
+    const neuFormSchliessen = () => { setNeuModus(false); setNeuName(""); setNeuStrasse(""); setNeuOrt(""); setNeuTelefon(""); setNeuEmail(""); setNeuGeschaeftskunde(false); setNeuUid(""); };
+    const kundeAnlegen = () => {
+        const name = neuName.trim();
         if (!name)
             return;
         if (!kunden.includes(name)) {
             const next = [...kunden, name].sort((a, b) => a.localeCompare(b, "de"));
             setKunden(next);
-            kundeInDbAnlegen(name);
+            kundeInDbAnlegen({
+                name,
+                street: neuStrasse.trim(),
+                city: neuOrt.trim(),
+                phone: neuTelefon.trim(),
+                email: neuEmail.trim(),
+                isBusiness: neuGeschaeftskunde,
+                uid: neuGeschaeftskunde ? neuUid.trim() : "",
+            });
         }
         onChange(name);
-        setNeuModus(false);
-        setNeuName("");
         setSuchtext("");
         setOffen(false);
+        neuFormSchliessen();
     };
     if (neuModus) {
-        return (React.createElement("div", { className: "flex flex-col gap-1" },
+        const feldClass = "border border-[#D8D4C8] rounded-md px-2.5 py-1.5 text-[14px] outline-none focus:border-[#E8963B]";
+        return (React.createElement("div", { className: "flex flex-col gap-2 border border-[#D8D4C8] rounded-md bg-[#FAF9F5] p-3" },
             React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Neuer Kunde"),
-            React.createElement("div", { className: "flex gap-1.5" },
-                React.createElement("input", { autoFocus: true, value: neuName, onChange: (e) => setNeuName(e.target.value), onKeyDown: (e) => e.key === "Enter" && kundeAnlegen(), placeholder: "Name", className: "flex-1 border border-[#D8D4C8] rounded-md px-2.5 py-1.5 text-[14px] outline-none focus:border-[#E8963B]" }),
-                React.createElement("button", { onClick: () => kundeAnlegen(), className: "px-3 py-1.5 rounded-md bg-[#E8963B] text-white text-[13px] font-semibold" }, "OK"),
-                React.createElement("button", { onClick: () => { setNeuModus(false); setNeuName(""); }, className: "px-2.5 py-1.5 rounded-md border border-[#D8D4C8] text-[#5B6472] text-[13px]" }, "\u2715"))));
+            React.createElement("input", { autoFocus: true, value: neuName, onChange: (e) => setNeuName(e.target.value), placeholder: "Name *", className: feldClass }),
+            React.createElement("input", { value: neuStrasse, onChange: (e) => setNeuStrasse(e.target.value), placeholder: "Stra\u00dfe", className: feldClass }),
+            React.createElement("input", { value: neuOrt, onChange: (e) => setNeuOrt(e.target.value), placeholder: "PLZ Ort", className: feldClass }),
+            React.createElement("div", { className: "grid grid-cols-2 gap-1.5" },
+                React.createElement("input", { value: neuTelefon, onChange: (e) => setNeuTelefon(e.target.value), placeholder: "Telefon", className: feldClass }),
+                React.createElement("input", { type: "email", value: neuEmail, onChange: (e) => setNeuEmail(e.target.value), placeholder: "E-Mail", className: feldClass })),
+            React.createElement("label", { className: "flex items-center gap-2 text-[13px] text-[#1B1F24] cursor-pointer" },
+                React.createElement("input", { type: "checkbox", checked: neuGeschaeftskunde, onChange: (e) => setNeuGeschaeftskunde(e.target.checked) }),
+                "Gesch\u00e4ftskunde"),
+            neuGeschaeftskunde && React.createElement("input", { value: neuUid, onChange: (e) => setNeuUid(e.target.value), placeholder: "UID-Nr.", className: feldClass }),
+            React.createElement("div", { className: "flex gap-1.5 justify-end mt-1" },
+                React.createElement("button", { type: "button", onClick: neuFormSchliessen, className: "px-2.5 py-1.5 rounded-md border border-[#D8D4C8] text-[#5B6472] text-[13px]" }, "Abbrechen"),
+                React.createElement("button", { type: "button", onClick: kundeAnlegen, className: "px-3 py-1.5 rounded-md bg-[#E8963B] text-white text-[13px] font-semibold" }, "Kunde anlegen"))));
     }
     const suchtextGetrimmt = suchtext.trim();
     const gefiltert = suchtextGetrimmt
@@ -2981,7 +3023,7 @@ function KundenAuswahl({ value, onChange }) {
                         else if (e.key === "Enter") {
                             e.preventDefault();
                             if (gefiltert.length >= 1) waehle(gefiltert[0]);
-                            else if (suchtextGetrimmt) kundeAnlegen(suchtextGetrimmt);
+                            else if (suchtextGetrimmt) neuFormOeffnen(suchtextGetrimmt);
                         }
                     }, className: "w-full border border-[#D8D4C8] rounded-md pl-8 pr-2.5 py-1.5 text-[14px] outline-none focus:border-[#E8963B] bg-white" })),
             offen && React.createElement("div", { className: "absolute z-20 left-0 right-0 mt-1 border border-[#D8D4C8] rounded-md bg-white shadow-lg max-h-[240px] overflow-y-auto" },
@@ -2989,7 +3031,7 @@ function KundenAuswahl({ value, onChange }) {
                 gefiltert.length === 0
                     ? React.createElement("div", { className: "px-3 py-2 text-[13px] text-[#8A8F98]" }, "Keine Treffer.")
                     : gefiltert.map((k) => (React.createElement("button", { key: k, type: "button", onMouseDown: (e) => e.preventDefault(), onClick: () => waehle(k), className: "w-full text-left px-3 py-2 text-[14px] text-[#1B1F24] hover:bg-[#FFF8EF]" }, k))),
-                React.createElement("button", { type: "button", onMouseDown: (e) => e.preventDefault(), onClick: () => { setNeuName(suchtextGetrimmt); setNeuModus(true); }, className: "w-full text-left px-3 py-2 text-[13.5px] text-[#E8963B] font-medium border-t border-[#E2DFD3] hover:bg-[#FFF8EF]" }, suchtextGetrimmt ? `+ \u201e${suchtextGetrimmt}\u201c als neuen Kunden anlegen` : "+ Neuer Kunde\u2026")))));
+                React.createElement("button", { type: "button", onMouseDown: (e) => e.preventDefault(), onClick: () => neuFormOeffnen(suchtextGetrimmt), className: "w-full text-left px-3 py-2 text-[13.5px] text-[#E8963B] font-medium border-t border-[#E2DFD3] hover:bg-[#FFF8EF]" }, suchtextGetrimmt ? `+ \u201e${suchtextGetrimmt}\u201c als neuen Kunden anlegen` : "+ Neuer Kunde\u2026")))));
 }
 // (Der frühere eigene App-PIN-Screen "PasswordGate" entfällt — siehe Hinweis oben.)
 // ============================================================
