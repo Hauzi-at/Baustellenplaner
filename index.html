@@ -1896,9 +1896,16 @@
   var planningEditId = null;
   var planningViewMode = "week"; // "week" | "day" — Umschalter Wochen-/Tagesansicht
   var planningDayDate = skipWeekend(new Date(), 1); // aktuell angezeigter Tag in der Tagesansicht (Mo–Fr)
-  // Aktiv, während im Archiv ein Auftrag für einen bestimmten Tag ausgewählt wird
-  // (ausgelöst über "+ Zuweisen" in der Planung) — { date: iso, employeeName }.
+  // Aktiv, während im Archiv ein Auftrag für einen oder mehrere Tage ausgewählt wird
+  // (ausgelöst über "+ Auftrag zuweisen" in der Planung) — { dates: [iso, ...], employeeName }.
+  // "dates" ersetzt das frühere einzelne "date", damit ein Auftrag auf mehrere Tage verteilt
+  // werden kann (z. B. ein mehrtägiger Einsatz).
   var archivePicker = null;
+  var archivePickerWeekStart = startOfWeek(new Date()); // aktuell im Tages-Picker angezeigte Woche
+  // Analog für "+ Frei eintragen" (Subunternehmer-Einträge ohne Auftragsbezug) — nur beim
+  // Neuanlegen relevant; beim Bearbeiten eines bestehenden Eintrags bleibt es bei einem Tag.
+  var freieEintragTage = [];
+  var freieEintragWeekStart = startOfWeek(new Date());
 
   function teamMemberNames() {
     var names = Array.from(new Set(state.team.map(function (m) { return m.name; }).concat(currentUser ? [currentUser] : []).filter(Boolean)));
@@ -1985,6 +1992,58 @@
     return el("div", { class: "banner", style: "background:var(--card-raised);color:var(--muted);" }, [text]);
   }
 
+  // Wiederverwendbarer Mehrtages-Picker: zeigt eine Woche (Mo–Fr) mit anklickbaren Tages-Chips,
+  // die einen angeklickten Tag an/abwählen, plus Wochen-Navigation. "ausgewaehlt" ist das Array
+  // der aktuell gewählten ISO-Daten (vom Aufrufer verwaltet); "onToggle(iso)" wird bei einem
+  // Klick auf einen Tages-Chip aufgerufen und muss das Array selbst anpassen. Wird sowohl beim
+  // "+ Auftrag zuweisen"-Banner im Archiv als auch bei "+ Frei eintragen" verwendet.
+  //
+  // "rerenderFn" (optional, Standard: das globale render()) ist die Funktion, die nach einem
+  // Klick (Tag umschalten oder Woche blättern) aufgerufen wird, um die Anzeige zu aktualisieren.
+  // Wichtig beim Einsatz INNERHALB des "Frei eintragen"-Dialogfensters: das Dialogfenster hängt
+  // in einem eigenen #modal-root und wird vom globalen render() NICHT mit neu aufgebaut (das
+  // baut nur #app neu auf) — dort muss stattdessen renderAssignModal() übergeben werden, sonst
+  // bleiben angeklickte Tages-Chips optisch unverändert, obwohl die Auswahl im Hintergrund
+  // korrekt aktualisiert wird.
+  function renderTageAuswahl(ausgewaehlt, weekStartGetter, weekStartSetter, onToggle, rerenderFn) {
+    var doRerender = rerenderFn || render;
+    var wrap = el("div", { style: "display:flex;flex-direction:column;gap:6px;" });
+    var ws = weekStartGetter();
+
+    var nav = el("div", { style: "display:flex;align-items:center;gap:6px;" });
+    var prevBtn = el("button", { class: "btn btn-icon btn-sm", title: "Vorherige Woche", type: "button" }, []);
+    prevBtn.innerHTML = icon("chevronL", 14);
+    prevBtn.addEventListener("click", function () { weekStartSetter(addDays(weekStartGetter(), -7)); doRerender(); });
+    var nextBtn = el("button", { class: "btn btn-icon btn-sm", title: "Nächste Woche", type: "button" }, []);
+    nextBtn.innerHTML = icon("chevronR", 14);
+    nextBtn.addEventListener("click", function () { weekStartSetter(addDays(weekStartGetter(), 7)); doRerender(); });
+    nav.appendChild(prevBtn);
+    nav.appendChild(el("span", { style: "font-size:12px;color:var(--muted);" }, [fmtRange(ws, addDays(ws, 4))]));
+    nav.appendChild(nextBtn);
+    wrap.appendChild(nav);
+
+    var chips = el("div", { style: "display:flex;gap:6px;flex-wrap:wrap;" });
+    for (var i = 0; i < 5; i++) {
+      var d = addDays(ws, i);
+      var iso = isoDate(d);
+      var active = ausgewaehlt.indexOf(iso) !== -1;
+      var chip = el("button", {
+        type: "button",
+        class: "btn btn-sm" + (active ? " btn-primary" : ""),
+        style: "display:flex;flex-direction:column;align-items:center;gap:1px;padding:5px 9px;line-height:1.1;"
+      }, [
+        WEEKDAYS[(d.getDay() + 6) % 7].slice(0, 2),
+        el("span", { style: "font-size:11px;" }, [d.getDate() + "." + (d.getMonth() + 1) + "."])
+      ]);
+      chip.addEventListener("click", (function (clickedIso) {
+        return function () { onToggle(clickedIso); doRerender(); };
+      })(iso));
+      chips.appendChild(chip);
+    }
+    wrap.appendChild(chips);
+    return wrap;
+  }
+
   function renderDayCard(date) {
     var iso = isoDate(date);
     var isToday = iso === todayIso();
@@ -2052,7 +2111,8 @@
     var addRow = el("div", { style: "display:flex;flex-wrap:wrap;gap:6px;" });
     var addBtn = el("button", { class: "add-assign-btn", style: "flex:1 1 120px;min-width:0;" }, ["+ Auftrag zuweisen"]);
     addBtn.addEventListener("click", function () {
-      archivePicker = { date: iso, employeeName: "" };
+      archivePicker = { dates: [iso], employeeName: "" };
+      archivePickerWeekStart = startOfWeek(date);
       currentTab = "archive";
       render();
     });
@@ -2070,6 +2130,12 @@
   function openAssignModal(iso, existing) {
     planningOpenDate = iso;
     planningEditId = existing ? existing.id : null;
+    if (!existing) {
+      // Neuanlage: Mehrtages-Picker auf den angeklickten Tag zurücksetzen (bearbeiten bleibt
+      // weiterhin auf genau einen Tag beschränkt).
+      freieEintragTage = [iso];
+      freieEintragWeekStart = startOfWeek(new Date(iso + "T00:00:00"));
+    }
     renderAssignModal();
   }
   function closeAssignModal() {
@@ -2111,6 +2177,26 @@
   function renderAssignForm(iso, existing) {
     var form = el("div", { class: "assign-form" });
 
+    if (!existing) {
+      // Nur bei Neuanlage: Mehrtages-Auswahl, damit ein Subunternehmer-Einsatz auf einmal für
+      // mehrere Tage eingetragen werden kann. Beim Bearbeiten eines bestehenden Eintrags bleibt
+      // es beim einen Tag, zu dem er gehört (iso).
+      var daysField = el("div", { class: "field" }, [el("label", {}, ["Tag(e)"])]);
+      daysField.appendChild(renderTageAuswahl(
+        freieEintragTage,
+        function () { return freieEintragWeekStart; },
+        function (d) { freieEintragWeekStart = d; },
+        function (clickedIso) {
+          var idx = freieEintragTage.indexOf(clickedIso);
+          if (idx === -1) freieEintragTage.push(clickedIso);
+          else if (freieEintragTage.length > 1) freieEintragTage.splice(idx, 1);
+          // Mindestens ein Tag muss ausgewählt bleiben.
+        },
+        renderAssignModal
+      ));
+      form.appendChild(daysField);
+    }
+
     var empField = el("div", { class: "field" }, [el("label", {}, ["Mitarbeiter"])]);
     var empSelect = el("select", {});
     empSelect.appendChild(el("option", { value: "" }, ["— wählen —"]));
@@ -2151,9 +2237,9 @@
       var site = siteInput.value.trim();
       if (!emp) { empSelect.focus(); return; }
       var orderRaw = orderInput.value.trim();
-      var payload = { date: iso, employeeName: emp, site: site, note: noteInput.value.trim(), sortOrder: orderRaw === "" ? null : parseInt(orderRaw, 10) };
-      if (existing) updateAssignment(existing, payload);
-      else addAssignment(payload);
+      var baseFields = { employeeName: emp, site: site, note: noteInput.value.trim(), sortOrder: orderRaw === "" ? null : parseInt(orderRaw, 10) };
+      if (existing) updateAssignment(existing, Object.assign({ date: iso }, baseFields));
+      else addAssignmentsForDates(freieEintragTage, baseFields);
     });
     rowActions.appendChild(cancelBtn);
     rowActions.appendChild(saveBtn);
@@ -2165,6 +2251,19 @@
     if (!db) { alert("Keine Verbindung zur Datenbank."); return; }
     payload.createdAt = new Date().toISOString();
     db.collection("assignments").add(payload).then(function () {
+      closeAssignModal(); render();
+    }).catch(function () { alert("Speichern nicht möglich. Bitte erneut versuchen."); });
+  }
+  // Legt für "+ Frei eintragen" (Neuanlage) einen eigenen Datensatz pro ausgewähltem Tag an,
+  // damit ein Subunternehmer-Einsatz auf mehrere Tage verteilt werden kann.
+  function addAssignmentsForDates(dates, baseFields) {
+    if (!db) { alert("Keine Verbindung zur Datenbank."); return; }
+    if (!dates || dates.length === 0) { alert("Bitte mindestens einen Tag auswählen."); return; }
+    var now = new Date().toISOString();
+    var inserts = dates.map(function (d) {
+      return db.collection("assignments").add(Object.assign({ date: d, createdAt: now }, baseFields));
+    });
+    Promise.all(inserts).then(function () {
       closeAssignModal(); render();
     }).catch(function () { alert("Speichern nicht möglich. Bitte erneut versuchen."); });
   }
@@ -4244,27 +4343,48 @@
     }
   }
 
-  // Erstellt/aktualisiert bei Bedarf einen verknüpften Eintrag in der Planungs-Kalenderwoche
-  // ("assignments"), wenn dem Auftrag Mitarbeiter + Datum zugewiesen wurden — so taucht ein
-  // vom Chef eingeteilter Auftrag automatisch in der Planung auf, ohne dass er ihn dort noch
-  // einmal separat anlegen muss.
-  function syncAssignmentForReport(reportId, data) {
+  // Erstellt/aktualisiert/löscht bei Bedarf die verknüpften Einträge in der Planungs-
+  // Kalenderwoche ("assignments"), wenn dem Auftrag Mitarbeiter + Datum zugewiesen wurden — so
+  // taucht ein vom Chef eingeteilter Auftrag automatisch in der Planung auf, ohne dass er ihn
+  // dort noch einmal separat anlegen muss.
+  //
+  // "explicitDates" (optionales Array von ISO-Daten) erlaubt es, einen Auftrag auf MEHRERE Tage
+  // zu verteilen (z. B. ein mehrtägiger Einsatz, zugewiesen über den Mehrtages-Picker im
+  // Archiv). Wird es nicht übergeben, verhält sich die Funktion wie bisher und nimmt
+  // "data.scheduledDate" als einzigen Tag (genutzt vom normalen Auftrags-Formular, das weiterhin
+  // nur ein Datumsfeld hat). Bereits bestehende verknüpfte Einträge zu Tagen, die nicht mehr in
+  // der Auswahl sind, werden gelöscht — so bleibt die Planung konsistent, wenn Tage abgewählt
+  // werden.
+  function syncAssignmentForReport(reportId, data, explicitDates) {
     if (!db) return;
-    if (!data.assignedTo || !data.scheduledDate) return;
-    var payload = {
-      date: data.scheduledDate,
+    var dates = (explicitDates && explicitDates.length) ? explicitDates : (data.scheduledDate ? [data.scheduledDate] : []);
+    if (!data.assignedTo || dates.length === 0) return;
+
+    var basePayload = {
       employeeName: data.assignedTo,
       site: data.baustelle || data.auftraggeber || "",
       note: "Auftrag im Archiv" + (data.pauseNote ? (" – " + data.pauseNote) : ""),
       reportId: reportId
     };
-    var existing = state.assignments.find(function (a) { return a.reportId === reportId; });
-    if (existing) {
-      db.doc("assignments/" + existing.id).update(payload).catch(function () {});
-    } else {
-      payload.createdAt = new Date().toISOString();
-      db.collection("assignments").add(payload).catch(function () {});
-    }
+    var existingList = state.assignments.filter(function (a) { return a.reportId === reportId; });
+    var datesSet = {};
+    dates.forEach(function (d) { datesSet[d] = true; });
+
+    // Verknüpfte Einträge zu abgewählten Tagen entfernen.
+    existingList.forEach(function (a) {
+      if (!datesSet[a.date]) db.doc("assignments/" + a.id).delete().catch(function () {});
+    });
+    // Je ausgewähltem Tag: bestehenden Eintrag aktualisieren oder neu anlegen.
+    dates.forEach(function (d) {
+      var existing = existingList.find(function (a) { return a.date === d; });
+      var payload = Object.assign({ date: d }, basePayload);
+      if (existing) {
+        db.doc("assignments/" + existing.id).update(payload).catch(function () {});
+      } else {
+        payload.createdAt = new Date().toISOString();
+        db.collection("assignments").add(payload).catch(function () {});
+      }
+    });
   }
 
   function completeReport() {
@@ -4347,17 +4467,28 @@
      Archiv
      ===================================================================== */
 
-  // Banner am Kopf des Archivs, solange über "+ Zuweisen" in der Planung ein Auftrag für
-  // einen bestimmten Tag gesucht wird — Mitarbeiter hier wählen, dann bei einem Auftrag in
-  // der Liste unten auf "→ Diesem Tag zuweisen" klicken.
+  // Banner am Kopf des Archivs, solange über "+ Auftrag zuweisen" in der Planung ein Auftrag für
+  // einen oder mehrere Tage gesucht wird — Mitarbeiter + Tag(e) hier wählen, dann bei einem
+  // Auftrag in der Liste unten auf "→ Zuweisen" klicken.
   function renderArchivePickerBanner() {
     var banner = el("div", { class: "picker-banner" });
     banner.appendChild(el("div", {}, [
-      el("strong", {}, ["Auftrag einteilen für " + deDateFromIso(archivePicker.date) + ":"]),
+      el("strong", {}, ["Auftrag einteilen:"]),
       el("span", { style: "display:block;font-size:12.5px;color:var(--muted);margin-top:2px;" },
-        ["Mitarbeiter wählen, dann unten bei einem Auftrag auf „Diesem Tag zuweisen“ klicken."])
+        ["Mitarbeiter wählen, Tag(e) anklicken, dann unten bei einem Auftrag auf „Zuweisen“ klicken."])
     ]));
-    var controls = el("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap;" });
+    banner.appendChild(renderTageAuswahl(
+      archivePicker.dates,
+      function () { return archivePickerWeekStart; },
+      function (d) { archivePickerWeekStart = d; },
+      function (clickedIso) {
+        var idx = archivePicker.dates.indexOf(clickedIso);
+        if (idx === -1) archivePicker.dates.push(clickedIso);
+        else if (archivePicker.dates.length > 1) archivePicker.dates.splice(idx, 1);
+        // Mindestens ein Tag muss ausgewählt bleiben.
+      }
+    ));
+    var controls = el("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;" });
     var empSelect = el("select", {});
     empSelect.appendChild(el("option", { value: "" }, ["— Mitarbeiter wählen —"]));
     teamMemberNames().forEach(function (n) {
@@ -4377,10 +4508,15 @@
   function assignReportToEmployee(r) {
     if (!archivePicker) return;
     if (!archivePicker.employeeName) { alert("Bitte zuerst oben einen Mitarbeiter auswählen."); return; }
+    if (!archivePicker.dates || archivePicker.dates.length === 0) { alert("Bitte mindestens einen Tag auswählen."); return; }
     if (!db) { alert("Keine Verbindung zur Datenbank."); return; }
-    var payload = { assignedTo: archivePicker.employeeName, scheduledDate: archivePicker.date };
+    // scheduledDate (singuläres Feld am Auftrag) bekommt weiterhin nur den frühesten Tag, damit
+    // ältere Anzeigen (z. B. die Archiv-Zeile "zugewiesen: ... (Datum)") sinnvoll bleiben — die
+    // eigentliche Mehrtages-Einteilung steckt in den verknüpften "assignments"-Einträgen.
+    var sortedDates = archivePicker.dates.slice().sort();
+    var payload = { assignedTo: archivePicker.employeeName, scheduledDate: sortedDates[0] };
     db.doc("reports/" + r.id).update(payload).then(function () {
-      syncAssignmentForReport(r.id, Object.assign({}, r, payload));
+      syncAssignmentForReport(r.id, Object.assign({}, r, payload), archivePicker.dates);
       archivePicker = null;
       currentTab = "planning";
       render();
@@ -4466,7 +4602,7 @@
     info.appendChild(el("div", { class: "m" }, [metaText]));
     row.appendChild(info);
     if (archivePicker) {
-      var pickBtn = el("button", { class: "btn btn-sm btn-primary" }, ["→ Diesem Tag zuweisen"]);
+      var pickBtn = el("button", { class: "btn btn-sm btn-primary" }, ["→ Zuweisen"]);
       pickBtn.addEventListener("click", function (e) { e.stopPropagation(); assignReportToEmployee(r); });
       row.appendChild(pickBtn);
     } else {
