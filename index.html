@@ -689,6 +689,7 @@
   var reportSuggestOpen = false;
   var reportPrefillDismissed = false;
   var reportPauseUiOpen = false; // "Nicht abschließbar" Panel (Zurückstellen / Folgeauftrag) sichtbar?
+  var reportSavedFlash = false; // kurze "Gespeichert ✓"-Bestätigung nach Klick auf "Speichern"
   var archiveFilter = { q: "", employee: "", type: "", status: "" };
   var archiveOpenReport = null; // report currently shown in modal
 
@@ -3776,6 +3777,7 @@
     reportPrefillDismissed = false;
     reportSuggestOpen = false;
     reportPauseUiOpen = false;
+    reportSavedFlash = false;
   }
 
   // Lädt einen bestehenden Bericht (egal welcher Status) zum Weiterbearbeiten in den
@@ -3805,6 +3807,7 @@
     reportPrefillDismissed = true;
     reportSuggestOpen = false;
     reportPauseUiOpen = false;
+    reportSavedFlash = false;
     closeModal();
     currentTab = "report";
     render();
@@ -4000,7 +4003,10 @@
 
     if (reportPauseUiOpen) view.appendChild(renderPausePanel());
 
-    var footerActions = el("div", { style: "display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;" });
+    var footerActions = el("div", { style: "display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;" });
+    if (reportSavedFlash) {
+      footerActions.appendChild(el("span", { style: "color:#2e7d32;font-size:13px;font-weight:600;margin-right:auto;" }, ["Gespeichert ✓"]));
+    }
     var resetBtn = el("button", { class: "btn" }, ["Verwerfen"]);
     resetBtn.addEventListener("click", function () {
       if (!confirm("Eingaben verwerfen?")) return;
@@ -4010,12 +4016,20 @@
     });
     var pauseBtn = el("button", { class: "btn btn-ghost" }, ["Nicht abschließbar …"]);
     pauseBtn.addEventListener("click", function () { reportPauseUiOpen = !reportPauseUiOpen; render(); });
+    footerActions.appendChild(resetBtn);
+    footerActions.appendChild(pauseBtn);
+    // "Speichern" (Status unverändert) gibt es nur beim Bearbeiten eines bereits bestehenden
+    // Auftrags — bei einem neuen Auftrag (noch keine id) ist "Als offenen Auftrag speichern" der
+    // naheliegende erste Speicherpunkt.
+    if (reportDraft.id) {
+      var saveBtn = el("button", { class: "btn" }, ["Speichern"]);
+      saveBtn.addEventListener("click", saveReportChanges);
+      footerActions.appendChild(saveBtn);
+    }
     var openBtn = el("button", { class: "btn" }, ["Als offenen Auftrag speichern"]);
     openBtn.addEventListener("click", saveOpenReport);
     var completeBtn = el("button", { class: "btn btn-primary" }, ["Auftrag abschließen & speichern"]);
     completeBtn.addEventListener("click", completeReport);
-    footerActions.appendChild(resetBtn);
-    footerActions.appendChild(pauseBtn);
     footerActions.appendChild(openBtn);
     footerActions.appendChild(completeBtn);
     view.appendChild(footerActions);
@@ -4348,17 +4362,22 @@
   // taucht ein vom Chef eingeteilter Auftrag automatisch in der Planung auf, ohne dass er ihn
   // dort noch einmal separat anlegen muss.
   //
-  // "explicitDates" (optionales Array von ISO-Daten) erlaubt es, einen Auftrag auf MEHRERE Tage
-  // zu verteilen (z. B. ein mehrtägiger Einsatz, zugewiesen über den Mehrtages-Picker im
-  // Archiv). Wird es nicht übergeben, verhält sich die Funktion wie bisher und nimmt
-  // "data.scheduledDate" als einzigen Tag (genutzt vom normalen Auftrags-Formular, das weiterhin
-  // nur ein Datumsfeld hat). Bereits bestehende verknüpfte Einträge zu Tagen, die nicht mehr in
-  // der Auswahl sind, werden gelöscht — so bleibt die Planung konsistent, wenn Tage abgewählt
-  // werden.
+  // "explicitDates" (optionales Array von ISO-Daten) wird NUR vom Mehrtages-Picker im Archiv
+  // ("+ Auftrag zuweisen" → Tag(e) anklicken → Zuweisen") übergeben und bedeutet "das ist jetzt
+  // die VOLLSTÄNDIGE Tagesmenge für diesen Auftrag" — nur dann werden bereits verknüpfte Tage,
+  // die nicht mehr in der Auswahl sind, gelöscht.
+  //
+  // Wird explicitDates NICHT übergeben (normales Speichern im Auftrags-Formular — "Speichern",
+  // "Als offenen Auftrag speichern", "Auftrag abschließen & speichern", "Zurückstellen" — alle
+  // rufen diese Funktion ohne explicitDates auf), werden bereits über den Mehrtages-Picker
+  // verknüpfte Tage NICHT angetastet oder gelöscht — sonst würde jede normale Bearbeitung eines
+  // auf mehrere Tage verteilten Auftrags (z. B. nur eine Tippfehler-Korrektur im Text) die
+  // übrigen Tage aus der Planung werfen. Stattdessen werden nur Mitarbeiter/Baustelle/Notiz auf
+  // allen bereits verknüpften Tagen aktuell gehalten; gibt es noch gar keinen verknüpften Tag,
+  // wird einer für "data.scheduledDate" (das einzelne Datumsfeld im Formular) angelegt.
   function syncAssignmentForReport(reportId, data, explicitDates) {
     if (!db) return;
-    var dates = (explicitDates && explicitDates.length) ? explicitDates : (data.scheduledDate ? [data.scheduledDate] : []);
-    if (!data.assignedTo || dates.length === 0) return;
+    if (!data.assignedTo) return;
 
     var basePayload = {
       employeeName: data.assignedTo,
@@ -4367,23 +4386,56 @@
       reportId: reportId
     };
     var existingList = state.assignments.filter(function (a) { return a.reportId === reportId; });
-    var datesSet = {};
-    dates.forEach(function (d) { datesSet[d] = true; });
 
-    // Verknüpfte Einträge zu abgewählten Tagen entfernen.
-    existingList.forEach(function (a) {
-      if (!datesSet[a.date]) db.doc("assignments/" + a.id).delete().catch(function () {});
-    });
-    // Je ausgewähltem Tag: bestehenden Eintrag aktualisieren oder neu anlegen.
-    dates.forEach(function (d) {
-      var existing = existingList.find(function (a) { return a.date === d; });
-      var payload = Object.assign({ date: d }, basePayload);
-      if (existing) {
-        db.doc("assignments/" + existing.id).update(payload).catch(function () {});
-      } else {
-        payload.createdAt = new Date().toISOString();
-        db.collection("assignments").add(payload).catch(function () {});
-      }
+    if (explicitDates && explicitDates.length) {
+      var datesSet = {};
+      explicitDates.forEach(function (d) { datesSet[d] = true; });
+      // Verknüpfte Einträge zu abgewählten Tagen entfernen — nur hier erlaubt, weil der
+      // Mehrtages-Picker die komplette, vom Nutzer bewusst gewählte Tagesmenge liefert.
+      existingList.forEach(function (a) {
+        if (!datesSet[a.date]) db.doc("assignments/" + a.id).delete().catch(function () {});
+      });
+      explicitDates.forEach(function (d) {
+        var existing = existingList.find(function (a) { return a.date === d; });
+        var payload = Object.assign({ date: d }, basePayload);
+        if (existing) {
+          db.doc("assignments/" + existing.id).update(payload).catch(function () {});
+        } else {
+          payload.createdAt = new Date().toISOString();
+          db.collection("assignments").add(payload).catch(function () {});
+        }
+      });
+      return;
+    }
+
+    if (existingList.length > 0) {
+      // Bereits auf einen oder mehrere Tage verteilt — Tage selbst unangetastet lassen, nur
+      // Inhalte (Mitarbeiter/Baustelle/Notiz) überall aktuell halten.
+      existingList.forEach(function (a) {
+        db.doc("assignments/" + a.id).update(basePayload).catch(function () {});
+      });
+      return;
+    }
+    if (!data.scheduledDate) return;
+    var newPayload = Object.assign({ date: data.scheduledDate }, basePayload);
+    newPayload.createdAt = new Date().toISOString();
+    db.collection("assignments").add(newPayload).catch(function () {});
+  }
+
+  // "Speichern" — speichert die aktuellen Eingaben eines BEREITS BESTEHENDEN Auftrags (egal
+  // welcher Status), OHNE den Status zu ändern und ohne eine Kundenunterschrift zu verlangen.
+  // Gedacht für reine Text-/Daten-Korrekturen (z. B. einen Tippfehler in der Beschreibung
+  // ausbessern), bei denen weder "Als offenen Auftrag speichern" (würde den Status auf "offen"
+  // zurücksetzen) noch "Auftrag abschließen & speichern" (verlangt eine neue Unterschrift) das
+  // Richtige wären. Bleibt bewusst im Editor (kein Tab-Wechsel), mit kurzer Bestätigung.
+  function saveReportChanges() {
+    if (!reportDraft.auftraggeber.trim()) { alert("Bitte einen Auftraggeber angeben."); return; }
+    if (!db) { alert("Keine Verbindung zur Datenbank — Auftrag kann gerade nicht gespeichert werden."); return; }
+    saveReportRecord({}, function (reportId) {
+      syncAssignmentForReport(reportId, draftDataFields());
+      reportSavedFlash = true;
+      render();
+      setTimeout(function () { reportSavedFlash = false; render(); }, 2200);
     });
   }
 
@@ -4440,11 +4492,11 @@
         render();
         return;
       }
-      // Folgeauftrag: den alten Kalendereintrag (falls vorhanden) entfernen, damit die
-      // Baustelle nicht doppelt in der Planung auftaucht — der neue, verknüpfte Auftrag
-      // übernimmt die Einteilung.
-      var oldAssignment = state.assignments.find(function (a) { return a.reportId === reportId; });
-      if (oldAssignment && db) db.doc("assignments/" + oldAssignment.id).delete().catch(function () {});
+      // Folgeauftrag: alle alten Kalendereinträge (auch bei einem auf mehrere Tage verteilten
+      // Auftrag können das mehrere sein) entfernen, damit die Baustelle nicht doppelt in der
+      // Planung auftaucht — der neue, verknüpfte Auftrag übernimmt die Einteilung.
+      var oldAssignments = state.assignments.filter(function (a) { return a.reportId === reportId; });
+      if (db) oldAssignments.forEach(function (a) { db.doc("assignments/" + a.id).delete().catch(function () {}); });
       var followupPayload = Object.assign(draftDataFields(), {
         status: "offen",
         previousReportId: reportId,
