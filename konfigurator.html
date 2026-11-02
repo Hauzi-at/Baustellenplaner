@@ -3000,9 +3000,11 @@ function saveAktiverKunde(name) { var _a; (_a = window.storage) === null || _a =
 // (Abschluss) und "Liste" sind für alle sichtbar.
 function baueTabs(einstellungen, listenAnzahl, istChef) {
     const tabs = [["konfiguration", "Konfiguration"]];
-    if (istChef && (einstellungen === null || einstellungen === void 0 ? void 0 : einstellungen.produktionSichtbar) !== false)
+    // Chef sieht Produktion + Kalkulation IMMER (die frueheren Ausblende-Schalter wirken nicht mehr);
+    // Mitarbeiter sehen beide Tabs nie.
+    if (istChef)
         tabs.push(["produktion", "Produktion"]);
-    if (istChef && (einstellungen === null || einstellungen === void 0 ? void 0 : einstellungen.kalkulationSichtbar) !== false)
+    if (istChef)
         tabs.push(["kalkulation", "Kalkulation"]);
     tabs.push(["abschluss", "Kunde zuweisen"]);
     tabs.push(["liste", `Liste (${listenAnzahl})`]);
@@ -3015,19 +3017,33 @@ function baueTabs(einstellungen, listenAnzahl, istChef) {
 // Tab-/Seitenwechsel im Konfigurator lädt ihn nicht erneut nach (bei einer Namensänderung hilft
 // ein Neuladen der Seite).
 let __istChefCache = null;
+const CHEF_FLAG_KEY = "thbp_chef_ok"; // merkt sich: Chef-Passwort wurde auf diesem Geraet eingegeben (Wert = Passwort-Hash)
 async function ladeIstChef(setIstChef) {
-    if (__istChefCache !== null) { setIstChef(__istChefCache); return; }
+    // 1) Chef-Passwort wurde auf diesem Geraet schon einmal eingegeben (Einstellungen) und gilt noch
+    let flag = "";
+    try { flag = localStorage.getItem(CHEF_FLAG_KEY) || ""; } catch (e) { flag = ""; }
+    if (flag && __thbpClient) {
+        const h = await getChefPasswordHash();
+        if (h && h === flag) { setIstChef(true); return; }
+    }
+    // 2) Angemeldete Person ist im Baustellenplaner als "Chef" markiert (Name ohne Beachtung von Gross-/Kleinschreibung und Leerzeichen)
+    if (__istChefCache === true) { setIstChef(true); return; }
     let name = "";
-    try { name = localStorage.getItem("thbp_user") || ""; } catch (e) { name = ""; }
+    try { name = (localStorage.getItem("thbp_user") || "").trim().toLowerCase(); } catch (e) { name = ""; }
     if (!__thbpClient || !name) { setIstChef(false); return; }
     try {
-        const res = await __thbpClient.from("team").select("isChef").eq("name", name).maybeSingle();
-        __istChefCache = !!(res && res.data && res.data.isChef);
+        const res = await __thbpClient.from("team").select("name,isChef");
+        const rows = (res && res.data) || [];
+        const me = rows.find((r) => String(r.name || "").trim().toLowerCase() === name);
+        __istChefCache = !!(me && me.isChef);
     }
     catch (e) {
         __istChefCache = false;
     }
     setIstChef(__istChefCache);
+}
+function merkeChefAufGeraet() {
+    getChefPasswordHash().then((h) => { try { if (h) localStorage.setItem(CHEF_FLAG_KEY, h); } catch (e) { } });
 }
 // Alle Produkt-Positionslisten, die pro Kunde zusammengeführt werden (für die Kundenübersicht).
 const PRODUKT_LISTEN_KEYS = [
@@ -3173,8 +3189,8 @@ function KundenAuswahl({ value, onChange }) {
 const SPANNRAHMEN_PROFILE = [
     {
         id: "es10", label: "ES10 — Frontmontage auf Fenster", artNr: "12908", breite: 35,
-        basis: "lichte", zuschlagBreite: 44, zuschlagHoehe: 42, bestaetigt: true,
-        hinweis: "Zusatzprofil: Vorsatzprofil 12930.",
+        basis: "lichte", zuschlagBreite: 42, zuschlagHoehe: 42, bestaetigt: true,
+        hinweis: "Zusatzprofil: Vorsatzprofil 12930. Rahmenbreite = lichte Breite + 42 mm (2 mm mehr Abzug als bisher).",
     },
     {
         id: "es14", label: "ES14 — In lichten Rahmen", artNr: "12911", breite: 30.5,
@@ -3267,6 +3283,17 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     const [gewebeTyp, setGewebeTyp] = useState("classic");
     const [befestigungTyp, setBefestigungTyp] = useState("klemmwinkel1");
     const [falzmass, setFalzmass] = useState(13);
+    // Hakenversatz in der Höhe ("Z-Maß oben"/"Z-Maß unten", Bezeichnung wie z. B. bei NEWO
+    // üblich): manche Einbausituationen haben einen Versatz zwischen dem Einhängehaken und der
+    // eigentlichen lichten Höhe — oben und unten können unterschiedlich sein, deshalb zwei
+    // eigene Felder statt nur einem. Wenn aktiviert, wird NUR eine zusätzliche Maß-Info
+    // angezeigt/gedruckt ("Lichte Höhe − Z-Maß oben − Z-Maß unten = X mm") als Montage-Hinweis.
+    // Die eigentliche Rahmenhöhe-Berechnung (und damit Gewebefläche/Material/Preis) bleibt
+    // bewusst unverändert — falls der Versatz stattdessen die Berechnung selbst beeinflussen
+    // soll, bitte Bescheid geben.
+    const [hakenversatzAktiv, setHakenversatzAktiv] = useState(false);
+    const [zMassOben, setZMassOben] = useState(0);
+    const [zMassUnten, setZMassUnten] = useState(0);
     const [heroalNr, setHeroalNr] = useState("44");
     const [customRal, setCustomRal] = useState("7016");
     const [kunde, setKunde] = useState(defaultKunde || "");
@@ -3281,6 +3308,9 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         setProfilTyp("es10");
         setGewebeTyp("classic");
         setFalzmass(13);
+        setHakenversatzAktiv(false);
+        setZMassOben(0);
+        setZMassUnten(0);
         setMenge(1);
         setPositionEingabe("");
         setBearbeitungsId(null);
@@ -3302,6 +3332,12 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         setProfilTyp((_c = c.profilTyp) !== null && _c !== void 0 ? _c : "es10");
         setGewebeTyp((_d = c.gewebeTyp) !== null && _d !== void 0 ? _d : "classic");
         setFalzmass((_e = c.falzmass) !== null && _e !== void 0 ? _e : 13);
+        setHakenversatzAktiv(!!c.hakenversatzAktiv);
+        // c.hakenversatz ist der Name des alten, einzelnen Versatz-Felds (kurzzeitig verwendet,
+        // bevor es in "oben"/"unten" aufgeteilt wurde) — als Fallback komplett auf "oben" gelegt,
+        // damit eine zwischenzeitlich gespeicherte Position beim Nachladen nicht verloren geht.
+        setZMassOben(c.zMassOben != null ? c.zMassOben : (c.hakenversatz != null ? c.hakenversatz : 0));
+        setZMassUnten(c.zMassUnten != null ? c.zMassUnten : 0);
         setHeroalNr((_f = c.heroalNr) !== null && _f !== void 0 ? _f : "44");
         setCustomRal((_g = c.customRal) !== null && _g !== void 0 ? _g : "7016");
         setMenge((_h = item.menge) !== null && _h !== void 0 ? _h : 1);
@@ -3320,6 +3356,10 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         }
     }, [editRequest, liste]);
     const profilObj = SPANNRAHMEN_PROFILE.find((p) => p.id === profilTyp) || SPANNRAHMEN_PROFILE[0];
+    // Maß-Info bei Hakenversatz in der Höhe (reine Montage-Information, siehe Kommentar oben bei
+    // useState(hakenversatzAktiv)) — beeinflusst NICHT rahmenhoehe/Gewebefläche/Preis.
+    const zMassGesamt = zMassOben + zMassUnten;
+    const effektiveLichteHoehe = hakenversatzAktiv && lichteHoehe !== null ? lichteHoehe - zMassGesamt : null;
     const hakenmass = falzmass + 2; // Hakenmaß = Falzmaß + 2mm
     const einhaengewinkelObj = findEinhaengewinkel(hakenmass);
     const gewebeObj = GEWEBE_TYPEN.find((g) => g.id === gewebeTyp) || GEWEBE_TYPEN[0];
@@ -3360,6 +3400,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         `Montageart: ${befestigungObj.label}`,
         `Profil: ${profilObj.label}`,
         `Falzmaß: ${falzmass} mm → Einhängewinkel Art. ${einhaengewinkelObj === null || einhaengewinkelObj === void 0 ? void 0 : einhaengewinkelObj.artNr} (4 Stk)`,
+        ...(hakenversatzAktiv ? [`⚠ Hakenversatz Höhe: Z-Maß oben ${zMassOben} mm, Z-Maß unten ${zMassUnten} mm → Lichte Höhe ${lichteHoehe} mm − ${zMassGesamt} mm = ${effektiveLichteHoehe} mm`] : []),
         `Farbe: ${displayLabel}`,
         `Gewebe: ${gewebeObj.label} (${gewebeObj.farbe})`,
     ].join("\n");
@@ -3367,7 +3408,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     const addToListe = () => {
         if (eingabeUnvollstaendig)
             return;
-        const config = { lichteBreite, lichteHoehe, profilTyp, gewebeTyp, falzmass, heroalNr, customRal };
+        const config = { lichteBreite, lichteHoehe, profilTyp, gewebeTyp, falzmass, hakenversatzAktiv, zMassOben, zMassUnten, heroalNr, customRal };
         const item = {
             id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), position: positionEingabe, kunde: kunde || "—", lichteBreite, lichteHoehe, rahmenbreite, rahmenhoehe,
             profilLabel: profilObj.label, gewebeLabel: gewebeObj.label, colorLabel: displayLabel,
@@ -3404,6 +3445,14 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                     React.createElement(Num, { label: profilObj.basis === "mass" ? "Maß B (direkt im Rahmen gemessen)" : "Lichte Breite", value: lichteBreite, onChange: setLichteBreite, unit: "mm", min: 200, allowEmpty: true }),
                     React.createElement(Num, { label: profilObj.basis === "mass" ? "Maß H (direkt im Rahmen gemessen)" : "Lichte Höhe", value: lichteHoehe, onChange: setLichteHoehe, unit: "mm", min: 200, allowEmpty: true }),
                     React.createElement(Num, { label: "Falzma\u00DF", value: falzmass, onChange: setFalzmass, unit: "mm", min: 5, className: "col-span-2" }),
+                    React.createElement("div", { className: "col-span-2" },
+                        React.createElement("label", { className: "flex items-center gap-2 text-[13px] text-[#1B1F24] mb-2" },
+                            React.createElement("input", { type: "checkbox", checked: hakenversatzAktiv, onChange: (e) => setHakenversatzAktiv(e.target.checked), className: "accent-[#E8963B] w-4 h-4" }),
+                            "Hakenversatz in der H\u00F6he"),
+                        hakenversatzAktiv && (React.createElement("div", { className: "grid grid-cols-2 gap-2" },
+                            React.createElement(Num, { label: "Z-Ma\u00DF oben", value: zMassOben, onChange: setZMassOben, unit: "mm", min: 0 }),
+                            React.createElement(Num, { label: "Z-Ma\u00DF unten", value: zMassUnten, onChange: setZMassUnten, unit: "mm", min: 0 }),
+                            React.createElement("p", { className: "col-span-2 text-[11px] text-[#8A8F98] -mt-1" }, "Versatz zwischen Einh\u00E4ngehaken und lichter H\u00F6he \u2014 oben/unten, falls unterschiedlich.")))),
                     React.createElement(Select, { label: "Gewebe", value: gewebeTyp, onChange: setGewebeTyp, options: GEWEBE_TYPEN.map((g) => ({ value: g.id, label: `${g.label} (${g.farbe})` })), className: "col-span-2" })),
                 React.createElement("p", { className: "text-[11px] text-[#8A8F98] -mt-2" }, gewebeObj.info),
                 React.createElement("p", { className: "text-[11px] text-[#8A8F98] -mt-2" },
@@ -3425,6 +3474,14 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                     " (bis ", einhaengewinkelObj === null || einhaengewinkelObj === void 0 ? void 0 :
                     einhaengewinkelObj.h,
                     "mm, 4 Stk pro Element \u2014 2 oben, 2 unten) \u2014 Preis unter \u201EKalkulation \u2192 Produktpreise\" hinterlegen."),
+                hakenversatzAktiv && (React.createElement("p", { className: "text-[11.5px] text-[#B96A16] bg-[#FFF8EF] border border-[#E8963B44] rounded-md px-3 py-2" },
+                    "\u26A0 Ma\u00DF-Info Hakenversatz (Z-Ma\u00DF oben ",
+                    zMassOben,
+                    "mm + Z-Ma\u00DF unten ",
+                    zMassUnten,
+                    "mm): Lichte H\u00F6he \u2212 Versatz = ",
+                    React.createElement("b", null, `${lichteHoehe !== null && lichteHoehe !== void 0 ? lichteHoehe : "?"} mm \u2212 ${zMassGesamt} mm = ${effektiveLichteHoehe !== null ? effektiveLichteHoehe : "?"} mm`),
+                    " \u2014 reine Montage-Info, die Rahmenh\u00F6he/Material/Preis werden weiterhin mit der vollen Lichten H\u00F6he berechnet.")),
                 React.createElement("div", null,
                     React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium mb-1.5 block" }, "Rahmenfarbe"),
                     React.createElement("button", { onClick: () => setColorModalOpen(true), className: "w-full flex items-center gap-3 border border-[#D8D4C8] rounded-md bg-white px-3 py-2.5 hover:border-[#E8963B] transition-colors" },
@@ -3492,6 +3549,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                         ["Profilumfang", `${umfangM.toFixed(2)} lfm`], ["Gewebefläche", `${gewebeflaecheM2.toFixed(2)} m²`],
                         ["Gewebe", `${gewebeObj.label} (${gewebeObj.farbe})`], ["Farbe Rahmen", displayLabel],
                         ["Falzmaß → Hakenmaß", `${falzmass}mm → ${hakenmass}mm`], ["Einhängewinkel", `Art. ${einhaengewinkelObj === null || einhaengewinkelObj === void 0 ? void 0 : einhaengewinkelObj.artNr}, 4 Stk`],
+                        ...(hakenversatzAktiv ? [["⚠ Hakenversatz Höhe", `Z oben ${zMassOben}mm + Z unten ${zMassUnten}mm → ${lichteHoehe} mm − ${zMassGesamt} mm = ${effektiveLichteHoehe} mm`]] : []),
                         ...(profilObj.schiebeverriegelung ? [["Schiebeverriegelung", "Art. 11845, 2 Stk"]] : []),
                     ], profilObj.hinweis), className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333] transition-colors" }, "Produktions\u00FCbersicht drucken"))),
             tab === "kalkulation" && (React.createElement("div", { className: "flex flex-col gap-4" },
@@ -5993,6 +6051,7 @@ function EinstellungenPasswortabfrage({ onUnlock, onZurueck }) {
         const hash = await sha256Hex(pw);
         const expected = await getChefPasswordHash();
         if (expected && hash === expected) {
+            merkeChefAufGeraet();
             onUnlock();
         }
         else {
@@ -6038,19 +6097,10 @@ function Einstellungen({ onZurueck }) {
                     React.createElement("h1", { className: "text-[26px] md:text-[32px] font-oswald font-semibold text-[#1B1F24] leading-tight" }, "Einstellungen"),
                     React.createElement("p", { className: "text-[13px] text-[#5B6472] mt-1" }, "Gilt f\u00FCr alle 6 Produkte gleichzeitig."))),
             React.createElement("div", { className: "flex flex-col gap-3" },
-                React.createElement("div", { className: "border border-[#D8D4C8] rounded-lg bg-white px-4 py-3.5 flex items-center justify-between" },
-                    React.createElement("div", null,
-                        React.createElement("div", { className: "text-[14px] font-medium text-[#1B1F24]" }, "Produktion-Tab sichtbar"),
-                        React.createElement("p", { className: "text-[12px] text-[#8A8F98]" }, "Zuschnittma\u00DFe & Artikelnummern f\u00FCr alle Mitarbeiter")),
-                    React.createElement("button", { onClick: () => umschalten("produktionSichtbar"), className: `w-12 h-7 rounded-full transition-colors relative shrink-0 ${einstellungen.produktionSichtbar ? "bg-[#E8963B]" : "bg-[#D8D4C8]"}` },
-                        React.createElement("span", { className: `absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${einstellungen.produktionSichtbar ? "left-6" : "left-1"}` }))),
-                React.createElement("div", { className: "border border-[#D8D4C8] rounded-lg bg-white px-4 py-3.5 flex items-center justify-between" },
-                    React.createElement("div", null,
-                        React.createElement("div", { className: "text-[14px] font-medium text-[#1B1F24]" }, "Kalkulation-Tab sichtbar"),
-                        React.createElement("p", { className: "text-[12px] text-[#8A8F98]" }, "Einkaufspreise, Kosten & Marge f\u00FCr alle Mitarbeiter")),
-                    React.createElement("button", { onClick: () => umschalten("kalkulationSichtbar"), className: `w-12 h-7 rounded-full transition-colors relative shrink-0 ${einstellungen.kalkulationSichtbar ? "bg-[#E8963B]" : "bg-[#D8D4C8]"}` },
-                        React.createElement("span", { className: `absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${einstellungen.kalkulationSichtbar ? "left-6" : "left-1"}` }))),
-                React.createElement("p", { className: "text-[11px] text-[#8A8F98] mt-2" }, "Kunde zuweisen & Positionsliste bleiben immer sichtbar \u2014 auch wenn Produktion/Kalkulation ausgeblendet sind.")))));
+                React.createElement("div", { className: "border border-[#D8D4C8] rounded-lg bg-white px-4 py-3.5" },
+                    React.createElement("div", { className: "text-[14px] font-medium text-[#1B1F24]" }, "Chef-Zugang aktiv \u2713"),
+                    React.createElement("p", { className: "text-[12px] text-[#8A8F98] mt-1" }, "Auf diesem Ger\u00E4t siehst du jetzt immer die Tabs Produktion und Kalkulation (Zuschnittma\u00DFe, Artikelnummern, Einkaufspreise, Marge). Mitarbeiter sehen sie nie \u2014 au\u00DFer sie kennen das Chef-Passwort und geben es hier ein. Zus\u00E4tzlich gilt: Ist dein Profil im Baustellenplaner als \u201EChef\u201C markiert, siehst du die Tabs auf jedem Ger\u00E4t.")),
+                React.createElement("p", { className: "text-[11px] text-[#8A8F98] mt-2" }, "Kunde zuweisen & Positionsliste sind f\u00FCr alle Mitarbeiter immer sichtbar.")))));
 }
 function KundenUebersicht({ onZurueck, onBearbeiten }) {
     const [kunden, setKunden] = useState([]);
@@ -6316,7 +6366,7 @@ function App() {
     const [einstellungen, setEinstellungen] = useState(DEFAULT_EINSTELLUNGEN);
     useEffect(() => { loadEinstellungen(setEinstellungen); }, [produkt]); // bei jedem Produktwechsel neu laden, falls im Einstellungen-Bereich geändert
     const [istChef, setIstChef] = useState(false);
-    useEffect(() => { ladeIstChef(setIstChef); }, []);
+    useEffect(() => { ladeIstChef(setIstChef); }, [produkt]);
     const bearbeiteAus = (produktRoute, id) => { setEditZiel({ produkt: produktRoute, id }); setProdukt(produktRoute); };
     const editRequestFuer = (name) => (editZiel && editZiel.produkt === name ? { id: editZiel.id } : null);
     const onEditConsumed = () => setEditZiel(null);
