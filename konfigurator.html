@@ -2882,7 +2882,7 @@ function etikettenMasseFuer(produktKey, item) {
         case "positionsliste_v2": // Rollladen
             return { breite: item.breite, hoehe: item.hoehe, falz: "" };
         case "spannrahmen_liste_v1": // Spannrahmen
-            return { breite: item.rahmenbreite, hoehe: item.rahmenhoehe, falz: (_a = item.config) === null || _a === void 0 ? void 0 : _a.falzmass };
+            return { breite: item.rahmenbreite, hoehe: item.rahmenhoehe, falz: (() => { const f = (_a = item.config) === null || _a === void 0 ? void 0 : _a.falzmass; return typeof f === "number" ? f + 4 : f; })() };
         case "drehtuer_liste_v1": // Drehtür
         case "schiebetuer_liste_v1": // Schiebetür
         case "lichtschacht_liste_v1": // Lichtschachtabdeckung
@@ -3361,6 +3361,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     const zMassGesamt = zMassOben + zMassUnten;
     const effektiveLichteHoehe = hakenversatzAktiv && lichteHoehe !== null ? lichteHoehe - zMassGesamt : null;
     const hakenmass = falzmass + 2; // Hakenmaß = Falzmaß + 2mm
+    const falzmassProd = falzmass + 4; // Falzmaß inkl. 4 mm Zugabe — dieser Wert steht in Produktion/Positionsliste/Etikett
     const einhaengewinkelObj = findEinhaengewinkel(hakenmass);
     const gewebeObj = GEWEBE_TYPEN.find((g) => g.id === gewebeTyp) || GEWEBE_TYPEN[0];
     const befestigungObj = BEFESTIGUNG_TYPEN.find((b) => b.id === befestigungTyp) || BEFESTIGUNG_TYPEN[0];
@@ -3399,7 +3400,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         `Rahmenmaß: ${rahmenbreite} × ${rahmenhoehe} mm`,
         `Montageart: ${befestigungObj.label}`,
         `Profil: ${profilObj.label}`,
-        `Falzmaß: ${falzmass} mm → Einhängewinkel Art. ${einhaengewinkelObj === null || einhaengewinkelObj === void 0 ? void 0 : einhaengewinkelObj.artNr} (4 Stk)`,
+        `Falzmaß inkl. 4 mm Zugabe: ${falzmassProd} mm (${falzmass} + 4) → Einhängewinkel Art. ${einhaengewinkelObj === null || einhaengewinkelObj === void 0 ? void 0 : einhaengewinkelObj.artNr} (4 Stk)`,
         ...(hakenversatzAktiv ? [`⚠ Hakenversatz Höhe: Z-Maß oben ${zMassOben} mm, Z-Maß unten ${zMassUnten} mm → Lichte Höhe ${lichteHoehe} mm − ${zMassGesamt} mm = ${effektiveLichteHoehe} mm`] : []),
         `Farbe: ${displayLabel}`,
         `Gewebe: ${gewebeObj.label} (${gewebeObj.farbe})`,
@@ -3514,6 +3515,12 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                             " ",
                             React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm"))),
                     React.createElement("div", { className: "border border-[#E2DFD3] rounded-lg bg-white px-3.5 py-2.5" },
+                        React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "Falzma\u00DF inkl. 4 mm Zugabe"),
+                        React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#1B1F24] mt-0.5" },
+                            falzmassProd,
+                            " ",
+                            React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm (" + falzmass + " + 4)"))),
+                    React.createElement("div", { className: "border border-[#E2DFD3] rounded-lg bg-white px-3.5 py-2.5" },
                         React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "Profilumfang"),
                         React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#1B1F24] mt-0.5" },
                             umfangM.toFixed(2),
@@ -3548,7 +3555,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                         ["Rahmenbreite", `${rahmenbreite} mm`], ["Rahmenhöhe", `${rahmenhoehe} mm`],
                         ["Profilumfang", `${umfangM.toFixed(2)} lfm`], ["Gewebefläche", `${gewebeflaecheM2.toFixed(2)} m²`],
                         ["Gewebe", `${gewebeObj.label} (${gewebeObj.farbe})`], ["Farbe Rahmen", displayLabel],
-                        ["Falzmaß → Hakenmaß", `${falzmass}mm → ${hakenmass}mm`], ["Einhängewinkel", `Art. ${einhaengewinkelObj === null || einhaengewinkelObj === void 0 ? void 0 : einhaengewinkelObj.artNr}, 4 Stk`],
+                        ["Falzmaß inkl. 4 mm Zugabe", `${falzmassProd} mm (${falzmass} + 4)`], ["Einhängewinkel", `Art. ${einhaengewinkelObj === null || einhaengewinkelObj === void 0 ? void 0 : einhaengewinkelObj.artNr}, 4 Stk`],
                         ...(hakenversatzAktiv ? [["⚠ Hakenversatz Höhe", `Z oben ${zMassOben}mm + Z unten ${zMassUnten}mm → ${lichteHoehe} mm − ${zMassGesamt} mm = ${effektiveLichteHoehe} mm`]] : []),
                         ...(profilObj.schiebeverriegelung ? [["Schiebeverriegelung", "Art. 11845, 2 Stk"]] : []),
                     ], profilObj.hinweis), className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333] transition-colors" }, "Produktions\u00FCbersicht drucken"))),
