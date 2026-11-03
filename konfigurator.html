@@ -3224,6 +3224,33 @@ const GEWEBE_TYPEN = [
     { id: "pet", label: "IS Pet", artNr: "11854..", farbe: "Anthrazitgrau", info: "Polyester · 365 g/m² · reißfest (Haustiere)" },
     { id: "stainless", label: "IS Stainless", artNr: "11859 00", farbe: "Metallischgrau", info: "Edelstahl 1.4301 · 370 g/m²" },
 ];
+// Bürsten (alle Spannrahmen-Ausführungen): pro Position beliebig viele Bürsten, jede mit Seite, Lage
+// (innen/außen), Bürstenmaß und optionaler abweichender Länge/Bemerkung — so wie auf den
+// handgeschriebenen Aufmaß-Zetteln ("Bürste Re 11 mm", "Bürste innen Li 11", ...).
+const BUERSTEN_SEITEN = [
+    { value: "rechts", label: "Rechts" }, { value: "links", label: "Links" },
+    { value: "rechts_links", label: "Rechts + Links" }, { value: "oben", label: "Oben" },
+    { value: "unten", label: "Unten" }, { value: "umlaufend", label: "Umlaufend" },
+];
+const BUERSTEN_LAGEN = [{ value: "innen", label: "Innen" }, { value: "aussen", label: "Außen" }];
+const buerstenSeiteLabel = (v) => { const o = BUERSTEN_SEITEN.find((x) => x.value === v); return o ? o.label : v; };
+const buerstenLageLabel = (v) => { const o = BUERSTEN_LAGEN.find((x) => x.value === v); return o ? o.label.toLowerCase() : v; };
+const neueBuerste = () => ({ id: Date.now() + Math.random(), seite: "rechts", lage: "innen", mass: 11, laenge: null, bemerkung: "" });
+// Automatische Länge je Seite aus dem Rahmenmaß (Rahmenbreite/-höhe); "laenge" überschreibt sie.
+function buerstenLaengeMm(b, rahmenbreite, rahmenhoehe) {
+    if (b.laenge != null && b.laenge > 0) return b.laenge;
+    switch (b.seite) {
+        case "rechts": case "links": return rahmenhoehe;
+        case "rechts_links": return 2 * rahmenhoehe;
+        case "oben": case "unten": return rahmenbreite;
+        case "umlaufend": return 2 * rahmenbreite + 2 * rahmenhoehe;
+        default: return 0;
+    }
+}
+function buerstenText(b, rahmenbreite, rahmenhoehe) {
+    const l = buerstenLaengeMm(b, rahmenbreite, rahmenhoehe);
+    return `Bürste ${buerstenSeiteLabel(b.seite)} (Ansicht von innen), ${buerstenLageLabel(b.lage)}, ${b.mass} mm — Länge ${l} mm${b.laenge != null && b.laenge > 0 ? " (abweichend)" : ""}${b.bemerkung ? " — " + b.bemerkung : ""}`;
+}
 // Befestigungsart-Auswahl entfällt — jede Ausführung (ES10/ES14/ESF) hat ihre eigene, feste Montageart.
 const BEFESTIGUNG_TYPEN = [
     { id: "klemmwinkel1", label: "Klemmwinkel Typ 1 (Standard)" },
@@ -3234,7 +3261,7 @@ const BEFESTIGUNG_TYPEN = [
 const DEFAULT_SPANNRAHMEN_PREISE = {
     profil_es10: 38.95, profil_es14: 36.98, profil_esf: 42.89,
     gewebe_classic: 2.30, gewebe_light: 2.30, gewebe_advantage: 3.95, gewebe_clear: 8.72, gewebe_pet: 9.67, gewebe_stainless: 7.05,
-    eckwinkel: 0.60, einhaengewinkel: 0.70, keder: 0.30, schiebeverriegelung: 3.90, kleinteile: 2,
+    eckwinkel: 0.60, einhaengewinkel: 0.70, keder: 0.30, schiebeverriegelung: 3.90, kleinteile: 2, buerste: 0,
     marge: 45,
 };
 function loadSpannrahmenPreise(setPreise) {
@@ -3280,20 +3307,21 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     const [lichteBreite, setLichteBreite] = useState(null);
     const [lichteHoehe, setLichteHoehe] = useState(null);
     const [profilTyp, setProfilTyp] = useState("es10");
-    const [gewebeTyp, setGewebeTyp] = useState("classic");
+    const [gewebeTyp, setGewebeTyp] = useState("advantage"); // Standard-Gewebe: IS Advantage
     const [befestigungTyp, setBefestigungTyp] = useState("klemmwinkel1");
     const [falzmass, setFalzmass] = useState(13);
-    // Hakenversatz in der Höhe ("Z-Maß oben"/"Z-Maß unten", Bezeichnung wie z. B. bei NEWO
+    // Hakenversatz in der Höhe ("X-Maß oben"/"X-Maß unten", Bezeichnung wie z. B. bei NEWO
     // üblich): manche Einbausituationen haben einen Versatz zwischen dem Einhängehaken und der
     // eigentlichen lichten Höhe — oben und unten können unterschiedlich sein, deshalb zwei
     // eigene Felder statt nur einem. Wenn aktiviert, wird NUR eine zusätzliche Maß-Info
-    // angezeigt/gedruckt ("Lichte Höhe − Z-Maß oben − Z-Maß unten = X mm") als Montage-Hinweis.
+    // angezeigt/gedruckt ("Lichte Höhe − X-Maß oben − X-Maß unten = X mm") als Montage-Hinweis.
     // Die eigentliche Rahmenhöhe-Berechnung (und damit Gewebefläche/Material/Preis) bleibt
     // bewusst unverändert — falls der Versatz stattdessen die Berechnung selbst beeinflussen
     // soll, bitte Bescheid geben.
     const [hakenversatzAktiv, setHakenversatzAktiv] = useState(false);
     const [zMassOben, setZMassOben] = useState(0);
     const [zMassUnten, setZMassUnten] = useState(0);
+    const [buersten, setBuersten] = useState([]); // Liste der Bürsten dieser Position (siehe BUERSTEN_SEITEN)
     const [heroalNr, setHeroalNr] = useState("44");
     const [customRal, setCustomRal] = useState("7016");
     const [kunde, setKunde] = useState(defaultKunde || "");
@@ -3306,11 +3334,12 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         setLichteBreite(null);
         setLichteHoehe(null);
         setProfilTyp("es10");
-        setGewebeTyp("classic");
+        setGewebeTyp("advantage");
         setFalzmass(13);
         setHakenversatzAktiv(false);
         setZMassOben(0);
         setZMassUnten(0);
+        setBuersten([]);
         setMenge(1);
         setPositionEingabe("");
         setBearbeitungsId(null);
@@ -3338,6 +3367,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         // damit eine zwischenzeitlich gespeicherte Position beim Nachladen nicht verloren geht.
         setZMassOben(c.zMassOben != null ? c.zMassOben : (c.hakenversatz != null ? c.hakenversatz : 0));
         setZMassUnten(c.zMassUnten != null ? c.zMassUnten : 0);
+        setBuersten(Array.isArray(c.buersten) ? c.buersten.map((b) => (Object.assign(Object.assign({}, neueBuerste()), b))) : []);
         setHeroalNr((_f = c.heroalNr) !== null && _f !== void 0 ? _f : "44");
         setCustomRal((_g = c.customRal) !== null && _g !== void 0 ? _g : "7016");
         setMenge((_h = item.menge) !== null && _h !== void 0 ? _h : 1);
@@ -3384,7 +3414,9 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     const schiebeverriegelungKosten = profilObj.schiebeverriegelung ? getPreis("schiebeverriegelung") * 4 : 0;
     const einhaengewinkelKosten = getPreis("einhaengewinkel") * 4;
     const fixkostenKleinteile = getPreis("kleinteile");
-    const materialkosten = profilKosten + gewebeKosten + eckwinkelKosten + kederKosten + schiebeverriegelungKosten + einhaengewinkelKosten + fixkostenKleinteile;
+    const buerstenLaengeGesamtM = buersten.reduce((sum, b) => sum + buerstenLaengeMm(b, rahmenbreite, rahmenhoehe), 0) / 1000;
+    const buerstenKosten = buerstenLaengeGesamtM * getPreis("buerste");
+    const materialkosten = profilKosten + gewebeKosten + eckwinkelKosten + kederKosten + schiebeverriegelungKosten + einhaengewinkelKosten + fixkostenKleinteile + buerstenKosten;
     const stundensatz = getPreis("stundensatz") || 55;
     const basisStunden = getPreis("basisstunden") || 0.5;
     const stunden = basisStunden + gewebeflaecheM2 * 0.15;
@@ -3401,7 +3433,8 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         `Montageart: ${befestigungObj.label}`,
         `Profil: ${profilObj.label}`,
         `Falzmaß inkl. 4 mm Zugabe: ${falzmassProd} mm (${falzmass} + 4) → Einhängewinkel Art. ${einhaengewinkelObj === null || einhaengewinkelObj === void 0 ? void 0 : einhaengewinkelObj.artNr} (4 Stk)`,
-        ...(hakenversatzAktiv ? [`⚠ Hakenversatz Höhe: Z-Maß oben ${zMassOben} mm, Z-Maß unten ${zMassUnten} mm → Lichte Höhe ${lichteHoehe} mm − ${zMassGesamt} mm = ${effektiveLichteHoehe} mm`] : []),
+        ...(hakenversatzAktiv ? [`⚠ Hakenversatz Höhe: X-Maß oben ${zMassOben} mm, X-Maß unten ${zMassUnten} mm → Lichte Höhe ${lichteHoehe} mm − ${zMassGesamt} mm = ${effektiveLichteHoehe} mm`] : []),
+        ...buersten.map((b) => buerstenText(b, rahmenbreite, rahmenhoehe)),
         `Farbe: ${displayLabel}`,
         `Gewebe: ${gewebeObj.label} (${gewebeObj.farbe})`,
     ].join("\n");
@@ -3409,7 +3442,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     const addToListe = () => {
         if (eingabeUnvollstaendig)
             return;
-        const config = { lichteBreite, lichteHoehe, profilTyp, gewebeTyp, falzmass, hakenversatzAktiv, zMassOben, zMassUnten, heroalNr, customRal };
+        const config = { lichteBreite, lichteHoehe, profilTyp, gewebeTyp, falzmass, hakenversatzAktiv, zMassOben, zMassUnten, buersten, heroalNr, customRal };
         const item = {
             id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), position: positionEingabe, kunde: kunde || "—", lichteBreite, lichteHoehe, rahmenbreite, rahmenhoehe,
             profilLabel: profilObj.label, gewebeLabel: gewebeObj.label, colorLabel: displayLabel,
@@ -3451,9 +3484,31 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                             React.createElement("input", { type: "checkbox", checked: hakenversatzAktiv, onChange: (e) => setHakenversatzAktiv(e.target.checked), className: "accent-[#E8963B] w-4 h-4" }),
                             "Hakenversatz in der H\u00F6he"),
                         hakenversatzAktiv && (React.createElement("div", { className: "grid grid-cols-2 gap-2" },
-                            React.createElement(Num, { label: "Z-Ma\u00DF oben", value: zMassOben, onChange: setZMassOben, unit: "mm", min: 0 }),
-                            React.createElement(Num, { label: "Z-Ma\u00DF unten", value: zMassUnten, onChange: setZMassUnten, unit: "mm", min: 0 }),
+                            React.createElement(Num, { label: "X-Ma\u00DF oben", value: zMassOben, onChange: setZMassOben, unit: "mm", min: 0 }),
+                            React.createElement(Num, { label: "X-Ma\u00DF unten", value: zMassUnten, onChange: setZMassUnten, unit: "mm", min: 0 }),
                             React.createElement("p", { className: "col-span-2 text-[11px] text-[#8A8F98] -mt-1" }, "Versatz zwischen Einh\u00E4ngehaken und lichter H\u00F6he \u2014 oben/unten, falls unterschiedlich.")))),
+                    React.createElement("div", { className: "col-span-2" },
+                        React.createElement("div", { className: "flex items-center justify-between mb-2" },
+                            React.createElement("span", { className: "text-[13px] font-medium text-[#1B1F24]" }, "B\u00FCrsten"),
+                            React.createElement("button", { type: "button", onClick: () => setBuersten((l) => [...l, neueBuerste()]), className: "flex items-center gap-1 px-2.5 py-1 rounded-md border border-[#D8D4C8] bg-white text-[12px] text-[#1B1F24] hover:border-[#E8963B]" }, "+ B\u00FCrste hinzuf\u00FCgen")),
+                        React.createElement("p", { className: "text-[11px] text-[#B96A16] mb-2" }, "Ansicht immer von innen (links / rechts / oben / unten)."),
+                        buersten.length === 0 && React.createElement("p", { className: "text-[11px] text-[#8A8F98]" }, "Keine B\u00FCrste \u2014 mit \u201E+ B\u00FCrste hinzuf\u00FCgen\u201C eine oder mehrere (auch unterschiedliche) B\u00FCrsten w\u00E4hlen."),
+                        buersten.map((b, idx) => {
+                            const upd = (patch) => setBuersten((l) => l.map((x) => (x.id === b.id ? Object.assign(Object.assign({}, x), patch) : x)));
+                            return React.createElement("div", { key: b.id, className: "border border-[#E2DFD3] rounded-lg bg-white px-3 py-3 mb-2" },
+                                React.createElement("div", { className: "flex items-center justify-between mb-2" },
+                                    React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "B\u00FCrste " + (idx + 1)),
+                                    React.createElement("button", { type: "button", onClick: () => setBuersten((l) => l.filter((x) => x.id !== b.id)), className: "text-[12px] text-[#8A8F98] hover:text-[#C0392B]" }, "Entfernen")),
+                                React.createElement("div", { className: "grid grid-cols-2 gap-2" },
+                                    React.createElement(Select, { label: "Seite (Ansicht von innen)", value: b.seite, onChange: (v) => upd({ seite: v }), options: BUERSTEN_SEITEN }),
+                                    React.createElement(Select, { label: "Lage", value: b.lage, onChange: (v) => upd({ lage: v }), options: BUERSTEN_LAGEN }),
+                                    React.createElement(Num, { label: "B\u00FCrstenma\u00DF", value: b.mass, onChange: (v) => upd({ mass: v }), unit: "mm", min: 1 }),
+                                    React.createElement(Num, { label: "L\u00E4nge (leer = ganze Seite)", value: b.laenge, onChange: (v) => upd({ laenge: v }), unit: "mm", min: 1, allowEmpty: true }),
+                                    React.createElement("label", { className: "flex flex-col gap-1 col-span-2" },
+                                        React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Bemerkung (optional)"),
+                                        React.createElement("input", { type: "text", value: b.bemerkung, onChange: (e) => upd({ bemerkung: e.target.value }), placeholder: "z.B. von unten ca. 5 cm", className: "border border-[#D8D4C8] rounded-md bg-white px-2.5 py-1.5 text-[14px] text-[#1B1F24] outline-none focus:border-[#E8963B] transition-colors" }))),
+                                React.createElement("p", { className: "text-[11px] text-[#8A8F98] mt-1.5" }, "Zuschnitt: " + buerstenLaengeMm(b, rahmenbreite, rahmenhoehe) + " mm"));
+                        })),
                     React.createElement(Select, { label: "Gewebe", value: gewebeTyp, onChange: setGewebeTyp, options: GEWEBE_TYPEN.map((g) => ({ value: g.id, label: `${g.label} (${g.farbe})` })), className: "col-span-2" })),
                 React.createElement("p", { className: "text-[11px] text-[#8A8F98] -mt-2" }, gewebeObj.info),
                 React.createElement("p", { className: "text-[11px] text-[#8A8F98] -mt-2" },
@@ -3476,9 +3531,9 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                     einhaengewinkelObj.h,
                     "mm, 4 Stk pro Element \u2014 2 oben, 2 unten) \u2014 Preis unter \u201EKalkulation \u2192 Produktpreise\" hinterlegen."),
                 hakenversatzAktiv && (React.createElement("p", { className: "text-[11.5px] text-[#B96A16] bg-[#FFF8EF] border border-[#E8963B44] rounded-md px-3 py-2" },
-                    "\u26A0 Ma\u00DF-Info Hakenversatz (Z-Ma\u00DF oben ",
+                    "\u26A0 Ma\u00DF-Info Hakenversatz (X-Ma\u00DF oben ",
                     zMassOben,
-                    "mm + Z-Ma\u00DF unten ",
+                    "mm + X-Ma\u00DF unten ",
                     zMassUnten,
                     "mm): Lichte H\u00F6he \u2212 Versatz = ",
                     React.createElement("b", null, `${lichteHoehe !== null && lichteHoehe !== void 0 ? lichteHoehe : "?"} mm \u2212 ${zMassGesamt} mm = ${effektiveLichteHoehe !== null ? effektiveLichteHoehe : "?"} mm`),
@@ -3532,6 +3587,9 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                             gewebeflaecheM2.toFixed(2),
                             " ",
                             React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "m\u00B2")))),
+                buersten.length > 0 && (React.createElement("div", { className: "border border-[#E2DFD3] rounded-lg bg-white px-3.5 py-2.5" },
+                    React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium mb-1" }, "B\u00FCrsten"),
+                    buersten.map((b) => React.createElement("div", { key: b.id, className: "text-[13px] font-['IBM_Plex_Mono'] text-[#1B1F24] py-0.5" }, buerstenText(b, rahmenbreite, rahmenhoehe))))),
                 React.createElement("p", { className: "text-[11px] text-[#8A8F98]" },
                     "Formel: Rahmenma\u00DF = Lichtes Ma\u00DF + ",
                     profilObj.zuschlagBreite,
@@ -3556,7 +3614,8 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                         ["Profilumfang", `${umfangM.toFixed(2)} lfm`], ["Gewebefläche", `${gewebeflaecheM2.toFixed(2)} m²`],
                         ["Gewebe", `${gewebeObj.label} (${gewebeObj.farbe})`], ["Farbe Rahmen", displayLabel],
                         ["Falzmaß inkl. 4 mm Zugabe", `${falzmassProd} mm (${falzmass} + 4)`], ["Einhängewinkel", `Art. ${einhaengewinkelObj === null || einhaengewinkelObj === void 0 ? void 0 : einhaengewinkelObj.artNr}, 4 Stk`],
-                        ...(hakenversatzAktiv ? [["⚠ Hakenversatz Höhe", `Z oben ${zMassOben}mm + Z unten ${zMassUnten}mm → ${lichteHoehe} mm − ${zMassGesamt} mm = ${effektiveLichteHoehe} mm`]] : []),
+                        ...(hakenversatzAktiv ? [["⚠ Hakenversatz Höhe", `X oben ${zMassOben}mm + X unten ${zMassUnten}mm → ${lichteHoehe} mm − ${zMassGesamt} mm = ${effektiveLichteHoehe} mm`]] : []),
+                        ...buersten.map((b, i) => ["Bürste " + (i + 1), buerstenText(b, rahmenbreite, rahmenhoehe).replace(/^Bürste /, "")]),
                         ...(profilObj.schiebeverriegelung ? [["Schiebeverriegelung", "Art. 11845, 2 Stk"]] : []),
                     ], profilObj.hinweis), className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333] transition-colors" }, "Produktions\u00FCbersicht drucken"))),
             tab === "kalkulation" && (React.createElement("div", { className: "flex flex-col gap-4" },
@@ -3664,6 +3723,11 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                             React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
                                 kederKosten.toFixed(2),
                                 " \u20AC")),
+                        buersten.length > 0 && (React.createElement("div", { className: "flex justify-between" },
+                            React.createElement("span", null, "B\u00FCrsten (" + buerstenLaengeGesamtM.toFixed(2) + " lfm)" + (getPreis("buerste") === 0 ? " \u00B7 kein Preis hinterlegt" : "")),
+                            React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
+                                buerstenKosten.toFixed(2),
+                                " \u20AC"))),
                         React.createElement("div", { className: "flex justify-between" },
                             React.createElement("span", null, "Kleinteile"),
                             React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
@@ -3681,6 +3745,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                         React.createElement(Num, { label: "Schiebeverriegelung (11845, f\u00FCr ESF, 4 Stk je Rahmen)", value: getPreis("schiebeverriegelung"), onChange: (v) => setPreis("schiebeverriegelung", v), unit: "\u20AC/Stk", min: 0 }),
                         React.createElement(Num, { label: "Einh\u00E4ngewinkel (Art. 11819-11890, alle Ausf\u00FChrungen)", value: getPreis("einhaengewinkel"), onChange: (v) => setPreis("einhaengewinkel", v), unit: "\u20AC/Stk", min: 0 }),
                         React.createElement(Num, { label: "Keder", value: getPreis("keder"), onChange: (v) => setPreis("keder", v), unit: "\u20AC/lfm", min: 0 }),
+                        React.createElement(Num, { label: "B\u00FCrste (je lfm, alle Spannrahmen)", value: getPreis("buerste"), onChange: (v) => setPreis("buerste", v), unit: "\u20AC/lfm", min: 0 }),
                         React.createElement(Num, { label: "Kleinteile", value: getPreis("kleinteile"), onChange: (v) => setPreis("kleinteile", v), unit: "\u20AC", min: 0 }),
                         React.createElement(Num, { label: "Stundensatz", value: getPreis("stundensatz") || 55, onChange: (v) => setPreis("stundensatz", v), unit: "\u20AC/h", min: 0 }),
                         React.createElement(Num, { label: "Basis-Montagezeit", value: getPreis("basisstunden") || 0.5, onChange: (v) => setPreis("basisstunden", v), unit: "h", min: 0, step: 0.1 }),
@@ -3879,7 +3944,7 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
     const [lichteBreite, setLichteBreite] = useState(null);
     const [lichteHoehe, setLichteHoehe] = useState(null);
     const [ausfuehrungTyp, setAusfuehrungTyp] = useState("dt3");
-    const [gewebeTyp, setGewebeTyp] = useState("classic");
+    const [gewebeTyp, setGewebeTyp] = useState("advantage"); // Standard-Gewebe: IS Advantage
     const [anschlag, setAnschlag] = useState("links"); // Türanschlag, rein informativ für den Positionstext
     const [heroalNr, setHeroalNr] = useState("44");
     const [customRal, setCustomRal] = useState("7016");
@@ -3896,7 +3961,7 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
         setLichteBreite(null);
         setLichteHoehe(null);
         setAusfuehrungTyp("dt3");
-        setGewebeTyp("classic");
+        setGewebeTyp("advantage");
         setAnschlag("links");
         setMenge(1);
         setPositionEingabe("");
@@ -4642,7 +4707,7 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     const [offenerPositionstext, setOffenerPositionstext] = useState(null);
     const [rahmenbreite, setRahmenbreite] = useState(null);
     const [rahmenhoehe, setRahmenhoehe] = useState(null);
-    const [gewebeTyp, setGewebeTyp] = useState("classic");
+    const [gewebeTyp, setGewebeTyp] = useState("advantage"); // Standard-Gewebe: IS Advantage
     const [ausfuehrungTyp, setAusfuehrungTyp] = useState("sa1");
     const [laufrichtung, setLaufrichtung] = useState("links");
     const [heroalNr, setHeroalNr] = useState("44");
@@ -4656,7 +4721,7 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     const zuruecksetzen = () => {
         setRahmenbreite(null);
         setRahmenhoehe(null);
-        setGewebeTyp("classic");
+        setGewebeTyp("advantage");
         setAusfuehrungTyp("sa1");
         setLaufrichtung("links");
         setMenge(1);
