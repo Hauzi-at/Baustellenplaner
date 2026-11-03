@@ -4662,7 +4662,7 @@ const DEFAULT_SCHIEBETUER_PREISE = {
     "zarge_sa1": 36.30, "zarge_sa2-1sp": 36.30, "zarge_sa2-2sp": 36.30,
     "fluegel_sa1": 79.03, "fluegel_sa2-1sp": 79.03, "fluegel_sa2-2sp": 79.03,
     gewebe_classic: 2.30, gewebe_light: 2.30, gewebe_advantage: 3.95, gewebe_clear: 8.72, gewebe_pet: 9.67, gewebe_stainless: 7.05,
-    laufwerk: 2.91,
+    laufwerk: 2.91, griffleiste: 81.61, buerste: 0,
     marge: 45,
 };
 function loadSchiebetuerPreise(setPreise) {
@@ -4710,6 +4710,12 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     const [gewebeTyp, setGewebeTyp] = useState("advantage"); // Standard-Gewebe: IS Advantage
     const [ausfuehrungTyp, setAusfuehrungTyp] = useState("sa1");
     const [laufrichtung, setLaufrichtung] = useState("links");
+    const [laufschienenLaenge, setLaufschienenLaenge] = useState(null); // frei eintragbar (mm); leer = nicht angegeben
+    // Griffleiste (Art. 12931) — optional wie bei der Drehtür: Position mittig oder per Maß UK Rahmen–Mitte Griffleiste
+    const [buersten, setBuersten] = useState([]); // Bürsten am Flügel (siehe BUERSTEN_SEITEN) — Ansicht von innen
+    const [griffleisteVerbaut, setGriffleisteVerbaut] = useState(false);
+    const [griffleistePosition, setGriffleistePosition] = useState("mittig");
+    const [griffleisteMass, setGriffleisteMass] = useState(null);
     const [heroalNr, setHeroalNr] = useState("44");
     const [customRal, setCustomRal] = useState("7016");
     const [kunde, setKunde] = useState(defaultKunde || "");
@@ -4724,6 +4730,11 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         setGewebeTyp("advantage");
         setAusfuehrungTyp("sa1");
         setLaufrichtung("links");
+        setLaufschienenLaenge(null);
+        setBuersten([]);
+        setGriffleisteVerbaut(false);
+        setGriffleistePosition("mittig");
+        setGriffleisteMass(null);
         setMenge(1);
         setPositionEingabe("");
         setBearbeitungsId(null);
@@ -4744,6 +4755,11 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         setGewebeTyp((_c = c.gewebeTyp) !== null && _c !== void 0 ? _c : "classic");
         setAusfuehrungTyp((_d = c.ausfuehrungTyp) !== null && _d !== void 0 ? _d : "sa1");
         setLaufrichtung((_e = item.laufrichtung) !== null && _e !== void 0 ? _e : "links");
+        setLaufschienenLaenge(c.laufschienenLaenge != null ? c.laufschienenLaenge : null);
+        setBuersten(Array.isArray(c.buersten) ? c.buersten.map((b) => (Object.assign(Object.assign({}, neueBuerste()), b))) : []);
+        setGriffleisteVerbaut(!!c.griffleisteVerbaut);
+        setGriffleistePosition(c.griffleistePosition != null ? c.griffleistePosition : "mittig");
+        setGriffleisteMass(c.griffleisteMass != null ? c.griffleisteMass : null);
         setHeroalNr((_f = c.heroalNr) !== null && _f !== void 0 ? _f : "44");
         setCustomRal((_g = c.customRal) !== null && _g !== void 0 ? _g : "7016");
         setMenge((_h = item.menge) !== null && _h !== void 0 ? _h : 1);
@@ -4784,9 +4800,17 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     const gewebeKosten = gewebeflaecheM2 * gewebePreisProM2;
     const laufwerkKosten = getPreis("laufwerk") * ausfuehrungObj.fluegelAnzahl;
     const schwelleKosten = getPreis("schwelle") * ausfuehrungObj.schwelleAnzahl;
-    const kederKosten = fluegelUmfangM * getPreis("keder");
+    // Griffleiste 12931 (optional, wie bei der Drehtür): Zuschnitt = Flügelbreite − 70 mm; beim Keder zählt
+    // zusätzlich 2x die Griffleistenlänge mit (Keder oberhalb + unterhalb der Griffleiste im Gewebe).
+    const griffleisteLaengeMm = fluegelbreite - 70;
+    const kederZusatzMm = griffleisteVerbaut ? 2 * griffleisteLaengeMm : 0;
+    const griffleisteKosten = griffleisteVerbaut ? (griffleisteLaengeMm / 1000 / 6) * getPreis("griffleiste") : 0;
+    const kederKosten = (fluegelUmfangM + kederZusatzMm / 1000) * getPreis("keder");
     const fixkostenKleinteile = getPreis("kleinteile");
-    const materialkosten = zargeKosten + fluegelKosten + gewebeKosten + laufwerkKosten + schwelleKosten + kederKosten + fixkostenKleinteile;
+    // Bürsten: Seite rechts/links = Flügelhöhe, oben/unten = Flügelbreite (je Flügel, Ansicht von innen); "Länge" überschreibt.
+    const buerstenLaengeGesamtM = buersten.reduce((sum, b) => sum + buerstenLaengeMm(b, fluegelbreite, fluegelhoehe), 0) / 1000;
+    const buerstenKosten = buerstenLaengeGesamtM * getPreis("buerste");
+    const materialkosten = zargeKosten + fluegelKosten + gewebeKosten + laufwerkKosten + schwelleKosten + kederKosten + griffleisteKosten + buerstenKosten + fixkostenKleinteile;
     const stundensatz = getPreis("stundensatz") || 55;
     const basisStunden = getPreis("basisstunden") || 0.9;
     const stunden = basisStunden + gewebeflaecheM2 * 0.2;
@@ -4802,8 +4826,11 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         `Flügelmaß: ${fluegelbreite.toFixed(1)} × ${fluegelhoehe} mm (${ausfuehrungObj.fluegelAnzahl}× Flügel)`,
         `Ausführung: ${ausfuehrungObj.label} (heroal Katalog S. ${ausfuehrungObj.seite})`,
         `Laufrichtung: ${laufrichtung === "links" ? "Links" : "Rechts"}`,
+        ...(laufschienenLaenge ? [`Laufschienenlänge: ${laufschienenLaenge} mm`] : []),
         `Zarge: ${ausfuehrungObj.zargeLabel} (Art. ${ausfuehrungObj.zargeArtNr})`,
         `Flügelprofil: ${ausfuehrungObj.fluegelLabel} (Art. ${ausfuehrungObj.fluegelArtNr})`,
+        ...buersten.map((b) => buerstenText(b, fluegelbreite, fluegelhoehe)),
+        ...(griffleisteVerbaut ? [`Griffleiste (Art. 12931): ${griffleisteLaengeMm.toFixed(0)} mm, Position: ${griffleistePosition === "mittig" ? "mittig" : `Maß UK Rahmen–Mitte Griffleiste = ${griffleisteMass !== null && griffleisteMass !== void 0 ? griffleisteMass : "?"} mm`}`] : []),
         `Farbe: ${displayLabel}`,
         `Gewebe: ${gewebeObj.label} (${gewebeObj.farbe})`,
     ].join("\n");
@@ -4811,7 +4838,7 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     const addToListe = () => {
         if (eingabeUnvollstaendig)
             return;
-        const config = { rahmenbreite, rahmenhoehe, gewebeTyp, ausfuehrungTyp, heroalNr, customRal };
+        const config = { rahmenbreite, rahmenhoehe, gewebeTyp, ausfuehrungTyp, laufschienenLaenge, buersten, griffleisteVerbaut, griffleistePosition, griffleisteMass, heroalNr, customRal };
         const item = {
             id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), position: positionEingabe, kunde: kunde || "—", rahmenbreite, rahmenhoehe, fluegelbreite, fluegelhoehe,
             gewebeLabel: gewebeObj.label, colorLabel: displayLabel,
@@ -4852,7 +4879,37 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                     React.createElement(Num, { label: "Rahmenbreite", value: rahmenbreite, onChange: setRahmenbreite, unit: "mm", min: 600, allowEmpty: true }),
                     React.createElement(Num, { label: "Rahmenh\u00F6he", value: rahmenhoehe, onChange: setRahmenhoehe, unit: "mm", min: 800, allowEmpty: true }),
                     React.createElement(Select, { label: "Laufrichtung", value: laufrichtung, onChange: setLaufrichtung, options: [{ value: "links", label: "Links" }, { value: "rechts", label: "Rechts" }] }),
+                    React.createElement(Num, { label: "Laufschienenl\u00E4nge (optional)", value: laufschienenLaenge, onChange: setLaufschienenLaenge, unit: "mm", min: 1, allowEmpty: true }),
                     React.createElement(Select, { label: "Gewebe", value: gewebeTyp, onChange: setGewebeTyp, options: GEWEBE_TYPEN.map((g) => ({ value: g.id, label: `${g.label} (${g.farbe})` })), className: "col-span-2" })),
+                React.createElement("div", { className: "border border-[#D8D4C8] rounded-md bg-white px-3 py-2.5" },
+                    React.createElement("div", { className: "flex items-center justify-between mb-2" },
+                        React.createElement("span", { className: "text-[13px] font-medium text-[#1B1F24]" }, "B\u00FCrsten"),
+                        React.createElement("button", { type: "button", onClick: () => setBuersten((l) => [...l, neueBuerste()]), className: "flex items-center gap-1 px-2.5 py-1 rounded-md border border-[#D8D4C8] bg-white text-[12px] text-[#1B1F24] hover:border-[#E8963B]" }, "+ B\u00FCrste hinzuf\u00FCgen")),
+                    React.createElement("p", { className: "text-[11px] text-[#B96A16] mb-2" }, "Ansicht immer von innen (links / rechts / oben / unten)."),
+                    buersten.length === 0 && React.createElement("p", { className: "text-[11px] text-[#8A8F98]" }, "Keine B\u00FCrste \u2014 mit \u201E+ B\u00FCrste hinzuf\u00FCgen\u201C eine oder mehrere (auch unterschiedliche) B\u00FCrsten w\u00E4hlen."),
+                    buersten.map((b, idx) => {
+                        const upd = (patch) => setBuersten((l) => l.map((x) => (x.id === b.id ? Object.assign(Object.assign({}, x), patch) : x)));
+                        return React.createElement("div", { key: b.id, className: "border border-[#E2DFD3] rounded-lg bg-white px-3 py-3 mb-2" },
+                            React.createElement("div", { className: "flex items-center justify-between mb-2" },
+                                React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "B\u00FCrste " + (idx + 1)),
+                                React.createElement("button", { type: "button", onClick: () => setBuersten((l) => l.filter((x) => x.id !== b.id)), className: "text-[12px] text-[#8A8F98] hover:text-[#C0392B]" }, "Entfernen")),
+                            React.createElement("div", { className: "grid grid-cols-2 gap-2" },
+                                React.createElement(Select, { label: "Seite (Ansicht von innen)", value: b.seite, onChange: (v) => upd({ seite: v }), options: BUERSTEN_SEITEN }),
+                                React.createElement(Select, { label: "Lage", value: b.lage, onChange: (v) => upd({ lage: v }), options: BUERSTEN_LAGEN }),
+                                React.createElement(Num, { label: "B\u00FCrstenma\u00DF", value: b.mass, onChange: (v) => upd({ mass: v }), unit: "mm", min: 1 }),
+                                React.createElement(Num, { label: "L\u00E4nge (leer = ganze Seite)", value: b.laenge, onChange: (v) => upd({ laenge: v }), unit: "mm", min: 1, allowEmpty: true }),
+                                React.createElement("label", { className: "flex flex-col gap-1 col-span-2" },
+                                    React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Bemerkung (optional)"),
+                                    React.createElement("input", { type: "text", value: b.bemerkung, onChange: (e) => upd({ bemerkung: e.target.value }), placeholder: "z.B. von unten ca. 5 cm", className: "border border-[#D8D4C8] rounded-md bg-white px-2.5 py-1.5 text-[14px] text-[#1B1F24] outline-none focus:border-[#E8963B] transition-colors" }))),
+                            React.createElement("p", { className: "text-[11px] text-[#8A8F98] mt-1.5" }, "Zuschnitt: " + buerstenLaengeMm(b, fluegelbreite, fluegelhoehe) + " mm"));
+                    })),
+                React.createElement("div", { className: "border border-[#D8D4C8] rounded-md bg-white px-3 py-2.5 flex flex-col gap-2" },
+                    React.createElement("label", { className: "flex items-center gap-2 text-[13px] text-[#1B1F24]" },
+                        React.createElement("input", { type: "checkbox", checked: griffleisteVerbaut, onChange: (e) => setGriffleisteVerbaut(e.target.checked), className: "accent-[#E8963B] w-4 h-4" }),
+                        "Griffleiste (Art. 12931) verbaut"),
+                    griffleisteVerbaut && (React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6" },
+                        React.createElement(Select, { label: "Griffleiste Position", value: griffleistePosition, onChange: setGriffleistePosition, options: [{ value: "mittig", label: "Mittig" }, { value: "mass", label: "Eigenes Ma\u00DF" }] }),
+                        griffleistePosition === "mass" && React.createElement(Num, { label: "Ma\u00DF UK Rahmen \u2013 Mitte Griffleiste", value: griffleisteMass, onChange: setGriffleisteMass, unit: "mm", min: 0, allowEmpty: true })))),
                 React.createElement("p", { className: "text-[11px] text-[#8A8F98] -mt-2" }, gewebeObj.info),
                 React.createElement("div", { className: `border rounded-md px-3 py-2 text-[11.5px] ${ausfuehrungObj.bestaetigtBreite ? "border-[#D8D4C8] bg-[#FFF8EF] text-[#8A6438]" : "border-[#C0392B] bg-[#FDEDEB] text-[#C0392B]"}` },
                     !ausfuehrungObj.bestaetigtBreite && "⚠ ",
@@ -4934,6 +4991,24 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                     " \u2014 heroal IS Katalog S. ",
                     ausfuehrungObj.seite,
                     "."),
+                laufschienenLaenge ? (React.createElement("div", { className: "border-2 border-[#E8963B] rounded-lg bg-[#FFF8EF] px-3.5 py-2.5" },
+                    React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "Laufschienenl\u00E4nge"),
+                    React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#B96A16] font-semibold mt-0.5" },
+                        laufschienenLaenge,
+                        " ",
+                        React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm")))) : null,
+                buersten.length > 0 && (React.createElement("div", { className: "border border-[#E2DFD3] rounded-lg bg-white px-3.5 py-2.5" },
+                    React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium mb-1" }, "B\u00FCrsten"),
+                    buersten.map((b) => React.createElement("div", { key: b.id, className: "text-[13px] font-['IBM_Plex_Mono'] text-[#1B1F24] py-0.5" }, buerstenText(b, fluegelbreite, fluegelhoehe))))),
+                griffleisteVerbaut && (React.createElement("div", { className: "border-2 border-[#E8963B] rounded-lg bg-[#FFF8EF] px-3.5 py-2.5" },
+                    React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "Griffleiste"),
+                    React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#B96A16] font-semibold mt-0.5" },
+                        griffleisteLaengeMm.toFixed(0),
+                        " ",
+                        React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm")),
+                    React.createElement("div", { className: "text-[10px] text-[#8A8F98] mt-0.5" },
+                        "Art. 12931 \u00B7 Position: ",
+                        griffleistePosition === "mittig" ? "mittig" : `UK Rahmen\u2013Mitte = ${griffleisteMass !== null && griffleisteMass !== void 0 ? griffleisteMass : "?"} mm`))),
                 React.createElement("button", { onClick: () => druckeUebersicht("Schiebetür — " + ausfuehrungObj.label, kunde, [
                         ["Ausführung", `${ausfuehrungObj.label} (S. ${ausfuehrungObj.seite})`],
                         ["Rahmenbreite", `${rahmenbreite} mm`], ["Rahmenhöhe", `${rahmenhoehe} mm`],
@@ -4941,8 +5016,11 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                         ["Flügelhöhe", `${fluegelhoehe} mm`],
                         ["Zarge", `${ausfuehrungObj.zargeLabel} (Art. ${ausfuehrungObj.zargeArtNr})`],
                         ["Flügelprofil", `${ausfuehrungObj.fluegelLabel} (Art. ${ausfuehrungObj.fluegelArtNr})`],
+                        ...buersten.map((b, i) => ["Bürste " + (i + 1), buerstenText(b, fluegelbreite, fluegelhoehe).replace(/^Bürste /, "")]),
+                        ...(griffleisteVerbaut ? [["Griffleiste (Art. 12931)", `${griffleisteLaengeMm.toFixed(0)} mm — Position: ${griffleistePosition === "mittig" ? "mittig" : `UK Rahmen–Mitte = ${griffleisteMass !== null && griffleisteMass !== void 0 ? griffleisteMass : "?"} mm`}`]] : []),
                         ["Schwellenprofil", `Art. ${ausfuehrungObj.schwelleArtNr}, ${ausfuehrungObj.schwelleAnzahl}×`],
                         ["Laufrichtung", laufrichtung === "links" ? "Links" : "Rechts"],
+                        ...(laufschienenLaenge ? [["Laufschienenlänge", `${laufschienenLaenge} mm`]] : []),
                         ["Gewebe", `${gewebeObj.label} (${gewebeObj.farbe})`], ["Farbe", displayLabel],
                     ], ausfuehrungObj.hinweis), className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333] transition-colors" }, "Produktions\u00FCbersicht drucken"))),
             tab === "kalkulation" && (React.createElement("div", { className: "flex flex-col gap-4" },
@@ -5054,6 +5132,16 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                             React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
                                 schwelleKosten.toFixed(2),
                                 " \u20AC")),
+                        buersten.length > 0 && React.createElement("div", { className: "flex justify-between" },
+                            React.createElement("span", null, "B\u00FCrsten (" + buerstenLaengeGesamtM.toFixed(2) + " lfm)" + (getPreis("buerste") === 0 ? " \u00B7 kein Preis hinterlegt" : "")),
+                            React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
+                                buerstenKosten.toFixed(2),
+                                " \u20AC")),
+                        griffleisteVerbaut && React.createElement("div", { className: "flex justify-between" },
+                            React.createElement("span", null, "Griffleiste (Art. 12931, " + griffleisteLaengeMm.toFixed(0) + " mm)"),
+                            React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
+                                griffleisteKosten.toFixed(2),
+                                " \u20AC")),
                         React.createElement("div", { className: "flex justify-between" },
                             React.createElement("span", null, "Keder (Fl\u00FCgel)"),
                             React.createElement("span", { className: "font-['IBM_Plex_Mono']" },
@@ -5076,6 +5164,8 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                     React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4" },
                         React.createElement(Num, { label: "Laufwerk/Rollen (je Fl\u00FCgel)", value: getPreis("laufwerk"), onChange: (v) => setPreis("laufwerk", v), unit: "\u20AC/Set", min: 0 }),
                         React.createElement(Num, { label: "Schwellenprofil (12921)", value: getPreis("schwelle"), onChange: (v) => setPreis("schwelle", v), unit: "\u20AC/Stk", min: 0 }),
+                        React.createElement(Num, { label: "B\u00FCrste (je lfm)", value: getPreis("buerste"), onChange: (v) => setPreis("buerste", v), unit: "\u20AC/lfm", min: 0 }),
+                        React.createElement(Num, { label: "Griffleiste (12931) \u2014 Preis pro 6m-Stange", value: getPreis("griffleiste"), onChange: (v) => setPreis("griffleiste", v), unit: "\u20AC", min: 0 }),
                         React.createElement(Num, { label: "Keder", value: getPreis("keder"), onChange: (v) => setPreis("keder", v), unit: "\u20AC/lfm", min: 0 }),
                         React.createElement(Num, { label: "Kleinteile", value: getPreis("kleinteile"), onChange: (v) => setPreis("kleinteile", v), unit: "\u20AC", min: 0 }),
                         React.createElement(Num, { label: "Stundensatz", value: getPreis("stundensatz") || 55, onChange: (v) => setPreis("stundensatz", v), unit: "\u20AC/h", min: 0 }),
