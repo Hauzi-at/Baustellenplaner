@@ -3180,7 +3180,7 @@ function schnittPreisFuer(gruppe, preise) {
     }
     return 0;
 }
-function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr) {
+function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr, ansicht) {
     gehr = gehr || { anschnitt: 0, zwischen: kerf, saAnschnitt: 0, saZwischen: kerf };
     const esc = (t) => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const zahl = (n) => Number(n).toLocaleString("de-AT", { maximumFractionDigits: 1 });
@@ -3217,19 +3217,36 @@ function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr) {
       .so .hint { font-size: 11px; color: #8A8F98; }
     </style>`;
     const total = `<div class="total"><div><b>${summeStangen}</b> neue Stangen insgesamt</div><div>Stangenlänge ${zahl(stange)} mm · gerade Schnitte ${zahl(kerf)} mm · Gehrung: Anschnitt ${zahl(gehr.anschnitt)} mm, zwischen den Schnitten ${zahl(gehr.zwischen)} mm · Schiebetür: ${zahl(gehr.saAnschnitt)} / ${zahl(gehr.saZwischen)} mm</div>${summeKosten > 0 ? `<div>Profilkosten (EK): <b>${summeKosten.toFixed(2)} €</b>${kostenKomplett ? "" : " (ohne Profile ohne hinterlegten Preis)"}</div>` : ""}</div>`;
+    // Sägeplan: Anschlag nur einmal je Länge einstellen – alle gleich langen Stücke (über alle Stangen) hintereinander sägen.
+    // Gehrungsprofile zuerst (Säge bleibt auf 45°), danach die geraden Schnitte (Winkel nur einmal umstellen).
+    let anschlaege = 0;
+    const saegeGruppen = ergebnis.slice().sort((a, b) => (b.gehrung ? 1 : 0) - (a.gehrung ? 1 : 0) || a.artNr.localeCompare(b.artNr));
+    const saegeBloecke = saegeGruppen.map((g) => {
+        let nS = 0, nR = 0;
+        const namen = g.alle.map((st) => (st.istRest ? "Rest " + (++nR) : "Stange " + (++nS)));
+        const proLaenge = {};
+        g.alle.forEach((st, bi) => st.teile.forEach((l, k) => { (proLaenge[l] = proLaenge[l] || []).push({ bar: namen[bi], text: (st.etiketten && st.etiketten[k]) || "", mass: (st.massen && st.massen[k]) || "" }); }));
+        const laengen = Object.keys(proLaenge).map(Number).sort((a, b) => b - a);
+        anschlaege += laengen.length;
+        const zeilen = laengen.map((l, i) => `<tr><td class="n"><b>${i + 1}.</b> Anschlag ${zahl(l)} mm</td><td>${proLaenge[l].length} Stück: ${proLaenge[l].map((e) => `<span class="chip"><b>${esc(e.bar)}</b><i>${esc(e.text)}</i></span>`).join("")}</td></tr>`).join("");
+        return `<div class="blk"><div class="kopf"><div><b>Art. ${esc(g.artNr)}</b> — ${esc(g.bez)}${g.farbe ? ` <span class="farbe">${esc(g.farbe)}</span>` : ""} <span class="farbe">${g.gehrung ? "Säge auf 45° Gehrung" : "gerader Schnitt (90°)"}</span></div>
+          <div class="sum"><b>${laengen.length} Anschlag-Einstellung${laengen.length === 1 ? "" : "en"}</b></div></div>
+          <table><thead><tr><th>Anschlag einstellen</th><th>Dann alle diese Stücke sägen (Stange · Position)</th></tr></thead><tbody>${zeilen}</tbody></table></div>`;
+    }).join("");
+    const saegeKopf = `<div class="total"><div><b>${anschlaege}</b> Anschlag-Einstellungen insgesamt (eine je Länge und Profil)</div><div>Reihenfolge: erst alle Gehrungs-Profile, dann die geraden Schnitte. Jeweils von der längsten zur kürzesten Länge – so stellst du den Anschlag nur einmal je Länge ein.</div></div>`;
     const hinweis = `<div class="hint">Enthalten: Spannrahmen, Drehtür, Schiebetür (Rahmen-, Flügel-, Zarge-, Schwellen-, Griffleisten-, Querprofil-, Laufschienen-Zuschnitte × Stückzahl). Profile mit gleicher Art.-Nr. und Farbe teilen sich die Stangen. Rollladen, Lichtschacht und IS KIS sind nicht eingerechnet.</div>`;
-    return `<div class="so">${css}${ergebnis.length ? total + bloecke : "<p>Keine Profil-Zuschnitte vorhanden (Spannrahmen, Drehtür oder Schiebetür in den Warenkorb legen).</p>"}${hinweis}</div>`;
+    return `<div class="so">${css}${ergebnis.length ? (ansicht === "saege" ? saegeKopf + saegeBloecke : total + bloecke) : "<p>Keine Profil-Zuschnitte vorhanden (Spannrahmen, Drehtür oder Schiebetür in den Warenkorb legen).</p>"}${hinweis}</div>`;
 }
-function druckeSchnittoptimierung(kunde, ergebnis, stange, kerf, preise, gehr) {
+function druckeSchnittoptimierung(kunde, ergebnis, stange, kerf, preise, gehr, ansicht) {
     const heute = new Date().toLocaleDateString("de-AT");
     const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>Schnittoptimierung — ${kunde}</title>
     <style>body { font-family: Arial, sans-serif; padding: 24px; color: #1B1F24; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .k { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #1B1F24; padding-bottom: 12px; margin-bottom: 14px; } .k img { width: 52px; height: 52px; }
     .f { font-size: 11px; letter-spacing: .15em; text-transform: uppercase; color: #E8963B; font-weight: 600; } .t { font-size: 20px; font-weight: 700; }
     .m { font-size: 12.5px; color: #5B6472; margin-bottom: 12px; } @media print { body { padding: 8px; } }</style></head><body>
-    <div class="k"><img src="${LOGO_IMAGE}"><div><div class="f">${FIRMA.name} — Produktion</div><div class="t">Schnittoptimierung</div></div></div>
+    <div class="k"><img src="${LOGO_IMAGE}"><div><div class="f">${FIRMA.name} — Produktion</div><div class="t">${ansicht === "saege" ? "Sägeplan (Anschlag je Länge)" : "Schnittoptimierung"}</div></div></div>
     <div class="m"><b>Kunde:</b> ${kunde || "—"} &nbsp;·&nbsp; <b>Datum:</b> ${heute}</div>
-    ${schnittHtml(kunde, ergebnis, stange, kerf, preise, true, gehr)}</body></html>`;
+    ${schnittHtml(kunde, ergebnis, stange, kerf, preise, true, gehr, ansicht)}</body></html>`;
     zeigeDruckVorschau(html);
 }
 const SCHNITT_REST_MIN = 250;
@@ -3244,6 +3261,7 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
     const [reste, setReste] = useState([]);
     const [einstOffen, setEinstOffen] = useState(false);
     const [uebernommen, setUebernommen] = useState(null);
+    const [ansicht, setAnsicht] = useState("stangen");
     const [meldung, setMeldung] = useState("");
     const sig = JSON.stringify(positionen.map((p) => [p.posNr, p.produktKey, p.item.id, p.item.menge, p.item.rahmenbreite, p.item.rahmenhoehe, p.item.fluegelbreite, p.item.fluegelhoehe, p.item.config && p.item.config.laufschienenLaenge]));
     useEffect(() => {
@@ -3337,7 +3355,7 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
                 "Pro Profil (Art.-Nr. + Farbe) siehst du, wie viele 6-m-Stangen du brauchst. Jede Zeile „Stange 1, 2, …“ ist EINE Stange. Die Kästchen daneben sind die Stücke, die du von dieser Stange absägst – oben die Länge, darunter die Position und ob es Breite oder Höhe ist (zum Beschriften). „Rest“ ist das, was von der Stange übrig bleibt."),
             React.createElement("div", { className: "text-[12.5px] bg-white border border-[#D8D4C8] rounded-lg p-3 mb-3" },
                 React.createElement("div", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium mb-1.5" }, "Berechnet aus dem Warenkorb (" + positionen.length + " Positionen)"),
-                positionen.map((p, i) => React.createElement("div", { key: i, className: "flex gap-2 py-0.5 border-t border-[#EEEBE0] first:border-t-0" },
+                positionen.map((p, i) => React.createElement("div", { key: i, className: "flex gap-2 py-0.5", style: { borderTop: i ? "1px solid #EEEBE0" : "none" } },
                     React.createElement("span", { className: "font-semibold text-[#1B1F24] w-10 shrink-0" }, p.posNr || (100 + i * 10)),
                     React.createElement("span", { className: "text-[#1B1F24] shrink-0" }, p.produktLabel),
                     React.createElement("span", { className: "text-[#5B6472] min-w-0" }, positionKurzbeschreibung(p.produktKey, p.item) + ((p.item.menge || 1) > 1 ? " · " + p.item.menge + " Stk" : ""))))),
@@ -3351,6 +3369,8 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
                     React.createElement(Num, { label: "Schiebetür (breiteres Profil): Anschnitt", value: saAnschnitt, onChange: (v) => { setSaAnschnitt(v); speichern(stange, kerf, anschnitt, zwischen, v, saZwischen); }, unit: "mm", min: 0 }),
                     React.createElement(Num, { label: "Schiebetür (breiteres Profil): zwischen den Schnitten", value: saZwischen, onChange: (v) => { setSaZwischen(v); speichern(stange, kerf, anschnitt, zwischen, saAnschnitt, v); }, unit: "mm", min: 0 })),
                 restBlock),
+            ergebnis.length > 0 && React.createElement("div", { className: "flex gap-2 mb-3" },
+                [["stangen", "Stangen-Plan (was auf welche Stange)"], ["saege", "Sägeplan (Säge selten umstellen)"]].map(([k, t]) => React.createElement("button", { key: k, onClick: () => setAnsicht(k), className: "px-3 py-2 rounded-md text-[13px] font-semibold border " + (ansicht === k ? "bg-[#1B1F24] text-white border-[#1B1F24]" : "bg-white text-[#1B1F24] border-[#D8D4C8]") }, t))),
             ergebnis.length > 0 && React.createElement(React.Fragment, null, istUebernommen
                 ? React.createElement("div", { className: "mb-3 rounded-lg border border-[#2E7D4F] bg-[#EAF5EE] p-3 text-[13px] text-[#1B1F24] flex flex-wrap items-center gap-2 justify-between" },
                     React.createElement("span", null, "✔ Reste aus diesem Auftrag sind im Restlager (" + (uebernommen.zeit || "") + "). Angezeigt wird die Berechnung mit dem damaligen Restlager."),
@@ -3359,9 +3379,9 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
                     React.createElement("button", { onClick: resteUebernehmen, className: "px-3.5 py-2 rounded-md bg-[#E8963B] text-white text-[13px] font-semibold hover:bg-[#d6852e]" }, "Reste ins Restlager übernehmen (ab " + SCHNITT_REST_MIN + " mm)"),
                     React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "Erst drücken, wenn der Auftrag gesägt ist. Verbrauchte Reste werden dabei entfernt.")),
                 meldung && React.createElement("div", { className: "text-[12.5px] text-[#2E7D4F] mb-3" }, meldung)),
-            React.createElement("div", { dangerouslySetInnerHTML: { __html: schnittHtml(kunde, ergebnis, stange, kerf, preise, false, gehr) } }),
+            React.createElement("div", { dangerouslySetInnerHTML: { __html: schnittHtml(kunde, ergebnis, stange, kerf, preise, false, gehr, ansicht) } }),
             React.createElement("div", { className: "flex justify-end gap-2 mt-3" },
-                React.createElement("button", { onClick: () => druckeSchnittoptimierung(kunde, ergebnis, stange, kerf, preise, gehr), className: "px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333]" }, "Drucken"))));
+                React.createElement("button", { onClick: () => druckeSchnittoptimierung(kunde, ergebnis, stange, kerf, preise, gehr, ansicht), className: "px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333]" }, "Drucken"))));
 }
 // ============================================================
 // GEMEINSAME KUNDENVERWALTUNG (produktübergreifend, alle 6 Konfiguratoren teilen sich diese Liste)
