@@ -2893,6 +2893,47 @@ function etikettenMasseFuer(produktKey, item) {
             return { breite: "", hoehe: "", falz: "" };
     }
 }
+// Zusatzangaben fürs Etikett je Produkt: Ausführung, Farbe, Gewebe und eine Liste kurzer Zusatzzeilen
+// (Bürsten, Griffleiste, Laufschiene, Anschlag, Hakenversatz ...). Alles stammt aus dem gespeicherten
+// Positions-Objekt, es wird nichts neu berechnet.
+function etikettenDetailFuer(produktKey, item) {
+    const c = item.config || {};
+    const zusatz = [];
+    let ausfuehrung = "", farbe = item.colorLabel || "", gewebe = item.gewebeLabel || "";
+    const kurz = (t) => String(t || "").split(" — ")[0];
+    switch (produktKey) {
+        case "spannrahmen_liste_v1":
+            ausfuehrung = kurz(item.profilLabel);
+            (c.buersten || []).forEach((b) => zusatz.push(buerstenText(b, item.rahmenbreite, item.rahmenhoehe).replace(" (Ansicht von innen)", " (v. innen)").replace(/ — Länge \d+ mm/, (m) => m.replace(" — Länge", ", L")).replace(/^Bürste /, "Bürste ")));
+            if (c.hakenversatzAktiv) zusatz.push(`X-Maß oben ${c.zMassOben || 0} / unten ${c.zMassUnten || 0}`);
+            break;
+        case "drehtuer_liste_v1":
+            ausfuehrung = kurz(item.ausfuehrungLabel);
+            if (item.anschlag) zusatz.push("Anschlag " + (item.anschlag === "links" ? "links" : "rechts"));
+            if (c.griffleisteVerbaut) zusatz.push("Griffleiste" + (c.griffleistePosition === "mass" ? ` (UK–Mitte ${c.griffleisteMass != null ? c.griffleisteMass : "?"})` : " mittig"));
+            if (item.fluegelbreite != null) zusatz.push(`Flügel ${Number(Number(item.fluegelbreite).toFixed(1))} × ${Number(Number(item.fluegelhoehe).toFixed(1))}`);
+            break;
+        case "schiebetuer_liste_v1":
+            ausfuehrung = kurz(item.ausfuehrungLabel);
+            if (item.laufrichtung) zusatz.push("Lauf " + (item.laufrichtung === "links" ? "links" : "rechts"));
+            if (c.laufschienenLaenge) zusatz.push(`Laufschiene ${c.laufschienenLaenge}`);
+            (c.buersten || []).forEach((b) => zusatz.push(buerstenText(b, item.fluegelbreite, item.fluegelhoehe).replace(" (Ansicht von innen)", " (v. innen)")));
+            if (c.griffleisteVerbaut) zusatz.push("Griffleiste" + (c.griffleistePosition === "mass" ? ` (UK–Mitte ${c.griffleisteMass != null ? c.griffleisteMass : "?"})` : " mittig"));
+            if (item.fluegelbreite != null) zusatz.push(`Flügel ${Number(Number(item.fluegelbreite).toFixed(1))} × ${Number(Number(item.fluegelhoehe).toFixed(1))}`);
+            break;
+        case "lichtschacht_liste_v1":
+            ausfuehrung = kurz(item.ausfuehrungLabel);
+            if (item.materialLabel) zusatz.push(item.materialLabel);
+            break;
+        case "kis_liste_v1":
+            ausfuehrung = kurz(item.mechanikLabel);
+            break;
+        default: // Rollladen
+            ausfuehrung = kurz(item.system || item.ausfuehrung || "");
+            farbe = item.colorLabel || "";
+    }
+    return { ausfuehrung, farbe, gewebe, zusatz };
+}
 // RFC4180-konformes CSV-Feld: nur in Anführungszeichen setzen, wenn nötig (Komma,
 // Anführungszeichen oder Zeilenumbruch enthalten), eingebettete Anführungszeichen verdoppeln.
 function csvFeld(wert) {
@@ -2900,11 +2941,14 @@ function csvFeld(wert) {
     return /[,"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 // Exportiert alle Positionen eines Kunden als CSV-Datei zum Import in Label LIVE
-// (Daten-Merge-Funktion) — eine Zeile je Position, für den Etikettendruck (70×50mm).
+// (Daten-Merge-Funktion) — eine Zeile = ein Etikett je Position (70×50mm). Die ersten 7 Spalten sind
+// unverändert geblieben (bestehende Label-LIVE-Vorlagen laufen weiter), neu angehängt: Ausfuehrung,
+// Farbe, Gewebe, Zusatz.
 function exportiereEtikettenCsv(kunde, positionen) {
-    const kopf = ["Kunde", "Position", "Typ", "Breite_mm", "Hoehe_mm", "Falz_mm", "Menge"];
+    const kopf = ["Kunde", "Position", "Typ", "Breite_mm", "Hoehe_mm", "Falz_mm", "Menge", "Ausfuehrung", "Farbe", "Gewebe", "Zusatz", "Titel", "Mass_BxH"];
     const zeilen = positionen.map((p) => {
         const m = etikettenMasseFuer(p.produktKey, p.item);
+        const d = etikettenDetailFuer(p.produktKey, p.item);
         return [
             kunde || "",
             p.item.position || "",
@@ -2913,9 +2957,15 @@ function exportiereEtikettenCsv(kunde, positionen) {
             m.hoehe != null ? m.hoehe : "",
             m.falz != null ? m.falz : "",
             p.item.menge,
+            d.ausfuehrung,
+            d.farbe,
+            d.gewebe,
+            d.zusatz.join(" | "),
+            [p.produktLabel, d.ausfuehrung].filter(Boolean).join(" "),
+            (m.breite != null && m.breite !== "" && m.hoehe != null && m.hoehe !== "") ? `${m.breite} x ${m.hoehe} mm` : "",
         ].map(csvFeld).join(",");
     });
-    const csv = "﻿" + [kopf.join(","), ...zeilen].join("\r\n");
+    const csv = "\uFEFF" + [kopf.join(","), ...zeilen].join("\r\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -2926,6 +2976,55 @@ function exportiereEtikettenCsv(kunde, positionen) {
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+// Direkter Etikettendruck: ein Etikett (70×50 mm) je Position, jede Seite = ein Etikett. Gestaltung nach
+// Vorlage von Thomas: blaue Titelleiste (Produkt + Ausführung), darunter "Kommission", "Position",
+// "Maß (BxH)" (bei Spannrahmen zusätzlich Falzmaß) und das TH-Logo unten rechts.
+function druckeEtiketten(kunde, positionen) {
+    const esc = (t) => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const etiketten = positionen.map((p) => {
+        const m = etikettenMasseFuer(p.produktKey, p.item);
+        const d = etikettenDetailFuer(p.produktKey, p.item);
+        const titel = [p.produktLabel, d.ausfuehrung].filter(Boolean).join(" ");
+        const mass = (m.breite != null && m.breite !== "" && m.hoehe != null && m.hoehe !== "") ? `${m.breite} x ${m.hoehe} mm` : "";
+        const extras = [d.farbe, d.gewebe, ...d.zusatz].filter(Boolean);
+        return `<div class="et">
+          <div class="titel">${esc(titel)}</div>
+          <div class="body">
+            <div class="row"><span class="l">Kommission:</span><span class="v">${esc(kunde)}</span></div>
+            <div class="row pos"><span class="l">Position:</span><span class="v">${esc(p.item.position || "—")}${p.item.menge > 1 ? ` (${p.item.menge}×)` : ""}</span></div>
+            ${mass ? `<div class="row"><span class="l">Maß (BxH):</span><span class="v">${esc(mass)}</span></div>` : ""}
+            ${m.falz != null && m.falz !== "" ? `<div class="row"><span class="l">Falzmaß:</span><span class="v">${esc(m.falz)} mm</span></div>` : ""}
+            ${extras.length ? `<div class="extra">${extras.map(esc).join(" · ")}</div>` : ""}
+          </div>
+          <img class="logo" src="${LOGO_IMAGE}" alt="">
+        </div>`;
+    }).join("");
+    const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>Etiketten — ${esc(kunde)}</title>
+    <style>
+      @page { size: 70mm 50mm; margin: 0; }
+      * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; }
+      .et { position: relative; width: 70mm; height: 50mm; overflow: hidden; page-break-after: always; break-after: page; background: #fff; }
+      .et:last-child { page-break-after: auto; break-after: auto; }
+      .titel { background: #2B4C74; color: #fff; font-weight: 700; font-size: 12.5pt; height: 9.5mm; line-height: 9.5mm; padding: 0 3mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .body { padding: 2.6mm 3mm 0; }
+      .row { display: flex; align-items: baseline; gap: 2mm; margin-bottom: 1.9mm; }
+      .l { width: 21mm; flex-shrink: 0; font-size: 8.5pt; }
+      .v { font-weight: 700; font-size: 9pt; line-height: 1.15; }
+      .pos .l { font-size: 9.5pt; } .pos .v { font-size: 11pt; }
+      .extra { font-size: 6pt; line-height: 1.25; color: #333; max-width: 47mm; margin-top: 0.5mm; }
+      .logo { position: absolute; right: 2.5mm; bottom: 2.5mm; width: 11.5mm; height: 11.5mm; }
+    </style></head><body>${etiketten}</body></html>`;
+    const fenster = window.open("", "_blank");
+    if (!fenster) {
+        alert("Bitte Pop-ups für diese Seite erlauben, um drucken zu können.");
+        return;
+    }
+    fenster.document.write(html);
+    fenster.document.close();
+    fenster.onload = () => { fenster.focus(); fenster.print(); };
+    setTimeout(() => { fenster.focus(); fenster.print(); }, 400);
 }
 // ============================================================
 // GEMEINSAME KUNDENVERWALTUNG (produktübergreifend, alle 6 Konfiguratoren teilen sich diese Liste)
@@ -6338,6 +6437,9 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
     const etikettenExportieren = () => {
         exportiereEtikettenCsv(ausgewaehlt, positionen);
     };
+    const etikettenDrucken = () => {
+        druckeEtiketten(ausgewaehlt, positionen);
+    };
     return (React.createElement("div", { className: "min-h-screen w-full overflow-x-hidden", style: { background: "#F5F4EF" } },
         React.createElement("style", null, `* { font-family: 'Inter', -apple-system, sans-serif; } .font-oswald { font-family: 'Oswald', sans-serif; }`),
         React.createElement("div", { className: "max-w-5xl mx-auto px-4 py-6 md:py-10" },
@@ -6411,6 +6513,7 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
                             " \u20AC")),
                     React.createElement("div", { className: "flex flex-wrap justify-end gap-2" },
                         React.createElement("button", { onClick: etikettenExportieren, className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[13px] font-semibold hover:border-[#E8963B] transition-colors" }, "Etiketten-CSV (Label LIVE)"),
+                        React.createElement("button", { onClick: etikettenDrucken, className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[13px] font-semibold hover:border-[#E8963B] transition-colors" }, "Etiketten drucken (70\u00D750)"),
                         React.createElement("button", { onClick: produktionDrucken, className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[13px] font-semibold hover:border-[#E8963B] transition-colors" }, "Produktionsliste drucken"),
                         React.createElement("button", { onClick: alleDrucken, className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333] transition-colors" }, "Kompletten Kundenauftrag drucken")))))))));
 }
@@ -6455,6 +6558,9 @@ function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, kundeDe
     };
     const warenkorbEtikettenExportieren = () => {
         exportiereEtikettenCsv(aktiverKunde, warenkorb);
+    };
+    const warenkorbEtikettenDrucken = () => {
+        druckeEtiketten(aktiverKunde, warenkorb);
     };
     return (React.createElement("div", { className: "min-h-screen w-full overflow-x-hidden", style: { background: "#F5F4EF" } },
         React.createElement("style", null, `* { font-family: 'Inter', -apple-system, sans-serif; } .font-oswald { font-family: 'Oswald', sans-serif; }`),
@@ -6502,7 +6608,8 @@ function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, kundeDe
                     React.createElement("div", { className: "flex flex-wrap justify-end items-center gap-3 pt-2 border-t border-[#E2DFD3]" },
                         React.createElement("div", { className: "flex flex-wrap gap-2 mr-auto" },
                             React.createElement("button", { onClick: warenkorbProduktionDrucken, className: "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[12.5px] font-medium hover:border-[#E8963B] transition-colors" }, "Produktionsliste drucken"),
-                            React.createElement("button", { onClick: warenkorbEtikettenExportieren, className: "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[12.5px] font-medium hover:border-[#E8963B] transition-colors" }, "Etiketten-CSV")),
+                            React.createElement("button", { onClick: warenkorbEtikettenExportieren, className: "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[12.5px] font-medium hover:border-[#E8963B] transition-colors" }, "Etiketten-CSV (Label LIVE)"),
+                            React.createElement("button", { onClick: warenkorbEtikettenDrucken, className: "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[12.5px] font-medium hover:border-[#E8963B] transition-colors" }, "Etiketten drucken (70\u00D750)")),
                         React.createElement("span", { className: "text-[13px] text-[#5B6472]" }, "Gesamt (brutto)"),
                         React.createElement("span", { className: "text-[17px] font-['IBM_Plex_Mono'] font-semibold text-[#1B1F24]" }, `${warenkorbGesamtBrutto.toFixed(2)} €`)))))),
             React.createElement("button", { onClick: onKunden, className: "w-full text-left border-2 border-[#1B1F24] rounded-xl bg-[#1B1F24] p-5 mb-6 hover:bg-[#333] transition-colors" },
