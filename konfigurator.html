@@ -2905,7 +2905,7 @@ function etikettenDetailFuer(produktKey, item) {
         case "spannrahmen_liste_v1":
             ausfuehrung = kurz(item.profilLabel);
             (c.buersten || []).forEach((b) => zusatz.push(buerstenText(b, item.rahmenbreite, item.rahmenhoehe).replace(" (Ansicht von innen)", " (v. innen)").replace(/ — Länge \d+ mm/, (m) => m.replace(" — Länge", ", L")).replace(/^Bürste /, "Bürste ")));
-            if (c.hakenversatzAktiv) zusatz.push(`X-Maß oben ${c.zMassOben || 0} / unten ${c.zMassUnten || 0}`);
+            if (c.hakenversatzAktiv) zusatz.push(`X-Maß ${c.xMass != null ? c.xMass : ((c.zMassOben || 0) + (c.zMassUnten || 0))} mm`);
             break;
         case "drehtuer_liste_v1":
             ausfuehrung = kurz(item.ausfuehrungLabel);
@@ -3025,6 +3025,262 @@ function druckeEtiketten(kunde, positionen) {
     fenster.document.close();
     fenster.onload = () => { fenster.focus(); fenster.print(); };
     setTimeout(() => { fenster.focus(); fenster.print(); }, 400);
+}
+// ============================================================
+// SCHNITTOPTIMIERUNG (Profile aus 6m-Stangen) — über alle Positionen eines Kunden
+// ============================================================
+// Sammelt für Spannrahmen, Drehtür und Schiebetür alle Profil-Zuschnitte (Längen wie im jeweiligen
+// Konfigurator berechnet, mal Stückzahl) und verteilt sie so auf Stangen, dass möglichst wenige Stangen
+// gebraucht werden. Profile mit gleicher Art.-Nr. UND gleicher Farbe teilen sich Stangen (z. B. Rahmenprofil 12908
+// aus Spannrahmen und Drehtür-Flügel). Rollladen, Lichtschacht und IS KIS sind nicht enthalten.
+function schnittTeileFuer(produktKey, item) {
+    const c = item.config || {};
+    const menge = item.menge || 1;
+    const farbe = item.colorLabel || "";
+    const teile = [];
+    const add = (artNr, bez, laenge, anzahl, quelle, preisKey) => {
+        if (!(laenge > 0) || !(anzahl > 0)) return;
+        teile.push({ artNr: String(artNr), bez, laenge: Math.round(laenge * 10) / 10, anzahl: anzahl * menge, farbe, quelle, preisKey, position: item.position || "—", gehrung: !/Querprofil|Quersprosse|Griffleiste|Bürstenprofil|Schwellen|Laufschiene/i.test(bez) });
+    };
+    if (produktKey === "spannrahmen_liste_v1") {
+        const prof = SPANNRAHMEN_PROFILE.find((p) => p.id === c.profilTyp) || SPANNRAHMEN_PROFILE[0];
+        add(prof.artNr, "Rahmenprofil", item.rahmenbreite, 2, "spannrahmen", "profil_" + prof.id);
+        add(prof.artNr, "Rahmenprofil", item.rahmenhoehe, 2, "spannrahmen", "profil_" + prof.id);
+    }
+    else if (produktKey === "drehtuer_liste_v1") {
+        const o = DREHTUER_AUSFUEHRUNG.find((a) => a.id === c.ausfuehrungTyp) || DREHTUER_AUSFUEHRUNG[0];
+        const typ = o.id;
+        add(o.zargeArtNr, o.zargeLabel, item.rahmenbreite, 2, "drehtuer", "zarge_" + typ);
+        add(o.zargeArtNr, o.zargeLabel, item.rahmenhoehe, 2, "drehtuer", "zarge_" + typ);
+        add(o.fluegelArtNr, o.fluegelLabel, item.fluegelbreite, 2, "drehtuer", "fluegel_" + typ);
+        add(o.fluegelArtNr, o.fluegelLabel, item.fluegelhoehe, 2, "drehtuer", "fluegel_" + typ);
+        if (o.dt3Zusatz) {
+            add("12930", "Querprofil", item.fluegelbreite - 70, 1, "drehtuer", "quersprosse");
+            add("12919", "Bürstenprofil unten", item.fluegelbreite, 1, "drehtuer", "buerstenprofil_unten");
+        }
+        if (o.griffleisteOptional && c.griffleisteVerbaut) add("12931", "Griffleiste", item.fluegelbreite - 70, 1, "drehtuer", "griffleiste");
+        if (o.pendelZusatz) {
+            add("12931", "Griffleiste", item.rahmenbreite, 1, "drehtuer", "griffleiste");
+            add("12930", "Quersprosse", item.rahmenbreite, 1, "drehtuer", "quersprosse");
+        }
+    }
+    else if (produktKey === "schiebetuer_liste_v1") {
+        const o = SCHIEBETUER_AUSFUEHRUNG.find((a) => a.id === c.ausfuehrungTyp) || SCHIEBETUER_AUSFUEHRUNG[0];
+        const typ = o.id;
+        add(String(o.zargeArtNr).split(" ")[0], o.zargeLabel, item.rahmenbreite, 2, "schiebetuer", "zarge_" + typ);
+        add(String(o.zargeArtNr).split(" ")[0], o.zargeLabel, item.rahmenhoehe, 2, "schiebetuer", "zarge_" + typ);
+        add(o.fluegelArtNr, o.fluegelLabel, item.fluegelbreite, 2 * o.fluegelAnzahl, "schiebetuer", "fluegel_" + typ);
+        add(o.fluegelArtNr, o.fluegelLabel, item.fluegelhoehe, 2 * o.fluegelAnzahl, "schiebetuer", "fluegel_" + typ);
+        add(o.schwelleArtNr, "Schwellenprofil", item.rahmenbreite, o.schwelleAnzahl, "schiebetuer", "schwelle");
+        if (c.laufschienenLaenge) add("Laufschiene", "Laufschiene", c.laufschienenLaenge, 1, "schiebetuer", null);
+        if (c.griffleisteVerbaut) add("12931", "Griffleiste", item.fluegelbreite - 70, 1, "schiebetuer", "griffleiste");
+    }
+    return teile;
+}
+function schnittRng(seed) { let a = seed >>> 0; return () => { a += 0x6D2B79F5; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+// Verteilt Längen auf Stangen: Mehrfachversuch aus First-/Best-Fit-Decreasing plus zufällig gestörten Sortierungen;
+// gewählt wird die Lösung mit den wenigsten Stangen, bei Gleichstand mit dem größten zusammenhängenden Rest.
+function schnittPacken(laengen, stange, kerf, reste, anschnitt) {
+    anschnitt = anschnitt || 0;
+    reste = (reste || []).slice().sort((x, y) => y - x);
+    const cap = stange - anschnitt + kerf;
+    const start = (r) => r.map((l) => ({ teile: [], used: 0, cap: l - anschnitt + kerf, istRest: true, laenge: l })).concat([]);
+    const lauf = (reihenfolge, best, restReihenfolge) => {
+        const bars = start(restReihenfolge);
+        for (const l of reihenfolge) {
+            let ziel = -1, bestRest = Infinity;
+            for (let i = 0; i < bars.length; i++) {
+                const rest = bars[i].cap - bars[i].used - (l + kerf);
+                if (rest >= 0) {
+                    if (!best) { ziel = i; break; }
+                    if (rest < bestRest) { bestRest = rest; ziel = i; }
+                }
+            }
+            if (ziel < 0) { bars.push({ teile: [l], used: l + kerf, cap, istRest: false }); }
+            else { bars[ziel].teile.push(l); bars[ziel].used += l + kerf; }
+        }
+        return bars;
+    };
+    const neu = (bars) => bars.filter((b) => !b.istRest).length;
+    const bewerte = (bars) => neu(bars) * 1e6 - Math.max(0, ...bars.filter((b) => !b.istRest || b.teile.length).map((b) => b.cap - b.used)) - bars.filter((b) => b.istRest && b.teile.length).length * 0.001;
+    const basis = laengen.slice().sort((a, b) => b - a);
+    const restAsc = reste.slice().reverse();
+    let besteBars = lauf(basis, false, reste), besteWert = bewerte(besteBars);
+    const kand = [lauf(basis, true, reste), lauf(basis, false, restAsc), lauf(basis, true, restAsc)];
+    const rnd = schnittRng(12345);
+    for (let i = 0; i < 400; i++) {
+        const gest = basis.map((l) => ({ l, k: l * (1 + (rnd() - 0.5) * 0.3) })).sort((a, b) => b.k - a.k).map((x) => x.l);
+        kand.push(lauf(gest, i % 2 === 0, i % 4 < 2 ? reste : restAsc));
+    }
+    for (const k of kand) { const w = bewerte(k); if (w < besteWert) { besteWert = w; besteBars = k; } }
+    const out = besteBars.filter((b) => !b.istRest || b.teile.length).map((b) => ({ teile: b.teile.slice().sort((x, y) => y - x), rest: b.cap - b.used, istRest: !!b.istRest, laenge: b.istRest ? b.laenge : stange }));
+    // Restlager-Stücke zuerst, dann neue Stangen
+    return out.sort((x, y) => (y.istRest ? 1 : 0) - (x.istRest ? 1 : 0));
+}
+function schnittBerechnen(positionen, stange, kerf, reste, gehr) {
+    gehr = gehr || { anschnitt: 0, zwischen: kerf };
+    const gruppen = {};
+    positionen.forEach((p) => {
+        schnittTeileFuer(p.produktKey, p.item).forEach((t) => {
+            const key = t.artNr + "|" + t.farbe;
+            if (!gruppen[key]) gruppen[key] = { artNr: t.artNr, bez: t.bez, farbe: t.farbe, teile: [], preisRefs: [], gehrung: false };
+            if (t.gehrung) gruppen[key].gehrung = true;
+            if (!gruppen[key].bez.includes(t.bez)) gruppen[key].bez += " / " + t.bez;
+            if (t.preisKey) gruppen[key].preisRefs.push({ quelle: t.quelle, key: t.preisKey });
+            for (let i = 0; i < t.anzahl; i++) gruppen[key].teile.push(t.laenge);
+        });
+    });
+    return Object.values(gruppen).map((g) => {
+        const zuLang = g.teile.filter((l) => l > stange);
+        const passend = g.teile.filter((l) => l <= stange);
+        const restLaengen = [];
+        (reste || []).forEach((r) => {
+            if (!(r.laenge > 0) || !(r.anzahl > 0) || String(r.artNr || "").trim() !== g.artNr) return;
+            if (r.farbe && String(r.farbe).trim() && !String(g.farbe || "").toLowerCase().includes(String(r.farbe).trim().toLowerCase())) return;
+            if (r.laenge > stange) return;
+            for (let i = 0; i < r.anzahl; i++) restLaengen.push(Number(r.laenge));
+        });
+        const alle = schnittPacken(passend, stange, g.gehrung ? gehr.zwischen : kerf, restLaengen, g.gehrung ? gehr.anschnitt : 0);
+        const stangen = alle.filter((x) => !x.istRest);
+        const restStuecke = alle.filter((x) => x.istRest);
+        const nutzlaenge = passend.reduce((s, l) => s + l, 0);
+        const gesamt = stangen.length * stange + restStuecke.reduce((s, x) => s + x.laenge, 0);
+        return Object.assign(g, { zuLang, stangen, restStuecke, alle, gehrParam: g.gehrung ? gehr : null, nutzlaenge, verschnittProzent: gesamt > 0 ? (1 - nutzlaenge / gesamt) * 100 : 0, anzahlTeile: g.teile.length });
+    }).sort((a, b) => a.artNr.localeCompare(b.artNr));
+}
+const SCHNITT_PREIS_QUELLEN = {
+    spannrahmen: { key: "spannrahmen_preise_v1", def: () => DEFAULT_SPANNRAHMEN_PREISE },
+    drehtuer: { key: "drehtuer_preise_v1", def: () => DEFAULT_DREHTUER_PREISE },
+    schiebetuer: { key: "schiebetuer_preise_v1", def: () => DEFAULT_SCHIEBETUER_PREISE },
+};
+async function schnittLadePreise() {
+    var _a;
+    const out = {};
+    for (const q of Object.keys(SCHNITT_PREIS_QUELLEN)) {
+        let p = Object.assign({}, SCHNITT_PREIS_QUELLEN[q].def());
+        try {
+            const r = await ((_a = window.storage) === null || _a === void 0 ? void 0 : _a.get(SCHNITT_PREIS_QUELLEN[q].key));
+            if (r && r.value) p = Object.assign(p, JSON.parse(r.value));
+        }
+        catch (e) { }
+        out[q] = p;
+    }
+    return out;
+}
+function schnittPreisFuer(gruppe, preise) {
+    for (const ref of gruppe.preisRefs) {
+        const v = preise && preise[ref.quelle] ? preise[ref.quelle][ref.key] : 0;
+        if (v > 0) return v;
+    }
+    return 0;
+}
+function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr) {
+    gehr = gehr || { anschnitt: 0, zwischen: kerf };
+    const esc = (t) => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const zahl = (n) => Number(n).toLocaleString("de-AT", { maximumFractionDigits: 1 });
+    let summeStangen = 0, summeKosten = 0, kostenKomplett = true;
+    const bloecke = ergebnis.map((g) => {
+        const preis = schnittPreisFuer(g, preise);
+        const kosten = preis * g.stangen.length;
+        summeStangen += g.stangen.length;
+        if (preis > 0) summeKosten += kosten; else kostenKomplett = false;
+        let nrS = 0, nrR = 0;
+        const zeilen = g.alle.map((s) => `<tr><td class="n">${s.istRest ? `Rest ${++nrR} (${zahl(s.laenge)})` : `Stange ${++nrS}`}</td><td>${s.teile.map((l) => zahl(l)).join(" + ")}</td><td class="r">${zahl(s.rest)} mm</td></tr>`).join("");
+        return `<div class="blk">
+          <div class="kopf"><div><b>Art. ${esc(g.artNr)}</b> — ${esc(g.bez)}${g.farbe ? ` <span class="farbe">${esc(g.farbe)}</span>` : ""} <span class="farbe">${g.gehrung ? `Gehrung 45° · Anschnitt ${zahl(gehr.anschnitt)} · zwischen ${zahl(gehr.zwischen)} mm` : `gerader Schnitt · ${zahl(kerf)} mm`}</span></div>
+          <div class="sum"><b>${g.stangen.length} neue Stange${g.stangen.length === 1 ? "" : "n"}</b> à ${zahl(stange)} mm${g.restStuecke.length ? ` + ${g.restStuecke.length} Reststück${g.restStuecke.length === 1 ? "" : "e"}` : ""} · ${g.anzahlTeile} Teile · Verschnitt ${g.verschnittProzent.toFixed(1)} %${preis > 0 ? ` · ${kosten.toFixed(2)} €` : ""}</div></div>
+          ${g.zuLang.length ? `<div class="warn">⚠ ${g.zuLang.length} Teil(e) länger als eine Stange (${g.zuLang.map(zahl).join(", ")} mm) — nicht eingeplant.</div>` : ""}
+          <table><thead><tr><th></th><th>Zuschnitte (mm)</th><th class="r">Rest</th></tr></thead><tbody>${zeilen}</tbody></table></div>`;
+    }).join("");
+    const css = `<style>
+      .so { font-family: Arial, sans-serif; color: #1B1F24; font-size: 12.5px; }
+      .so .blk { border: 1px solid #D8D4C8; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; break-inside: avoid; }
+      .so .kopf { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+      .so .farbe { background: #F5F4EF; border-radius: 4px; padding: 1px 6px; font-size: 11px; color: #5B6472; margin-left: 4px; }
+      .so .sum { color: #B96A16; }
+      .so table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      .so th { text-align: left; font-size: 10.5px; color: #8A8F98; text-transform: uppercase; border-bottom: 1px solid #D8D4C8; padding: 3px 4px; }
+      .so td { padding: 3px 4px; border-bottom: 1px solid #EEEBE0; font-family: monospace; }
+      .so td.n { color: #8A8F98; width: 110px; white-space: nowrap; font-family: Arial, sans-serif; } .so .r { text-align: right; }
+      .so .warn { background: #FDEDEB; color: #C0392B; border-radius: 6px; padding: 5px 8px; margin-bottom: 6px; }
+      .so .total { background: #FFF8EF; border: 1px solid #E8963B; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; display: flex; gap: 18px; flex-wrap: wrap; }
+      .so .hint { font-size: 11px; color: #8A8F98; }
+    </style>`;
+    const total = `<div class="total"><div><b>${summeStangen}</b> neue Stangen insgesamt</div><div>Stangenlänge ${zahl(stange)} mm · gerade Schnitte ${zahl(kerf)} mm · Gehrung: Anschnitt ${zahl(gehr.anschnitt)} mm, zwischen den Schnitten ${zahl(gehr.zwischen)} mm</div>${summeKosten > 0 ? `<div>Profilkosten (EK): <b>${summeKosten.toFixed(2)} €</b>${kostenKomplett ? "" : " (ohne Profile ohne hinterlegten Preis)"}</div>` : ""}</div>`;
+    const hinweis = `<div class="hint">Enthalten: Spannrahmen, Drehtür, Schiebetür (Rahmen-, Flügel-, Zarge-, Schwellen-, Griffleisten-, Querprofil-, Laufschienen-Zuschnitte × Stückzahl). Profile mit gleicher Art.-Nr. und Farbe teilen sich die Stangen. Rollladen, Lichtschacht und IS KIS sind nicht eingerechnet.</div>`;
+    return `<div class="so">${css}${ergebnis.length ? total + bloecke : "<p>Keine Profil-Zuschnitte vorhanden (Spannrahmen, Drehtür oder Schiebetür in den Warenkorb legen).</p>"}${hinweis}</div>`;
+}
+function druckeSchnittoptimierung(kunde, ergebnis, stange, kerf, preise, gehr) {
+    const heute = new Date().toLocaleDateString("de-AT");
+    const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>Schnittoptimierung — ${kunde}</title>
+    <style>body { font-family: Arial, sans-serif; padding: 24px; color: #1B1F24; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .k { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #1B1F24; padding-bottom: 12px; margin-bottom: 14px; } .k img { width: 52px; height: 52px; }
+    .f { font-size: 11px; letter-spacing: .15em; text-transform: uppercase; color: #E8963B; font-weight: 600; } .t { font-size: 20px; font-weight: 700; }
+    .m { font-size: 12.5px; color: #5B6472; margin-bottom: 12px; } @media print { body { padding: 8px; } }</style></head><body>
+    <div class="k"><img src="${LOGO_IMAGE}"><div><div class="f">${FIRMA.name} — Produktion</div><div class="t">Schnittoptimierung</div></div></div>
+    <div class="m"><b>Kunde:</b> ${kunde || "—"} &nbsp;·&nbsp; <b>Datum:</b> ${heute}</div>
+    ${schnittHtml(kunde, ergebnis, stange, kerf, preise, true, gehr)}</body></html>`;
+    const fenster = window.open("", "_blank");
+    if (!fenster) { alert("Bitte Pop-ups für diese Seite erlauben, um drucken zu können."); return; }
+    fenster.document.write(html);
+    fenster.document.close();
+    fenster.onload = () => { fenster.focus(); fenster.print(); };
+    setTimeout(() => { fenster.focus(); fenster.print(); }, 400);
+}
+function Schnittoptimierung({ kunde, positionen, onClose }) {
+    const [stange, setStange] = useState(6000);
+    const [kerf, setKerf] = useState(4);
+    const [anschnitt, setAnschnitt] = useState(55);
+    const [zwischen, setZwischen] = useState(80);
+    const [preise, setPreise] = useState(null);
+    const [reste, setReste] = useState([]);
+    useEffect(() => {
+        var _a;
+        schnittLadePreise().then(setPreise);
+        (_a = window.storage) === null || _a === void 0 ? void 0 : _a.get("schnitt_reste_v1").then((r) => {
+            if (r && r.value) { try { const e = JSON.parse(r.value); if (Array.isArray(e)) setReste(e); } catch (x) { } }
+        }).catch(() => { });
+        (_a = window.storage) === null || _a === void 0 ? void 0 : _a.get("schnitt_einstellungen_v1").then((r) => {
+            if (r && r.value) { try { const e = JSON.parse(r.value); if (e.stange > 0) setStange(e.stange); if (e.kerf >= 0) setKerf(e.kerf); if (e.anschnitt >= 0) setAnschnitt(e.anschnitt); if (e.zwischen >= 0) setZwischen(e.zwischen); } catch (x) { } }
+        }).catch(() => { });
+    }, []);
+    const speichern = (s, k, a, z) => { var _a; (_a = window.storage) === null || _a === void 0 ? void 0 : _a.set("schnitt_einstellungen_v1", JSON.stringify({ stange: s, kerf: k, anschnitt: a, zwischen: z })).catch(() => { }); };
+    const gehr = { anschnitt: anschnitt == null ? 0 : anschnitt, zwischen: zwischen == null ? 0 : zwischen };
+    const resteAendern = (neu) => { var _a; setReste(neu); (_a = window.storage) === null || _a === void 0 ? void 0 : _a.set("schnitt_reste_v1", JSON.stringify(neu)).catch(() => { }); };
+    const ergebnis = schnittBerechnen(positionen, stange, kerf, reste, gehr);
+    const grpOpt = [];
+    schnittBerechnen(positionen, stange, kerf, [], gehr).forEach((g) => { grpOpt.push(g); });
+    const inp = "border border-[#D8D4C8] rounded-md bg-white px-2 py-1.5 text-[13px] w-full";
+    const setR = (i, feld, wert) => resteAendern(reste.map((r, j) => j === i ? Object.assign({}, r, { [feld]: wert }) : r));
+    const restBlock = React.createElement("div", { className: "mb-4 border border-[#D8D4C8] rounded-lg bg-white p-3" },
+        React.createElement("div", { className: "flex items-center justify-between mb-2" },
+            React.createElement("span", { className: "text-[12px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Restlager (Abfallstücke) — werden zuerst verbraucht"),
+            React.createElement("button", { onClick: () => resteAendern(reste.concat([{ id: Date.now() + Math.random(), artNr: grpOpt[0] ? grpOpt[0].artNr : "", farbe: grpOpt[0] ? grpOpt[0].farbe : "", laenge: "", anzahl: 1 }])), className: "text-[12.5px] font-semibold text-[#B96A16] hover:underline" }, "+ Rest hinzufügen")),
+        reste.length === 0 && React.createElement("div", { className: "text-[12px] text-[#8A8F98]" }, "Keine Reste erfasst. Mit „+ Rest hinzufügen“ Art.-Nr., Farbe, Länge und Stückzahl eintragen."),
+        reste.length > 0 && React.createElement("div", { className: "gap-2 items-center text-[10.5px] uppercase text-[#8A8F98] mb-1", style: { display: "grid", gridTemplateColumns: "1fr 1.6fr 0.9fr 0.6fr 28px" } },
+            React.createElement("span", null, "Art.-Nr."), React.createElement("span", null, "Farbe (leer = egal)"), React.createElement("span", null, "Länge mm"), React.createElement("span", null, "Stk"), React.createElement("span", null, "")),
+        reste.map((r, i) => React.createElement("div", { key: r.id || i, className: "gap-2 items-center mb-1.5", style: { display: "grid", gridTemplateColumns: "1fr 1.6fr 0.9fr 0.6fr 28px" } },
+            React.createElement("input", { className: inp, value: r.artNr, list: "schnitt-art-liste", onChange: (e) => setR(i, "artNr", e.target.value) }),
+            React.createElement("input", { className: inp, value: r.farbe || "", list: "schnitt-farb-liste", onChange: (e) => setR(i, "farbe", e.target.value) }),
+            React.createElement("input", { className: inp, type: "number", inputMode: "decimal", value: r.laenge, onChange: (e) => setR(i, "laenge", e.target.value === "" ? "" : Number(e.target.value)) }),
+            React.createElement("input", { className: inp, type: "number", value: r.anzahl, onChange: (e) => setR(i, "anzahl", e.target.value === "" ? "" : Number(e.target.value)) }),
+            React.createElement("button", { onClick: () => resteAendern(reste.filter((_, j) => j !== i)), className: "text-[#8A8F98] hover:text-[#C0392B] px-1", title: "Entfernen" }, "✕"))),
+        React.createElement("datalist", { id: "schnitt-art-liste" }, Array.from(new Set(grpOpt.map((g) => g.artNr))).map((a) => React.createElement("option", { key: a, value: a }))),
+        React.createElement("datalist", { id: "schnitt-farb-liste" }, Array.from(new Set(grpOpt.map((g) => g.farbe).filter(Boolean))).map((f) => React.createElement("option", { key: f, value: f }))));
+    return React.createElement("div", { className: "fixed inset-0 z-50 flex items-start justify-center overflow-y-auto", style: { background: "rgba(27,31,36,0.55)" }, onClick: (e) => { if (e.target === e.currentTarget) onClose(); } },
+        React.createElement("div", { className: "bg-[#F5F4EF] rounded-xl w-full max-w-3xl my-6 mx-3 p-5 shadow-xl" },
+            React.createElement("div", { className: "flex items-center justify-between mb-3" },
+                React.createElement("h2", { className: "text-[20px] font-oswald font-semibold text-[#1B1F24]" }, "Schnittoptimierung" + (kunde ? " — " + kunde : "")),
+                React.createElement("button", { onClick: onClose, className: "text-[13px] text-[#5B6472] hover:text-[#1B1F24]" }, "Schließen ✕")),
+            React.createElement("div", { className: "grid grid-cols-2 gap-3 mb-4" },
+                React.createElement(Num, { label: "Stangenlänge", value: stange, onChange: (v) => { setStange(v); speichern(v, kerf, anschnitt, zwischen); }, unit: "mm", min: 1000 }),
+                React.createElement(Num, { label: "Sägeschnitt (gerade Profile)", value: kerf, onChange: (v) => { setKerf(v); speichern(stange, v, anschnitt, zwischen); }, unit: "mm", min: 0 }),
+                React.createElement(Num, { label: "Gehrung: Anschnitt (Abfall am Stangenanfang)", value: anschnitt, onChange: (v) => { setAnschnitt(v); speichern(stange, kerf, v, zwischen); }, unit: "mm", min: 0 }),
+                React.createElement(Num, { label: "Gehrung: Abfall zwischen den Schnitten", value: zwischen, onChange: (v) => { setZwischen(v); speichern(stange, kerf, anschnitt, v); }, unit: "mm", min: 0 })),
+            restBlock,
+            React.createElement("div", { dangerouslySetInnerHTML: { __html: schnittHtml(kunde, ergebnis, stange, kerf, preise, false, gehr) } }),
+            React.createElement("div", { className: "flex justify-end gap-2 mt-3" },
+                React.createElement("button", { onClick: () => druckeSchnittoptimierung(kunde, ergebnis, stange, kerf, preise, gehr), className: "px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333]" }, "Drucken"))));
 }
 // ============================================================
 // GEMEINSAME KUNDENVERWALTUNG (produktübergreifend, alle 6 Konfiguratoren teilen sich diese Liste)
@@ -3418,8 +3674,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     // bewusst unverändert — falls der Versatz stattdessen die Berechnung selbst beeinflussen
     // soll, bitte Bescheid geben.
     const [hakenversatzAktiv, setHakenversatzAktiv] = useState(false);
-    const [zMassOben, setZMassOben] = useState(0);
-    const [zMassUnten, setZMassUnten] = useState(0);
+    const [xMass, setXMass] = useState(0); // X-Maß (Hakenversatz): Oberkante Regenschiene bis Unterkante Profil, ein einzelnes Maß
     const [buersten, setBuersten] = useState([]); // Liste der Bürsten dieser Position (siehe BUERSTEN_SEITEN)
     const [heroalNr, setHeroalNr] = useState("44");
     const [customRal, setCustomRal] = useState("7016");
@@ -3436,8 +3691,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         setGewebeTyp("advantage");
         setFalzmass(13);
         setHakenversatzAktiv(false);
-        setZMassOben(0);
-        setZMassUnten(0);
+        setXMass(0);
         setBuersten([]);
         setMenge(1);
         setPositionEingabe("");
@@ -3464,8 +3718,8 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         // c.hakenversatz ist der Name des alten, einzelnen Versatz-Felds (kurzzeitig verwendet,
         // bevor es in "oben"/"unten" aufgeteilt wurde) — als Fallback komplett auf "oben" gelegt,
         // damit eine zwischenzeitlich gespeicherte Position beim Nachladen nicht verloren geht.
-        setZMassOben(c.zMassOben != null ? c.zMassOben : (c.hakenversatz != null ? c.hakenversatz : 0));
-        setZMassUnten(c.zMassUnten != null ? c.zMassUnten : 0);
+        // Altbestand: früher zwei Felder (oben/unten) bzw. noch früher ein Feld "hakenversatz" — bei alten Positionen Summe übernehmen
+        setXMass(c.xMass != null ? c.xMass : ((c.zMassOben || 0) + (c.zMassUnten || 0) + (c.zMassOben == null && c.zMassUnten == null && c.hakenversatz != null ? c.hakenversatz : 0)));
         setBuersten(Array.isArray(c.buersten) ? c.buersten.map((b) => (Object.assign(Object.assign({}, neueBuerste()), b))) : []);
         setHeroalNr((_f = c.heroalNr) !== null && _f !== void 0 ? _f : "44");
         setCustomRal((_g = c.customRal) !== null && _g !== void 0 ? _g : "7016");
@@ -3487,8 +3741,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     const profilObj = SPANNRAHMEN_PROFILE.find((p) => p.id === profilTyp) || SPANNRAHMEN_PROFILE[0];
     // Maß-Info bei Hakenversatz in der Höhe (reine Montage-Information, siehe Kommentar oben bei
     // useState(hakenversatzAktiv)) — beeinflusst NICHT rahmenhoehe/Gewebefläche/Preis.
-    const zMassGesamt = zMassOben + zMassUnten;
-    const effektiveLichteHoehe = hakenversatzAktiv && lichteHoehe !== null ? lichteHoehe - zMassGesamt : null;
+    const effektiveLichteHoehe = hakenversatzAktiv && lichteHoehe !== null ? lichteHoehe - xMass : null;
     const hakenmass = falzmass + 2; // Hakenmaß = Falzmaß + 2mm
     const falzmassProd = falzmass + 4; // Falzmaß inkl. 4 mm Zugabe — dieser Wert steht in Produktion/Positionsliste/Etikett
     const einhaengewinkelObj = findEinhaengewinkel(hakenmass);
@@ -3532,7 +3785,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
         `Montageart: ${befestigungObj.label}`,
         `Profil: ${profilObj.label}`,
         `Falzmaß inkl. 4 mm Zugabe: ${falzmassProd} mm (${falzmass} + 4) → Einhängewinkel Art. ${einhaengewinkelObj === null || einhaengewinkelObj === void 0 ? void 0 : einhaengewinkelObj.artNr} (4 Stk)`,
-        ...(hakenversatzAktiv ? [`⚠ Hakenversatz Höhe: X-Maß oben ${zMassOben} mm, X-Maß unten ${zMassUnten} mm → Lichte Höhe ${lichteHoehe} mm − ${zMassGesamt} mm = ${effektiveLichteHoehe} mm`] : []),
+        ...(hakenversatzAktiv ? [`⚠ Hakenversatz Höhe: X-Maß ${xMass} mm → Lichte Höhe ${lichteHoehe} mm − ${xMass} mm = ${effektiveLichteHoehe} mm`] : []),
         ...buersten.map((b) => buerstenText(b, rahmenbreite, rahmenhoehe)),
         `Farbe: ${displayLabel}`,
         `Gewebe: ${gewebeObj.label} (${gewebeObj.farbe})`,
@@ -3541,7 +3794,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     const addToListe = () => {
         if (eingabeUnvollstaendig)
             return;
-        const config = { lichteBreite, lichteHoehe, profilTyp, gewebeTyp, falzmass, hakenversatzAktiv, zMassOben, zMassUnten, buersten, heroalNr, customRal };
+        const config = { lichteBreite, lichteHoehe, profilTyp, gewebeTyp, falzmass, hakenversatzAktiv, xMass, buersten, heroalNr, customRal };
         const item = {
             id: bearbeitungsId !== null && bearbeitungsId !== void 0 ? bearbeitungsId : Date.now(), position: positionEingabe, kunde: kunde || "—", lichteBreite, lichteHoehe, rahmenbreite, rahmenhoehe,
             profilLabel: profilObj.label, gewebeLabel: gewebeObj.label, colorLabel: displayLabel,
@@ -3582,10 +3835,9 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                         React.createElement("label", { className: "flex items-center gap-2 text-[13px] text-[#1B1F24] mb-2" },
                             React.createElement("input", { type: "checkbox", checked: hakenversatzAktiv, onChange: (e) => setHakenversatzAktiv(e.target.checked), className: "accent-[#E8963B] w-4 h-4" }),
                             "Hakenversatz in der H\u00F6he"),
-                        hakenversatzAktiv && (React.createElement("div", { className: "grid grid-cols-2 gap-2" },
-                            React.createElement(Num, { label: "X-Ma\u00DF oben", value: zMassOben, onChange: setZMassOben, unit: "mm", min: 0 }),
-                            React.createElement(Num, { label: "X-Ma\u00DF unten", value: zMassUnten, onChange: setZMassUnten, unit: "mm", min: 0 }),
-                            React.createElement("p", { className: "col-span-2 text-[11px] text-[#8A8F98] -mt-1" }, "Versatz zwischen Einh\u00E4ngehaken und lichter H\u00F6he \u2014 oben/unten, falls unterschiedlich.")))),
+                        hakenversatzAktiv && (React.createElement("div", { className: "flex flex-col gap-2" },
+                            React.createElement(Num, { label: "X-Ma\u00DF", value: xMass, onChange: setXMass, unit: "mm", min: 0 }),
+                            React.createElement("p", { className: "text-[11px] text-[#8A8F98] -mt-1" }, "X-Ma\u00DF = Ma\u00DF von Oberkante Regenschiene bis Unterkante Profil (Hakenversatz in der H\u00F6he).")))),
                     React.createElement("div", { className: "col-span-2" },
                         React.createElement("div", { className: "flex items-center justify-between mb-2" },
                             React.createElement("span", { className: "text-[13px] font-medium text-[#1B1F24]" }, "B\u00FCrsten"),
@@ -3630,12 +3882,10 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                     einhaengewinkelObj.h,
                     "mm, 4 Stk pro Element \u2014 2 oben, 2 unten) \u2014 Preis unter \u201EKalkulation \u2192 Produktpreise\" hinterlegen."),
                 hakenversatzAktiv && (React.createElement("p", { className: "text-[11.5px] text-[#B96A16] bg-[#FFF8EF] border border-[#E8963B44] rounded-md px-3 py-2" },
-                    "\u26A0 Ma\u00DF-Info Hakenversatz (X-Ma\u00DF oben ",
-                    zMassOben,
-                    "mm + X-Ma\u00DF unten ",
-                    zMassUnten,
+                    "\u26A0 Ma\u00DF-Info Hakenversatz (X-Ma\u00DF ",
+                    xMass,
                     "mm): Lichte H\u00F6he \u2212 Versatz = ",
-                    React.createElement("b", null, `${lichteHoehe !== null && lichteHoehe !== void 0 ? lichteHoehe : "?"} mm \u2212 ${zMassGesamt} mm = ${effektiveLichteHoehe !== null ? effektiveLichteHoehe : "?"} mm`),
+                    React.createElement("b", null, `${lichteHoehe !== null && lichteHoehe !== void 0 ? lichteHoehe : "?"} mm \u2212 ${xMass} mm = ${effektiveLichteHoehe !== null ? effektiveLichteHoehe : "?"} mm`),
                     " \u2014 reine Montage-Info, die Rahmenh\u00F6he/Material/Preis werden weiterhin mit der vollen Lichten H\u00F6he berechnet.")),
                 React.createElement("div", null,
                     React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium mb-1.5 block" }, "Rahmenfarbe"),
@@ -3713,7 +3963,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                         ["Profilumfang", `${umfangM.toFixed(2)} lfm`], ["Gewebefläche", `${gewebeflaecheM2.toFixed(2)} m²`],
                         ["Gewebe", `${gewebeObj.label} (${gewebeObj.farbe})`], ["Farbe Rahmen", displayLabel],
                         ["Falzmaß inkl. 4 mm Zugabe", `${falzmassProd} mm (${falzmass} + 4)`], ["Einhängewinkel", `Art. ${einhaengewinkelObj === null || einhaengewinkelObj === void 0 ? void 0 : einhaengewinkelObj.artNr}, 4 Stk`],
-                        ...(hakenversatzAktiv ? [["⚠ Hakenversatz Höhe", `X oben ${zMassOben}mm + X unten ${zMassUnten}mm → ${lichteHoehe} mm − ${zMassGesamt} mm = ${effektiveLichteHoehe} mm`]] : []),
+                        ...(hakenversatzAktiv ? [["⚠ Hakenversatz Höhe", `X-Maß ${xMass} mm → ${lichteHoehe} mm − ${xMass} mm = ${effektiveLichteHoehe} mm`]] : []),
                         ...buersten.map((b, i) => ["Bürste " + (i + 1), buerstenText(b, rahmenbreite, rahmenhoehe).replace(/^Bürste /, "")]),
                         ...(profilObj.schiebeverriegelung ? [["Schiebeverriegelung", "Art. 11845, 2 Stk"]] : []),
                     ], profilObj.hinweis), className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333] transition-colors" }, "Produktions\u00FCbersicht drucken"))),
@@ -6437,11 +6687,13 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
     const etikettenExportieren = () => {
         exportiereEtikettenCsv(ausgewaehlt, positionen);
     };
+    const [schnittOffen, setSchnittOffen] = useState(false);
     const etikettenDrucken = () => {
         druckeEtiketten(ausgewaehlt, positionen);
     };
     return (React.createElement("div", { className: "min-h-screen w-full overflow-x-hidden", style: { background: "#F5F4EF" } },
         React.createElement("style", null, `* { font-family: 'Inter', -apple-system, sans-serif; } .font-oswald { font-family: 'Oswald', sans-serif; }`),
+        schnittOffen && React.createElement(Schnittoptimierung, { kunde: ausgewaehlt, positionen: positionen, onClose: () => setSchnittOffen(false) }),
         React.createElement("div", { className: "max-w-5xl mx-auto px-4 py-6 md:py-10" },
             React.createElement("button", { onClick: ausgewaehlt ? () => { setAusgewaehlt(null); setPositionen([]); setKundeAdresse(null); } : onZurueck, className: "text-[12px] text-[#5B6472] hover:text-[#1B1F24] mb-3 flex items-center gap-1" },
                 "\u2190 ",
@@ -6514,6 +6766,7 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
                     React.createElement("div", { className: "flex flex-wrap justify-end gap-2" },
                         React.createElement("button", { onClick: etikettenExportieren, className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[13px] font-semibold hover:border-[#E8963B] transition-colors" }, "Etiketten-CSV (Label LIVE)"),
                         React.createElement("button", { onClick: etikettenDrucken, className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[13px] font-semibold hover:border-[#E8963B] transition-colors" }, "Etiketten drucken (70\u00D750)"),
+                        React.createElement("button", { onClick: () => setSchnittOffen(true), className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[13px] font-semibold hover:border-[#E8963B] transition-colors" }, "Schnittoptimierung"),
                         React.createElement("button", { onClick: produktionDrucken, className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[13px] font-semibold hover:border-[#E8963B] transition-colors" }, "Produktionsliste drucken"),
                         React.createElement("button", { onClick: alleDrucken, className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333] transition-colors" }, "Kompletten Kundenauftrag drucken")))))))));
 }
@@ -6559,11 +6812,13 @@ function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, kundeDe
     const warenkorbEtikettenExportieren = () => {
         exportiereEtikettenCsv(aktiverKunde, warenkorb);
     };
+    const [schnittOffen, setSchnittOffen] = useState(false);
     const warenkorbEtikettenDrucken = () => {
         druckeEtiketten(aktiverKunde, warenkorb);
     };
     return (React.createElement("div", { className: "min-h-screen w-full overflow-x-hidden", style: { background: "#F5F4EF" } },
         React.createElement("style", null, `* { font-family: 'Inter', -apple-system, sans-serif; } .font-oswald { font-family: 'Oswald', sans-serif; }`),
+        schnittOffen && React.createElement(Schnittoptimierung, { kunde: aktiverKunde, positionen: warenkorb, onClose: () => setSchnittOffen(false) }),
         React.createElement("div", { className: "max-w-5xl mx-auto px-4 py-8 md:py-14" },
             React.createElement("div", { className: "flex items-center gap-3 mb-8" },
                 React.createElement("img", { src: LOGO_IMAGE, alt: "TH Sonnenschutz", className: "w-14 h-14 shrink-0" }),
@@ -6609,7 +6864,8 @@ function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, kundeDe
                         React.createElement("div", { className: "flex flex-wrap gap-2 mr-auto" },
                             React.createElement("button", { onClick: warenkorbProduktionDrucken, className: "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[12.5px] font-medium hover:border-[#E8963B] transition-colors" }, "Produktionsliste drucken"),
                             React.createElement("button", { onClick: warenkorbEtikettenExportieren, className: "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[12.5px] font-medium hover:border-[#E8963B] transition-colors" }, "Etiketten-CSV (Label LIVE)"),
-                            React.createElement("button", { onClick: warenkorbEtikettenDrucken, className: "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[12.5px] font-medium hover:border-[#E8963B] transition-colors" }, "Etiketten drucken (70\u00D750)")),
+                            React.createElement("button", { onClick: warenkorbEtikettenDrucken, className: "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[12.5px] font-medium hover:border-[#E8963B] transition-colors" }, "Etiketten drucken (70\u00D750)"),
+                            React.createElement("button", { onClick: () => setSchnittOffen(true), className: "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[12.5px] font-medium hover:border-[#E8963B] transition-colors" }, "Schnittoptimierung")),
                         React.createElement("span", { className: "text-[13px] text-[#5B6472]" }, "Gesamt (brutto)"),
                         React.createElement("span", { className: "text-[17px] font-['IBM_Plex_Mono'] font-semibold text-[#1B1F24]" }, `${warenkorbGesamtBrutto.toFixed(2)} €`)))))),
             React.createElement("button", { onClick: onKunden, className: "w-full text-left border-2 border-[#1B1F24] rounded-xl bg-[#1B1F24] p-5 mb-6 hover:bg-[#333] transition-colors" },
