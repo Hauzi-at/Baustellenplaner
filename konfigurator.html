@@ -3180,21 +3180,40 @@ function schnittPreisFuer(gruppe, preise) {
     }
     return 0;
 }
-function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr, ansicht) {
+function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr, ansicht, opts) {
+    opts = opts || {};
+    const gesaegt = new Set(opts.gesaegt || []);
+    const nurRest = !!opts.nurRest, interaktiv = !!opts.interaktiv;
     gehr = gehr || { anschnitt: 0, zwischen: kerf, saAnschnitt: 0, saZwischen: kerf };
     const esc = (t) => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const zahl = (n) => Number(n).toLocaleString("de-AT", { maximumFractionDigits: 1 });
-    let summeStangen = 0, summeKosten = 0, kostenKomplett = true;
+    let summeStangen = 0, summeKosten = 0, kostenKomplett = true, stueckGesamt = 0, stueckFertig = 0;
+    const pKey = (g, name, k) => g.artNr + "|" + (g.farbe || "") + "|" + name + "|" + k;
+    const barNamen = (g) => { let nS = 0, nR = 0; return g.alle.map((st) => (st.istRest ? "Rest " + (++nR) : "Stange " + (++nS))); };
+    const chipHtml = (key, l, etikett, mass, bar) => {
+        const fertig = gesaegt.has(key);
+        if (nurRest && fertig) return "";
+        return `<span class="chip${fertig ? " done" : ""}"${interaktiv ? ` data-key="${esc(key)}" title="Antippen = gesägt / nicht gesägt"` : ""}><b>${zahl(l)}</b>${bar ? `<em>${esc(bar)}</em>` : ""}<i>${esc(etikett || "")}</i>${mass ? `<i class="pm">${esc(mass)}</i>` : ""}</span>`;
+    };
+    ergebnis.forEach((g) => { const nm = barNamen(g); g.alle.forEach((st, bi) => st.teile.forEach((l, k) => { stueckGesamt++; if (gesaegt.has(pKey(g, nm[bi], k))) stueckFertig++; })); });
     const bloecke = ergebnis.map((g) => {
         const preis = schnittPreisFuer(g, preise);
-        const kosten = preis * g.stangen.length;
-        summeStangen += g.stangen.length;
+        const namen = barNamen(g);
+        const offen = (st, bi) => st.teile.filter((l, k) => !gesaegt.has(pKey(g, namen[bi], k))).length;
+        const neueOffen = g.alle.filter((st, bi) => !st.istRest && (!nurRest || offen(st, bi) > 0)).length;
+        const kosten = preis * neueOffen;
+        summeStangen += neueOffen;
         if (preis > 0) summeKosten += kosten; else kostenKomplett = false;
-        let nrS = 0, nrR = 0;
-        const zeilen = g.alle.map((s) => `<tr><td class="n">${s.istRest ? `Rest ${++nrR} (${zahl(s.laenge)})` : `Stange ${++nrS}`}</td><td>${s.teile.map((l, k) => `<span class="chip"><b>${zahl(l)}</b><i>${esc((s.etiketten && s.etiketten[k]) || "")}</i>${s.massen && s.massen[k] ? `<i class="pm">${esc(s.massen[k])}</i>` : ""}</span>`).join("")}</td><td class="r">${zahl(s.rest)} mm</td></tr>`).join("");
+        const zeilen = g.alle.map((s, bi) => {
+            const o = offen(s, bi);
+            if (nurRest && o === 0) return "";
+            const barBtn = interaktiv ? `<br><button type="button" class="barbtn" data-bar="${esc(g.artNr + "|" + (g.farbe || "") + "|" + namen[bi])}">${o === 0 ? "↺ wieder offen" : "✓ ganze Stange gesägt"}</button>` : "";
+            return `<tr class="${o === 0 ? "rowdone" : ""}"><td class="n">${s.istRest ? `Rest ${namen[bi].split(" ")[1]} (${zahl(s.laenge)})` : esc(namen[bi])}${barBtn}</td><td>${s.teile.map((l, k) => chipHtml(pKey(g, namen[bi], k), l, s.etiketten && s.etiketten[k], s.massen && s.massen[k])).join("")}</td><td class="r">${zahl(s.rest)} mm</td></tr>`;
+        }).join("");
+        if (nurRest && !zeilen) return "";
         return `<div class="blk">
           <div class="kopf"><div><b>Art. ${esc(g.artNr)}</b> — ${esc(g.bez)}${g.farbe ? ` <span class="farbe">${esc(g.farbe)}</span>` : ""} <span class="farbe">${g.gehrung ? `Gehrung 45° · Anschnitt ${zahl(g.gehrEff.anschnitt)} · zwischen ${zahl(g.gehrEff.zwischen)} mm` : `gerader Schnitt · ${zahl(kerf)} mm`}</span></div>
-          <div class="sum"><b>${g.stangen.length} neue Stange${g.stangen.length === 1 ? "" : "n"}</b> à ${zahl(stange)} mm${g.restStuecke.length ? ` + ${g.restStuecke.length} Reststück${g.restStuecke.length === 1 ? "" : "e"}` : ""} · ${g.anzahlTeile} Teile · Verschnitt ${g.verschnittProzent.toFixed(1)} %${preis > 0 ? ` · ${kosten.toFixed(2)} €` : ""}</div></div>
+          <div class="sum"><b>${neueOffen} ${nurRest ? "Stange" + (neueOffen === 1 ? "" : "n") + " noch" : "neue Stange" + (neueOffen === 1 ? "" : "n")}</b> à ${zahl(stange)} mm${g.restStuecke.length ? ` + ${g.restStuecke.length} Reststück${g.restStuecke.length === 1 ? "" : "e"}` : ""} · ${nurRest ? g.alle.reduce((n, st, bi) => n + offen(st, bi), 0) + " Teile offen" : g.anzahlTeile + " Teile · Verschnitt " + g.verschnittProzent.toFixed(1) + " %"}${preis > 0 ? ` · ${kosten.toFixed(2)} €` : ""}</div></div>
           ${g.zuLang.length ? `<div class="warn">⚠ ${g.zuLang.length} Teil(e) länger als eine Stange (${g.zuLang.map(zahl).join(", ")} mm) — nicht eingeplant.</div>` : ""}
           <table><thead><tr><th></th><th>Zuschnitte (mm)</th><th class="r">Rest</th></tr></thead><tbody>${zeilen}</tbody></table></div>`;
     }).join("");
@@ -3209,6 +3228,12 @@ function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr, ansi
       .so td { padding: 3px 4px; border-bottom: 1px solid #EEEBE0; font-family: monospace; }
       .so .chip { display: inline-block; border: 1px solid #C9C5B6; border-radius: 5px; padding: 2px 6px; margin: 2px 4px 2px 0; background: #FBFAF6; line-height: 1.25; vertical-align: top; }
       .so .chip b { display: block; font-size: 12.5px; }
+      .so .chip.done { opacity: .5; background: #E3F1E8; border-color: #9CC9AC; }
+      .so .chip.done b { text-decoration: line-through; }
+      .so .chip em { font-style: normal; font-size: 10px; color: #B96A16; font-weight: 700; }
+      .so .chip[data-key] { cursor: pointer; }
+      .so .barbtn { margin-top: 4px; font-size: 10.5px; border: 1px solid #C9C5B6; border-radius: 4px; background: #fff; color: #1B1F24; padding: 2px 6px; cursor: pointer; }
+      .so tr.rowdone td { background: #F1F8F3; }
       .so .chip i.pm { color: #8A8F98; font-size: 10px; }
       .so .chip i { display: block; font-style: normal; font-family: Arial, sans-serif; font-size: 10.5px; color: #5B6472; }
       .so td.n { color: #8A8F98; width: 110px; white-space: nowrap; font-family: Arial, sans-serif; } .so .r { text-align: right; }
@@ -3216,37 +3241,38 @@ function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr, ansi
       .so .total { background: #FFF8EF; border: 1px solid #E8963B; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; display: flex; gap: 18px; flex-wrap: wrap; }
       .so .hint { font-size: 11px; color: #8A8F98; }
     </style>`;
-    const total = `<div class="total"><div><b>${summeStangen}</b> neue Stangen insgesamt</div><div>Stangenlänge ${zahl(stange)} mm · gerade Schnitte ${zahl(kerf)} mm · Gehrung: Anschnitt ${zahl(gehr.anschnitt)} mm, zwischen den Schnitten ${zahl(gehr.zwischen)} mm · Schiebetür: ${zahl(gehr.saAnschnitt)} / ${zahl(gehr.saZwischen)} mm</div>${summeKosten > 0 ? `<div>Profilkosten (EK): <b>${summeKosten.toFixed(2)} €</b>${kostenKomplett ? "" : " (ohne Profile ohne hinterlegten Preis)"}</div>` : ""}</div>`;
+    const fortschritt = stueckGesamt ? `<div><b>${stueckFertig}</b> von ${stueckGesamt} Stücken gesägt · <b>noch ${stueckGesamt - stueckFertig}</b></div>` : "";
+    const total = `<div class="total">${nurRest ? `<div><b>NOCH ZU SÄGEN:</b> ${stueckGesamt - stueckFertig} Stücke (bereits gesägt: ${stueckFertig} von ${stueckGesamt})</div>` : fortschritt}<div><b>${summeStangen}</b> ${nurRest ? "Stangen werden noch gebraucht" : "neue Stangen insgesamt"}</div><div>Stangenlänge ${zahl(stange)} mm · gerade Schnitte ${zahl(kerf)} mm · Gehrung: Anschnitt ${zahl(gehr.anschnitt)} mm, zwischen den Schnitten ${zahl(gehr.zwischen)} mm · Schiebetür: ${zahl(gehr.saAnschnitt)} / ${zahl(gehr.saZwischen)} mm</div>${summeKosten > 0 ? `<div>Profilkosten (EK): <b>${summeKosten.toFixed(2)} €</b>${kostenKomplett ? "" : " (ohne Profile ohne hinterlegten Preis)"}</div>` : ""}</div>`;
     // Sägeplan: Anschlag nur einmal je Länge einstellen – alle gleich langen Stücke (über alle Stangen) hintereinander sägen.
     // Gehrungsprofile zuerst (Säge bleibt auf 45°), danach die geraden Schnitte (Winkel nur einmal umstellen).
     let anschlaege = 0;
     const saegeGruppen = ergebnis.slice().sort((a, b) => (b.gehrung ? 1 : 0) - (a.gehrung ? 1 : 0) || a.artNr.localeCompare(b.artNr));
     const saegeBloecke = saegeGruppen.map((g) => {
-        let nS = 0, nR = 0;
-        const namen = g.alle.map((st) => (st.istRest ? "Rest " + (++nR) : "Stange " + (++nS)));
+        const namen = barNamen(g);
         const proLaenge = {};
-        g.alle.forEach((st, bi) => st.teile.forEach((l, k) => { (proLaenge[l] = proLaenge[l] || []).push({ bar: namen[bi], text: (st.etiketten && st.etiketten[k]) || "", mass: (st.massen && st.massen[k]) || "" }); }));
+        g.alle.forEach((st, bi) => st.teile.forEach((l, k) => { const key = pKey(g, namen[bi], k); if (nurRest && gesaegt.has(key)) return; (proLaenge[l] = proLaenge[l] || []).push({ key, bar: namen[bi], text: (st.etiketten && st.etiketten[k]) || "", mass: "" }); }));
         const laengen = Object.keys(proLaenge).map(Number).sort((a, b) => b - a);
         anschlaege += laengen.length;
-        const zeilen = laengen.map((l, i) => `<tr><td class="n"><b>${i + 1}.</b> Anschlag ${zahl(l)} mm</td><td>${proLaenge[l].length} Stück: ${proLaenge[l].map((e) => `<span class="chip"><b>${esc(e.bar)}</b><i>${esc(e.text)}</i></span>`).join("")}</td></tr>`).join("");
+        if (nurRest && !laengen.length) return "";
+        const zeilen = laengen.map((l, i) => `<tr><td class="n"><b>${i + 1}.</b> Anschlag ${zahl(l)} mm</td><td>${proLaenge[l].length} Stück: ${proLaenge[l].map((e) => { const fertig = gesaegt.has(e.key); return `<span class="chip${fertig ? " done" : ""}"${interaktiv ? ` data-key="${esc(e.key)}" title="Antippen = gesägt / nicht gesägt"` : ""}><b>${esc(e.bar)}</b><i>${esc(e.text)}</i></span>`; }).join("")}</td></tr>`).join("");
         return `<div class="blk"><div class="kopf"><div><b>Art. ${esc(g.artNr)}</b> — ${esc(g.bez)}${g.farbe ? ` <span class="farbe">${esc(g.farbe)}</span>` : ""} <span class="farbe">${g.gehrung ? "Säge auf 45° Gehrung" : "gerader Schnitt (90°)"}</span></div>
           <div class="sum"><b>${laengen.length} Anschlag-Einstellung${laengen.length === 1 ? "" : "en"}</b></div></div>
           <table><thead><tr><th>Anschlag einstellen</th><th>Dann alle diese Stücke sägen (Stange · Position)</th></tr></thead><tbody>${zeilen}</tbody></table></div>`;
     }).join("");
-    const saegeKopf = `<div class="total"><div><b>${anschlaege}</b> Anschlag-Einstellungen insgesamt (eine je Länge und Profil)</div><div>Reihenfolge: erst alle Gehrungs-Profile, dann die geraden Schnitte. Jeweils von der längsten zur kürzesten Länge – so stellst du den Anschlag nur einmal je Länge ein.</div></div>`;
+    const saegeKopf = `<div class="total">${nurRest ? `<div><b>NOCH ZU SÄGEN:</b> ${stueckGesamt - stueckFertig} Stücke (bereits gesägt: ${stueckFertig} von ${stueckGesamt})</div>` : fortschritt}<div><b>${anschlaege}</b> Anschlag-Einstellungen ${nurRest ? "noch" : "insgesamt"} (eine je Länge und Profil)</div><div>Reihenfolge: erst alle Gehrungs-Profile, dann die geraden Schnitte. Jeweils von der längsten zur kürzesten Länge – so stellst du den Anschlag nur einmal je Länge ein.</div></div>`;
     const hinweis = `<div class="hint">Enthalten: Spannrahmen, Drehtür, Schiebetür (Rahmen-, Flügel-, Zarge-, Schwellen-, Griffleisten-, Querprofil-, Laufschienen-Zuschnitte × Stückzahl). Profile mit gleicher Art.-Nr. und Farbe teilen sich die Stangen. Rollladen, Lichtschacht und IS KIS sind nicht eingerechnet.</div>`;
     return `<div class="so">${css}${ergebnis.length ? (ansicht === "saege" ? saegeKopf + saegeBloecke : total + bloecke) : "<p>Keine Profil-Zuschnitte vorhanden (Spannrahmen, Drehtür oder Schiebetür in den Warenkorb legen).</p>"}${hinweis}</div>`;
 }
-function druckeSchnittoptimierung(kunde, ergebnis, stange, kerf, preise, gehr, ansicht) {
+function druckeSchnittoptimierung(kunde, ergebnis, stange, kerf, preise, gehr, ansicht, opts) {
     const heute = new Date().toLocaleDateString("de-AT");
     const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>Schnittoptimierung — ${kunde}</title>
     <style>body { font-family: Arial, sans-serif; padding: 24px; color: #1B1F24; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .k { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #1B1F24; padding-bottom: 12px; margin-bottom: 14px; } .k img { width: 52px; height: 52px; }
     .f { font-size: 11px; letter-spacing: .15em; text-transform: uppercase; color: #E8963B; font-weight: 600; } .t { font-size: 20px; font-weight: 700; }
     .m { font-size: 12.5px; color: #5B6472; margin-bottom: 12px; } @media print { body { padding: 8px; } }</style></head><body>
-    <div class="k"><img src="${LOGO_IMAGE}"><div><div class="f">${FIRMA.name} — Produktion</div><div class="t">${ansicht === "saege" ? "Sägeplan (Anschlag je Länge)" : "Schnittoptimierung"}</div></div></div>
+    <div class="k"><img src="${LOGO_IMAGE}"><div><div class="f">${FIRMA.name} — Produktion</div><div class="t">${(opts && opts.nurRest ? "Noch zu sägen — " : "") + (ansicht === "saege" ? "Sägeplan (Anschlag je Länge)" : "Schnittoptimierung")}</div></div></div>
     <div class="m"><b>Kunde:</b> ${kunde || "—"} &nbsp;·&nbsp; <b>Datum:</b> ${heute}</div>
-    ${schnittHtml(kunde, ergebnis, stange, kerf, preise, true, gehr, ansicht)}</body></html>`;
+    ${schnittHtml(kunde, ergebnis, stange, kerf, preise, true, gehr, ansicht, opts)}</body></html>`;
     zeigeDruckVorschau(html);
 }
 const SCHNITT_REST_MIN = 250;
@@ -3262,11 +3288,16 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
     const [einstOffen, setEinstOffen] = useState(false);
     const [uebernommen, setUebernommen] = useState(null);
     const [ansicht, setAnsicht] = useState("stangen");
+    const [gesaegt, setGesaegt] = useState([]);
+    const [fixPlan, setFixPlan] = useState(null);
     const [meldung, setMeldung] = useState("");
     const sig = JSON.stringify(positionen.map((p) => [p.posNr, p.produktKey, p.item.id, p.item.menge, p.item.rahmenbreite, p.item.rahmenhoehe, p.item.fluegelbreite, p.item.fluegelhoehe, p.item.config && p.item.config.laufschienenLaenge]));
     useEffect(() => {
         var _a;
         schnittLadePreise().then(setPreise);
+        (_a = window.storage) === null || _a === void 0 ? void 0 : _a.get("schnitt_gesaegt_v1").then((r) => {
+            if (r && r.value) { try { const e = JSON.parse(r.value); const x = e && e[kunde || ""]; if (x && x.sig === sig && Array.isArray(x.keys)) { setGesaegt(x.keys); if (x.fix) setFixPlan(x.fix); } } catch (x) { } }
+        }).catch(() => { });
         (_a = window.storage) === null || _a === void 0 ? void 0 : _a.get("schnitt_uebernommen_v1").then((r) => {
             if (r && r.value) { try { const e = JSON.parse(r.value); if (e && e[kunde || ""]) setUebernommen(e[kunde || ""]); } catch (x) { } }
         }).catch(() => { });
@@ -3281,9 +3312,43 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
     const n0 = (v) => (v == null ? 0 : v);
     const gehr = { anschnitt: n0(anschnitt), zwischen: n0(zwischen), saAnschnitt: n0(saAnschnitt), saZwischen: n0(saZwischen) };
     const resteAendern = (neu) => { var _a; setReste(neu); (_a = window.storage) === null || _a === void 0 ? void 0 : _a.set("schnitt_reste_v1", JSON.stringify(neu)).catch(() => { }); };
+    const gesaegtSpeichern = (keys) => {
+        var _a;
+        setGesaegt(keys);
+        const fix = keys.length ? (planFix || { sig, ergebnis: ergebnisLive, stange, kerf, gehr }) : null;
+        setFixPlan(fix);
+        const st = (_a = window.storage) === null || _a === void 0 ? void 0 : _a.get("schnitt_gesaegt_v1");
+        Promise.resolve(st).catch(() => null).then((r) => {
+            let all = {};
+            try { if (r && r.value) all = JSON.parse(r.value) || {}; } catch (x) { }
+            if (keys.length) all[kunde || ""] = { sig, keys, fix }; else delete all[kunde || ""];
+            return window.storage && window.storage.set("schnitt_gesaegt_v1", JSON.stringify(all));
+        }).catch(() => { });
+    };
     const istUebernommen = !!(uebernommen && uebernommen.sig === sig);
     const resteEff = istUebernommen ? uebernommen.resteVorher : reste;
-    const ergebnis = schnittBerechnen(positionen, stange, kerf, resteEff, gehr);
+    const ergebnisLive = schnittBerechnen(positionen, stange, kerf, resteEff, gehr);
+    // Sobald du etwas abgehakt hast, wird der Plan festgehalten – er ändert sich dann nicht mehr (auch nicht durch andere Einstellungen).
+    const planFix = fixPlan && fixPlan.sig === sig ? fixPlan : null;
+    const ergebnis = planFix ? planFix.ergebnis : ergebnisLive;
+    const stangeA = planFix ? planFix.stange : stange, kerfA = planFix ? planFix.kerf : kerf, gehrA = planFix ? planFix.gehr : gehr;
+    const ergebnisKlick = (e) => {
+        const chip = e.target.closest && e.target.closest("[data-key]");
+        const bar = e.target.closest && e.target.closest("[data-bar]");
+        if (bar) {
+            const pre = bar.getAttribute("data-bar") + "|";
+            const alleKeys = [];
+            ergebnis.forEach((g) => { let nS = 0, nR = 0; g.alle.forEach((st) => { const name = st.istRest ? "Rest " + (++nR) : "Stange " + (++nS); st.teile.forEach((l, k) => alleKeys.push(g.artNr + "|" + (g.farbe || "") + "|" + name + "|" + k)); }); });
+            const dieseKeys = alleKeys.filter((k) => k.startsWith(pre));
+            const alleFertig = dieseKeys.length > 0 && dieseKeys.every((k) => gesaegt.includes(k));
+            gesaegtSpeichern(alleFertig ? gesaegt.filter((k) => !dieseKeys.includes(k)) : Array.from(new Set(gesaegt.concat(dieseKeys))));
+            return;
+        }
+        if (chip) {
+            const k = chip.getAttribute("data-key");
+            gesaegtSpeichern(gesaegt.includes(k) ? gesaegt.filter((x) => x !== k) : gesaegt.concat([k]));
+        }
+    };
     const uebernommenSpeichern = (wert) => {
         var _a;
         setUebernommen(wert);
@@ -3352,7 +3417,7 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
                 React.createElement("button", { onClick: onClose, className: "text-[13px] text-[#5B6472] hover:text-[#1B1F24]" }, "Schließen ✕")),
             React.createElement("div", { className: "text-[13px] text-[#5B6472] bg-white border border-[#D8D4C8] rounded-lg p-3 mb-3 leading-relaxed" },
                 React.createElement("b", { className: "text-[#1B1F24]" }, "So liest du die Liste: "),
-                "Pro Profil (Art.-Nr. + Farbe) siehst du, wie viele 6-m-Stangen du brauchst. Jede Zeile „Stange 1, 2, …“ ist EINE Stange. Die Kästchen daneben sind die Stücke, die du von dieser Stange absägst – oben die Länge, darunter die Position und ob es Breite oder Höhe ist (zum Beschriften). „Rest“ ist das, was von der Stange übrig bleibt."),
+                "Pro Profil (Art.-Nr. + Farbe) siehst du, wie viele 6-m-Stangen du brauchst. Jede Zeile „Stange 1, 2, …“ ist EINE Stange. Die Kästchen daneben sind die Stücke, die du von dieser Stange absägst – oben die Länge, darunter die Position und ob es Breite oder Höhe ist (zum Beschriften). „Rest“ ist das, was von der Stange übrig bleibt. Tippe ein Stück an (oder „ganze Stange gesägt“), sobald es geschnitten ist – dann kannst du unten „Rest drucken“ wählen und bekommst nur noch, was fehlt."),
             React.createElement("div", { className: "text-[12.5px] bg-white border border-[#D8D4C8] rounded-lg p-3 mb-3" },
                 React.createElement("div", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium mb-1.5" }, "Berechnet aus dem Warenkorb (" + positionen.length + " Positionen)"),
                 positionen.map((p, i) => React.createElement("div", { key: i, className: "flex gap-2 py-0.5", style: { borderTop: i ? "1px solid #EEEBE0" : "none" } },
@@ -3361,6 +3426,10 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
                     React.createElement("span", { className: "text-[#5B6472] min-w-0" }, positionKurzbeschreibung(p.produktKey, p.item) + ((p.item.menge || 1) > 1 ? " · " + p.item.menge + " Stk" : ""))))),
             React.createElement("button", { onClick: () => setEinstOffen(!einstOffen), className: "text-[13px] font-semibold text-[#B96A16] hover:underline mb-3" }, (einstOffen ? "▾ " : "▸ ") + "Einstellungen & Restlager" + (reste.length ? " (" + reste.length + " Reste)" : "") + " — normalerweise nicht nötig"),
             einstOffen && React.createElement("div", null,
+                React.createElement("div", { className: "flex flex-wrap gap-2 mb-3 items-center" },
+                    React.createElement("span", { className: "text-[12px] text-[#5B6472]" }, "Gehrungs-Werte:"),
+                    React.createElement("button", { onClick: () => { setAnschnitt(55); setZwischen(80); setSaAnschnitt(64); setSaZwischen(98); speichern(stange, kerf, 55, 80, 64, 98); }, className: "px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[12.5px] font-semibold text-[#1B1F24]" }, "wie Ausdruck vom 4.11. (55 / 80 · SA 64 / 98)"),
+                    React.createElement("button", { onClick: () => { setAnschnitt(25); setZwischen(20); setSaAnschnitt(30); setSaZwischen(25); speichern(stange, kerf, 25, 20, 30, 25); }, className: "px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[12.5px] font-semibold text-[#1B1F24]" }, "neu, genauer (25 / 20 · SA 30 / 25)")),
             React.createElement("div", { className: "gap-3 mb-4", style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))" } },
                     React.createElement(Num, { label: "Stangenlänge", value: stange, onChange: (v) => { setStange(v); speichern(v, kerf, anschnitt, zwischen); }, unit: "mm", min: 1000 }),
                     React.createElement(Num, { label: "Sägeschnitt (gerade Profile)", value: kerf, onChange: (v) => { setKerf(v); speichern(stange, v, anschnitt, zwischen); }, unit: "mm", min: 0 }),
@@ -3369,6 +3438,8 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
                     React.createElement(Num, { label: "Schiebetür (breiteres Profil): Anschnitt", value: saAnschnitt, onChange: (v) => { setSaAnschnitt(v); speichern(stange, kerf, anschnitt, zwischen, v, saZwischen); }, unit: "mm", min: 0 }),
                     React.createElement(Num, { label: "Schiebetür (breiteres Profil): zwischen den Schnitten", value: saZwischen, onChange: (v) => { setSaZwischen(v); speichern(stange, kerf, anschnitt, zwischen, saAnschnitt, v); }, unit: "mm", min: 0 })),
                 restBlock),
+            planFix && React.createElement("div", { className: "mb-3 rounded-lg border border-[#B96A16] bg-[#FFF3E3] p-3 text-[13px] text-[#1B1F24]" },
+                "🔒 Der Plan ist festgehalten, weil du schon Stücke abgehakt hast. Er ändert sich nicht mehr – auch nicht durch andere Einstellungen oder Reste. Zum Neuberechnen unten „Haken zurücksetzen“ drücken."),
             ergebnis.length > 0 && React.createElement("div", { className: "flex gap-2 mb-3" },
                 [["stangen", "Stangen-Plan (was auf welche Stange)"], ["saege", "Sägeplan (Säge selten umstellen)"]].map(([k, t]) => React.createElement("button", { key: k, onClick: () => setAnsicht(k), className: "px-3 py-2 rounded-md text-[13px] font-semibold border " + (ansicht === k ? "bg-[#1B1F24] text-white border-[#1B1F24]" : "bg-white text-[#1B1F24] border-[#D8D4C8]") }, t))),
             ergebnis.length > 0 && React.createElement(React.Fragment, null, istUebernommen
@@ -3379,9 +3450,11 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
                     React.createElement("button", { onClick: resteUebernehmen, className: "px-3.5 py-2 rounded-md bg-[#E8963B] text-white text-[13px] font-semibold hover:bg-[#d6852e]" }, "Reste ins Restlager übernehmen (ab " + SCHNITT_REST_MIN + " mm)"),
                     React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "Erst drücken, wenn der Auftrag gesägt ist. Verbrauchte Reste werden dabei entfernt.")),
                 meldung && React.createElement("div", { className: "text-[12.5px] text-[#2E7D4F] mb-3" }, meldung)),
-            React.createElement("div", { dangerouslySetInnerHTML: { __html: schnittHtml(kunde, ergebnis, stange, kerf, preise, false, gehr, ansicht) } }),
+            React.createElement("div", { onClick: ergebnisKlick, dangerouslySetInnerHTML: { __html: schnittHtml(kunde, ergebnis, stangeA, kerfA, preise, false, gehrA, ansicht, { gesaegt, interaktiv: true }) } }),
             React.createElement("div", { className: "flex justify-end gap-2 mt-3" },
-                React.createElement("button", { onClick: () => druckeSchnittoptimierung(kunde, ergebnis, stange, kerf, preise, gehr, ansicht), className: "px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333]" }, "Drucken"))));
+                gesaegt.length > 0 && React.createElement("button", { onClick: () => gesaegtSpeichern([]), className: "px-3.5 py-2 rounded-md border border-[#D8D4C8] bg-white text-[#5B6472] text-[13px] font-semibold" }, "Haken zurücksetzen"),
+                gesaegt.length > 0 && React.createElement("button", { onClick: () => druckeSchnittoptimierung(kunde, ergebnis, stangeA, kerfA, preise, gehrA, ansicht, { gesaegt, nurRest: true }), className: "px-3.5 py-2 rounded-md bg-[#E8963B] text-white text-[13px] font-semibold hover:bg-[#d6852e]" }, "Rest drucken (noch zu sägen)"),
+                React.createElement("button", { onClick: () => druckeSchnittoptimierung(kunde, ergebnis, stangeA, kerfA, preise, gehrA, ansicht, { gesaegt }), className: "px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333]" }, "Drucken"))));
 }
 // ============================================================
 // GEMEINSAME KUNDENVERWALTUNG (produktübergreifend, alle 6 Konfiguratoren teilen sich diese Liste)
