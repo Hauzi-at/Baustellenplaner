@@ -3116,6 +3116,8 @@ function schnittBerechnen(positionen, stange, kerf, reste, gehr) {
     const gruppen = {};
     positionen.forEach((p, pIdx) => {
         const posLabel = "Pos. " + (p.posNr || (100 + pIdx * 10));
+        const pm = etikettenMasseFuer(p.produktKey, p.item);
+        const posMass = (pm.breite != null && pm.breite !== "" && pm.hoehe != null && pm.hoehe !== "") ? "Pos-Maß " + pm.breite + " × " + pm.hoehe : "";
         schnittTeileFuer(p.produktKey, p.item).forEach((t) => {
             const key = t.artNr + "|" + t.farbe;
             if (!gruppen[key]) gruppen[key] = { artNr: t.artNr, bez: t.bez, farbe: t.farbe, teile: [], preisRefs: [], gehrung: false, quelle: t.quelle };
@@ -3126,7 +3128,7 @@ function schnittBerechnen(positionen, stange, kerf, reste, gehr) {
             for (let i = 0; i < t.anzahl; i++) {
                 const stk = t.menge > 1 ? " · Stk " + (Math.floor(i / t.proStk) + 1) + "/" + t.menge : "";
                 gruppen[key].teile.push(t.laenge);
-                (gruppen[key].etik = gruppen[key].etik || []).push({ l: t.laenge, text: posLabel + " · " + t.teilName + seiteTxt + stk });
+                (gruppen[key].etik = gruppen[key].etik || []).push({ l: t.laenge, text: posLabel + " · " + t.teilName + seiteTxt + stk, mass: posMass });
             }
         });
     });
@@ -3143,8 +3145,8 @@ function schnittBerechnen(positionen, stange, kerf, reste, gehr) {
         const ge = g.quelle === "schiebetuer" ? { anschnitt: gehr.saAnschnitt, zwischen: gehr.saZwischen } : { anschnitt: gehr.anschnitt, zwischen: gehr.zwischen };
         const alle = schnittPacken(passend, stange, g.gehrung ? ge.zwischen : kerf, restLaengen, g.gehrung ? ge.anschnitt : 0);
         const pool = {};
-        (g.etik || []).slice().sort((x, y) => (x.text < y.text ? -1 : x.text > y.text ? 1 : 0)).forEach((e) => { (pool[e.l] = pool[e.l] || []).push(e.text); });
-        alle.forEach((x) => { x.etiketten = x.teile.map((l) => (pool[l] && pool[l].length ? pool[l].shift() : "")); });
+        (g.etik || []).slice().sort((x, y) => (x.text < y.text ? -1 : x.text > y.text ? 1 : 0)).forEach((e) => { (pool[e.l] = pool[e.l] || []).push(e); });
+        alle.forEach((x) => { const zu = x.teile.map((l) => (pool[l] && pool[l].length ? pool[l].shift() : { text: "", mass: "" })); x.etiketten = zu.map((z) => z.text); x.massen = zu.map((z) => z.mass); });
         const stangen = alle.filter((x) => !x.istRest);
         const restStuecke = alle.filter((x) => x.istRest);
         const nutzlaenge = passend.reduce((s, l) => s + l, 0);
@@ -3189,7 +3191,7 @@ function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr) {
         summeStangen += g.stangen.length;
         if (preis > 0) summeKosten += kosten; else kostenKomplett = false;
         let nrS = 0, nrR = 0;
-        const zeilen = g.alle.map((s) => `<tr><td class="n">${s.istRest ? `Rest ${++nrR} (${zahl(s.laenge)})` : `Stange ${++nrS}`}</td><td>${s.teile.map((l, k) => `<span class="chip"><b>${zahl(l)}</b><i>${esc((s.etiketten && s.etiketten[k]) || "")}</i></span>`).join("")}</td><td class="r">${zahl(s.rest)} mm</td></tr>`).join("");
+        const zeilen = g.alle.map((s) => `<tr><td class="n">${s.istRest ? `Rest ${++nrR} (${zahl(s.laenge)})` : `Stange ${++nrS}`}</td><td>${s.teile.map((l, k) => `<span class="chip"><b>${zahl(l)}</b><i>${esc((s.etiketten && s.etiketten[k]) || "")}</i>${s.massen && s.massen[k] ? `<i class="pm">${esc(s.massen[k])}</i>` : ""}</span>`).join("")}</td><td class="r">${zahl(s.rest)} mm</td></tr>`).join("");
         return `<div class="blk">
           <div class="kopf"><div><b>Art. ${esc(g.artNr)}</b> — ${esc(g.bez)}${g.farbe ? ` <span class="farbe">${esc(g.farbe)}</span>` : ""} <span class="farbe">${g.gehrung ? `Gehrung 45° · Anschnitt ${zahl(g.gehrEff.anschnitt)} · zwischen ${zahl(g.gehrEff.zwischen)} mm` : `gerader Schnitt · ${zahl(kerf)} mm`}</span></div>
           <div class="sum"><b>${g.stangen.length} neue Stange${g.stangen.length === 1 ? "" : "n"}</b> à ${zahl(stange)} mm${g.restStuecke.length ? ` + ${g.restStuecke.length} Reststück${g.restStuecke.length === 1 ? "" : "e"}` : ""} · ${g.anzahlTeile} Teile · Verschnitt ${g.verschnittProzent.toFixed(1)} %${preis > 0 ? ` · ${kosten.toFixed(2)} €` : ""}</div></div>
@@ -3207,6 +3209,7 @@ function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr) {
       .so td { padding: 3px 4px; border-bottom: 1px solid #EEEBE0; font-family: monospace; }
       .so .chip { display: inline-block; border: 1px solid #C9C5B6; border-radius: 5px; padding: 2px 6px; margin: 2px 4px 2px 0; background: #FBFAF6; line-height: 1.25; vertical-align: top; }
       .so .chip b { display: block; font-size: 12.5px; }
+      .so .chip i.pm { color: #8A8F98; font-size: 10px; }
       .so .chip i { display: block; font-style: normal; font-family: Arial, sans-serif; font-size: 10.5px; color: #5B6472; }
       .so td.n { color: #8A8F98; width: 110px; white-space: nowrap; font-family: Arial, sans-serif; } .so .r { text-align: right; }
       .so .warn { background: #FDEDEB; color: #C0392B; border-radius: 6px; padding: 5px 8px; margin-bottom: 6px; }
@@ -3238,6 +3241,7 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
     const [saZwischen, setSaZwischen] = useState(98);
     const [preise, setPreise] = useState(null);
     const [reste, setReste] = useState([]);
+    const [einstOffen, setEinstOffen] = useState(false);
     useEffect(() => {
         var _a;
         schnittLadePreise().then(setPreise);
@@ -3278,14 +3282,25 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
             React.createElement("div", { className: "flex items-center justify-between mb-3" },
                 React.createElement("h2", { className: "text-[20px] font-oswald font-semibold text-[#1B1F24]" }, "Schnittoptimierung" + (kunde ? " — " + kunde : "")),
                 React.createElement("button", { onClick: onClose, className: "text-[13px] text-[#5B6472] hover:text-[#1B1F24]" }, "Schließen ✕")),
+            React.createElement("div", { className: "text-[13px] text-[#5B6472] bg-white border border-[#D8D4C8] rounded-lg p-3 mb-3 leading-relaxed" },
+                React.createElement("b", { className: "text-[#1B1F24]" }, "So liest du die Liste: "),
+                "Pro Profil (Art.-Nr. + Farbe) siehst du, wie viele 6-m-Stangen du brauchst. Jede Zeile „Stange 1, 2, …“ ist EINE Stange. Die Kästchen daneben sind die Stücke, die du von dieser Stange absägst – oben die Länge, darunter die Position und ob es Breite oder Höhe ist (zum Beschriften). „Rest“ ist das, was von der Stange übrig bleibt."),
+            React.createElement("div", { className: "text-[12.5px] bg-white border border-[#D8D4C8] rounded-lg p-3 mb-3" },
+                React.createElement("div", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium mb-1.5" }, "Berechnet aus dem Warenkorb (" + positionen.length + " Positionen)"),
+                positionen.map((p, i) => React.createElement("div", { key: i, className: "flex gap-2 py-0.5 border-t border-[#EEEBE0] first:border-t-0" },
+                    React.createElement("span", { className: "font-semibold text-[#1B1F24] w-10 shrink-0" }, p.posNr || (100 + i * 10)),
+                    React.createElement("span", { className: "text-[#1B1F24] shrink-0" }, p.produktLabel),
+                    React.createElement("span", { className: "text-[#5B6472] min-w-0" }, positionKurzbeschreibung(p.produktKey, p.item) + ((p.item.menge || 1) > 1 ? " · " + p.item.menge + " Stk" : ""))))),
+            React.createElement("button", { onClick: () => setEinstOffen(!einstOffen), className: "text-[13px] font-semibold text-[#B96A16] hover:underline mb-3" }, (einstOffen ? "▾ " : "▸ ") + "Einstellungen & Restlager" + (reste.length ? " (" + reste.length + " Reste)" : "") + " — normalerweise nicht nötig"),
+            einstOffen && React.createElement("div", null,
             React.createElement("div", { className: "gap-3 mb-4", style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))" } },
-                React.createElement(Num, { label: "Stangenlänge", value: stange, onChange: (v) => { setStange(v); speichern(v, kerf, anschnitt, zwischen); }, unit: "mm", min: 1000 }),
-                React.createElement(Num, { label: "Sägeschnitt (gerade Profile)", value: kerf, onChange: (v) => { setKerf(v); speichern(stange, v, anschnitt, zwischen); }, unit: "mm", min: 0 }),
-                React.createElement(Num, { label: "Gehrung: Anschnitt (Abfall am Stangenanfang)", value: anschnitt, onChange: (v) => { setAnschnitt(v); speichern(stange, kerf, v, zwischen); }, unit: "mm", min: 0 }),
-                React.createElement(Num, { label: "Gehrung: Abfall zwischen den Schnitten", value: zwischen, onChange: (v) => { setZwischen(v); speichern(stange, kerf, anschnitt, v); }, unit: "mm", min: 0 }),
-                React.createElement(Num, { label: "Schiebetür (breiteres Profil): Anschnitt", value: saAnschnitt, onChange: (v) => { setSaAnschnitt(v); speichern(stange, kerf, anschnitt, zwischen, v, saZwischen); }, unit: "mm", min: 0 }),
-                React.createElement(Num, { label: "Schiebetür (breiteres Profil): zwischen den Schnitten", value: saZwischen, onChange: (v) => { setSaZwischen(v); speichern(stange, kerf, anschnitt, zwischen, saAnschnitt, v); }, unit: "mm", min: 0 })),
-            restBlock,
+                    React.createElement(Num, { label: "Stangenlänge", value: stange, onChange: (v) => { setStange(v); speichern(v, kerf, anschnitt, zwischen); }, unit: "mm", min: 1000 }),
+                    React.createElement(Num, { label: "Sägeschnitt (gerade Profile)", value: kerf, onChange: (v) => { setKerf(v); speichern(stange, v, anschnitt, zwischen); }, unit: "mm", min: 0 }),
+                    React.createElement(Num, { label: "Gehrung: Anschnitt (Abfall am Stangenanfang)", value: anschnitt, onChange: (v) => { setAnschnitt(v); speichern(stange, kerf, v, zwischen); }, unit: "mm", min: 0 }),
+                    React.createElement(Num, { label: "Gehrung: Abfall zwischen den Schnitten", value: zwischen, onChange: (v) => { setZwischen(v); speichern(stange, kerf, anschnitt, v); }, unit: "mm", min: 0 }),
+                    React.createElement(Num, { label: "Schiebetür (breiteres Profil): Anschnitt", value: saAnschnitt, onChange: (v) => { setSaAnschnitt(v); speichern(stange, kerf, anschnitt, zwischen, v, saZwischen); }, unit: "mm", min: 0 }),
+                    React.createElement(Num, { label: "Schiebetür (breiteres Profil): zwischen den Schnitten", value: saZwischen, onChange: (v) => { setSaZwischen(v); speichern(stange, kerf, anschnitt, zwischen, saAnschnitt, v); }, unit: "mm", min: 0 })),
+                restBlock),
             React.createElement("div", { dangerouslySetInnerHTML: { __html: schnittHtml(kunde, ergebnis, stange, kerf, preise, false, gehr) } }),
             React.createElement("div", { className: "flex justify-end gap-2 mt-3" },
                 React.createElement("button", { onClick: () => druckeSchnittoptimierung(kunde, ergebnis, stange, kerf, preise, gehr), className: "px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333]" }, "Drucken"))));
@@ -6690,7 +6705,7 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
             }
             catch (_b) { }
         }
-        setPositionen(alle);
+        setPositionen(nummeriereWarenkorb(alle));
         setLadeStatus("fertig");
     };
     const kundeWaehlen = (name) => { setAusgewaehlt(name); setKundeAdresse(null); loadKundeVollDetails(name, setKundeAdresse); ladePositionen(name); };
@@ -6756,7 +6771,7 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
                             React.createElement("tbody", null, positionen.map((p, i) => {
                                 var _a;
                                 return (React.createElement("tr", { key: i, className: "border-t border-[#E2DFD3]" },
-                                    React.createElement("td", { className: "px-2 py-2 text-right font-['IBM_Plex_Mono'] text-[#1B1F24] font-semibold" }, p.posNr || i + 1),
+                                    React.createElement("td", { className: "px-2 py-2 text-right font-['IBM_Plex_Mono'] text-[#1B1F24] font-bold text-[15px]" }, p.posNr || i + 1),
                                     React.createElement("td", { className: "px-3 py-2 text-[#1B1F24]" }, p.item.position || "—"),
                                     React.createElement("td", { className: "px-3 py-2 text-[#1B1F24] font-medium" }, p.produktLabel),
                                     React.createElement("td", { className: "px-3 py-2 text-[#5B6472]" }, positionKurzbeschreibung(p.produktKey, p.item)),
@@ -6869,9 +6884,12 @@ function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, kundeDe
                 warenkorbStatus === "fertig" && warenkorb.length === 0 && (React.createElement("p", { className: "text-[13px] text-[#8A8F98] mt-2" }, `Für ${aktiverKunde} sind noch keine Positionen angelegt. Wähle unten ein Produkt.`)),
                 warenkorb.length > 0 && (React.createElement(React.Fragment, null,
                     React.createElement("div", { className: "flex flex-col gap-2 mt-3 mb-3" }, warenkorb.map((p) => (React.createElement("div", { key: `${p.produktKey}-${p.item.id}`, className: "flex items-center justify-between gap-2 border border-[#E2DFD3] rounded-lg px-3 py-2" },
-                        React.createElement("div", { className: "min-w-0" },
-                            React.createElement("div", { className: "text-[13.5px] font-medium text-[#1B1F24] truncate" }, (p.posNr ? p.posNr + " · " : "") + p.produktLabel + (p.item.position ? ` — ${p.item.position}` : "")),
-                            React.createElement("div", { className: "text-[12px] text-[#8A8F98] truncate" }, positionKurzbeschreibung(p.produktKey, p.item))),
+                        React.createElement("div", { className: "flex items-center gap-3 min-w-0" },
+                            React.createElement("div", { className: "shrink-0 rounded-md bg-[#1B1F24] text-white font-['IBM_Plex_Mono'] font-semibold text-center px-2.5 py-2", style: { minWidth: "54px" }, title: "Positionsnummer (Produktion)" },
+                                React.createElement("div", { style: { fontSize: "9px", fontFamily: "Inter, sans-serif", fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.6, marginBottom: "3px" } }, "Pos."), React.createElement("div", { style: { fontSize: "17px", lineHeight: 1 } }, p.posNr)),
+                            React.createElement("div", { className: "min-w-0" },
+                                React.createElement("div", { className: "text-[13.5px] font-medium text-[#1B1F24] truncate" }, p.produktLabel + (p.item.position ? ` — ${p.item.position}` : "")),
+                                React.createElement("div", { className: "text-[12px] text-[#8A8F98] truncate" }, positionKurzbeschreibung(p.produktKey, p.item)))),
                         React.createElement("div", { className: "flex items-center gap-2 shrink-0" },
                             React.createElement("span", { className: "text-[13px] font-['IBM_Plex_Mono'] text-[#1B1F24]" }, `${(p.item.preisBrutto * p.item.menge).toFixed(2)} €`),
                             React.createElement("button", { onClick: () => { var _a; return onBearbeiten((_a = PRODUKT_LISTEN_KEYS.find((pl) => pl.key === p.produktKey)) === null || _a === void 0 ? void 0 : _a.produktRoute, p.item.id); }, className: "text-[#8A8F98] hover:text-[#1B1F24]", title: "Bearbeiten" },
