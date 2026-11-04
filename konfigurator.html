@@ -2681,6 +2681,31 @@ const FIRMA = {
 };
 // Öffnet ein eigenes, schlankes Druckfenster mit Logo/Firma/Kunde/Datum + Tabellenzeilen und startet
 // den Druckdialog. Zuverlässiger als CSS-Versteck-Tricks, funktioniert auch auf mobilen Browsern.
+// Druckvorschau INNERHALB der App (statt neuem Fenster/Tab): so gibt es immer ein „Zurück“, auch auf Handy/Tablet
+// und in der installierten App, wo window.open die App ersetzt und man nicht mehr zurückkommt.
+function zeigeDruckVorschau(html) {
+    const alt = document.getElementById("th-druckvorschau");
+    if (alt) alt.remove();
+    const box = document.createElement("div");
+    box.id = "th-druckvorschau";
+    box.style.cssText = "position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;background:#3A3F47;font-family:Inter,Arial,sans-serif;";
+    const bar = document.createElement("div");
+    bar.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:#1B1F24;color:#fff;flex:0 0 auto;";
+    const mkBtn = (txt, bg) => { const b = document.createElement("button"); b.type = "button"; b.textContent = txt; b.style.cssText = "border:0;border-radius:6px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;color:#fff;background:" + bg + ";"; return b; };
+    const zurueck = mkBtn("\u2190 Zur\u00FCck zur App", "#4A5260");
+    const drucken = mkBtn("Drucken", "#E8963B");
+    const titel = document.createElement("span"); titel.textContent = "Druckvorschau"; titel.style.cssText = "font-size:13px;opacity:.75;flex:1;text-align:center;";
+    bar.appendChild(zurueck); bar.appendChild(titel); bar.appendChild(drucken);
+    const rahmen = document.createElement("iframe");
+    rahmen.style.cssText = "flex:1 1 auto;width:100%;border:0;background:#fff;";
+    rahmen.setAttribute("title", "Druckvorschau");
+    box.appendChild(bar); box.appendChild(rahmen);
+    document.body.appendChild(box);
+    const schliessen = () => { box.remove(); };
+    zurueck.onclick = schliessen;
+    drucken.onclick = () => { try { rahmen.contentWindow.focus(); rahmen.contentWindow.print(); } catch (e) { window.print(); } };
+    rahmen.srcdoc = html;
+}
 function druckeUebersicht(titel, kunde, zeilen, hinweis) {
     const heute = new Date().toLocaleDateString("de-AT");
     const zeilenHtml = zeilen.map(([label, wert, hervorheben]) => `
@@ -2709,15 +2734,7 @@ function druckeUebersicht(titel, kunde, zeilen, hinweis) {
       <table><tbody>${zeilenHtml}</tbody></table>
       ${hinweis ? `<p class="hinweis">${hinweis}</p>` : ""}
     </body></html>`;
-    const fenster = window.open("", "_blank");
-    if (!fenster) {
-        alert("Bitte Pop-ups für diese Seite erlauben, um drucken zu können.");
-        return;
-    }
-    fenster.document.write(html);
-    fenster.document.close();
-    fenster.onload = () => { fenster.focus(); fenster.print(); };
-    setTimeout(() => { fenster.focus(); fenster.print(); }, 400); // Fallback falls onload nicht feuert
+    zeigeDruckVorschau(html);
 }
 // Eigener, repräsentativer Ausdruck für "Kompletten Kundenauftrag drucken" (Kundenübersicht) —
 // mit vollständigem Briefkopf (Logo + Firmenadresse) und der Adresse des Kunden, damit der
@@ -2786,15 +2803,7 @@ function druckeKundenauftrag(kunde, kundeAdresse, positionen, gesamtEk, gesamtBr
       </table>
       <p class="hinweis">${positionen.length} Position(en) über alle Produkte.</p>
     </body></html>`;
-    const fenster = window.open("", "_blank");
-    if (!fenster) {
-        alert("Bitte Pop-ups für diese Seite erlauben, um drucken zu können.");
-        return;
-    }
-    fenster.document.write(html);
-    fenster.document.close();
-    fenster.onload = () => { fenster.focus(); fenster.print(); };
-    setTimeout(() => { fenster.focus(); fenster.print(); }, 400); // Fallback falls onload nicht feuert
+    zeigeDruckVorschau(html);
 }
 // Reine Werkstatt-/Fertigungsliste (keine Preise) für ALLE Positionen eines Kunden über alle
 // Produkte hinweg — nutzt dieselbe "positionstext"-Angabe, die jeder der 6 Konfiguratoren beim
@@ -2860,15 +2869,7 @@ function druckeProduktionsliste(kunde, kundeAdresse, positionen) {
       ${positionenHtml}
       <p class="hinweis">${positionen.length} Position(en) über alle Produkte — reine Fertigungsliste, ohne Preise.</p>
     </body></html>`;
-    const fenster = window.open("", "_blank");
-    if (!fenster) {
-        alert("Bitte Pop-ups für diese Seite erlauben, um drucken zu können.");
-        return;
-    }
-    fenster.document.write(html);
-    fenster.document.close();
-    fenster.onload = () => { fenster.focus(); fenster.print(); };
-    setTimeout(() => { fenster.focus(); fenster.print(); }, 400); // Fallback falls onload nicht feuert
+    zeigeDruckVorschau(html);
 }
 // Breite/Höhe/Falzmaß für die Etiketten-CSV (Label LIVE) — je Produkt unterschiedliche
 // Feldnamen auf dem gespeicherten Positions-Objekt (siehe "const item = {...}" in den
@@ -3016,15 +3017,7 @@ function druckeEtiketten(kunde, positionen) {
       .extra { font-size: 6pt; line-height: 1.25; color: #333; max-width: 47mm; margin-top: 0.5mm; }
       .logo { position: absolute; right: 2.5mm; bottom: 2.5mm; width: 11.5mm; height: 11.5mm; }
     </style></head><body>${etiketten}</body></html>`;
-    const fenster = window.open("", "_blank");
-    if (!fenster) {
-        alert("Bitte Pop-ups für diese Seite erlauben, um drucken zu können.");
-        return;
-    }
-    fenster.document.write(html);
-    fenster.document.close();
-    fenster.onload = () => { fenster.focus(); fenster.print(); };
-    setTimeout(() => { fenster.focus(); fenster.print(); }, 400);
+    zeigeDruckVorschau(html);
 }
 // ============================================================
 // SCHNITTOPTIMIERUNG (Profile aus 6m-Stangen) — über alle Positionen eines Kunden
@@ -3118,12 +3111,12 @@ function schnittPacken(laengen, stange, kerf, reste, anschnitt) {
     return out.sort((x, y) => (y.istRest ? 1 : 0) - (x.istRest ? 1 : 0));
 }
 function schnittBerechnen(positionen, stange, kerf, reste, gehr) {
-    gehr = gehr || { anschnitt: 0, zwischen: kerf };
+    gehr = gehr || { anschnitt: 0, zwischen: kerf, saAnschnitt: 0, saZwischen: kerf };
     const gruppen = {};
     positionen.forEach((p) => {
         schnittTeileFuer(p.produktKey, p.item).forEach((t) => {
             const key = t.artNr + "|" + t.farbe;
-            if (!gruppen[key]) gruppen[key] = { artNr: t.artNr, bez: t.bez, farbe: t.farbe, teile: [], preisRefs: [], gehrung: false };
+            if (!gruppen[key]) gruppen[key] = { artNr: t.artNr, bez: t.bez, farbe: t.farbe, teile: [], preisRefs: [], gehrung: false, quelle: t.quelle };
             if (t.gehrung) gruppen[key].gehrung = true;
             if (!gruppen[key].bez.includes(t.bez)) gruppen[key].bez += " / " + t.bez;
             if (t.preisKey) gruppen[key].preisRefs.push({ quelle: t.quelle, key: t.preisKey });
@@ -3140,12 +3133,13 @@ function schnittBerechnen(positionen, stange, kerf, reste, gehr) {
             if (r.laenge > stange) return;
             for (let i = 0; i < r.anzahl; i++) restLaengen.push(Number(r.laenge));
         });
-        const alle = schnittPacken(passend, stange, g.gehrung ? gehr.zwischen : kerf, restLaengen, g.gehrung ? gehr.anschnitt : 0);
+        const ge = g.quelle === "schiebetuer" ? { anschnitt: gehr.saAnschnitt, zwischen: gehr.saZwischen } : { anschnitt: gehr.anschnitt, zwischen: gehr.zwischen };
+        const alle = schnittPacken(passend, stange, g.gehrung ? ge.zwischen : kerf, restLaengen, g.gehrung ? ge.anschnitt : 0);
         const stangen = alle.filter((x) => !x.istRest);
         const restStuecke = alle.filter((x) => x.istRest);
         const nutzlaenge = passend.reduce((s, l) => s + l, 0);
         const gesamt = stangen.length * stange + restStuecke.reduce((s, x) => s + x.laenge, 0);
-        return Object.assign(g, { zuLang, stangen, restStuecke, alle, gehrParam: g.gehrung ? gehr : null, nutzlaenge, verschnittProzent: gesamt > 0 ? (1 - nutzlaenge / gesamt) * 100 : 0, anzahlTeile: g.teile.length });
+        return Object.assign(g, { zuLang, stangen, restStuecke, alle, gehrEff: g.gehrung ? ge : null, nutzlaenge, verschnittProzent: gesamt > 0 ? (1 - nutzlaenge / gesamt) * 100 : 0, anzahlTeile: g.teile.length });
     }).sort((a, b) => a.artNr.localeCompare(b.artNr));
 }
 const SCHNITT_PREIS_QUELLEN = {
@@ -3175,7 +3169,7 @@ function schnittPreisFuer(gruppe, preise) {
     return 0;
 }
 function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr) {
-    gehr = gehr || { anschnitt: 0, zwischen: kerf };
+    gehr = gehr || { anschnitt: 0, zwischen: kerf, saAnschnitt: 0, saZwischen: kerf };
     const esc = (t) => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const zahl = (n) => Number(n).toLocaleString("de-AT", { maximumFractionDigits: 1 });
     let summeStangen = 0, summeKosten = 0, kostenKomplett = true;
@@ -3187,7 +3181,7 @@ function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr) {
         let nrS = 0, nrR = 0;
         const zeilen = g.alle.map((s) => `<tr><td class="n">${s.istRest ? `Rest ${++nrR} (${zahl(s.laenge)})` : `Stange ${++nrS}`}</td><td>${s.teile.map((l) => zahl(l)).join(" + ")}</td><td class="r">${zahl(s.rest)} mm</td></tr>`).join("");
         return `<div class="blk">
-          <div class="kopf"><div><b>Art. ${esc(g.artNr)}</b> — ${esc(g.bez)}${g.farbe ? ` <span class="farbe">${esc(g.farbe)}</span>` : ""} <span class="farbe">${g.gehrung ? `Gehrung 45° · Anschnitt ${zahl(gehr.anschnitt)} · zwischen ${zahl(gehr.zwischen)} mm` : `gerader Schnitt · ${zahl(kerf)} mm`}</span></div>
+          <div class="kopf"><div><b>Art. ${esc(g.artNr)}</b> — ${esc(g.bez)}${g.farbe ? ` <span class="farbe">${esc(g.farbe)}</span>` : ""} <span class="farbe">${g.gehrung ? `Gehrung 45° · Anschnitt ${zahl(g.gehrEff.anschnitt)} · zwischen ${zahl(g.gehrEff.zwischen)} mm` : `gerader Schnitt · ${zahl(kerf)} mm`}</span></div>
           <div class="sum"><b>${g.stangen.length} neue Stange${g.stangen.length === 1 ? "" : "n"}</b> à ${zahl(stange)} mm${g.restStuecke.length ? ` + ${g.restStuecke.length} Reststück${g.restStuecke.length === 1 ? "" : "e"}` : ""} · ${g.anzahlTeile} Teile · Verschnitt ${g.verschnittProzent.toFixed(1)} %${preis > 0 ? ` · ${kosten.toFixed(2)} €` : ""}</div></div>
           ${g.zuLang.length ? `<div class="warn">⚠ ${g.zuLang.length} Teil(e) länger als eine Stange (${g.zuLang.map(zahl).join(", ")} mm) — nicht eingeplant.</div>` : ""}
           <table><thead><tr><th></th><th>Zuschnitte (mm)</th><th class="r">Rest</th></tr></thead><tbody>${zeilen}</tbody></table></div>`;
@@ -3206,7 +3200,7 @@ function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr) {
       .so .total { background: #FFF8EF; border: 1px solid #E8963B; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; display: flex; gap: 18px; flex-wrap: wrap; }
       .so .hint { font-size: 11px; color: #8A8F98; }
     </style>`;
-    const total = `<div class="total"><div><b>${summeStangen}</b> neue Stangen insgesamt</div><div>Stangenlänge ${zahl(stange)} mm · gerade Schnitte ${zahl(kerf)} mm · Gehrung: Anschnitt ${zahl(gehr.anschnitt)} mm, zwischen den Schnitten ${zahl(gehr.zwischen)} mm</div>${summeKosten > 0 ? `<div>Profilkosten (EK): <b>${summeKosten.toFixed(2)} €</b>${kostenKomplett ? "" : " (ohne Profile ohne hinterlegten Preis)"}</div>` : ""}</div>`;
+    const total = `<div class="total"><div><b>${summeStangen}</b> neue Stangen insgesamt</div><div>Stangenlänge ${zahl(stange)} mm · gerade Schnitte ${zahl(kerf)} mm · Gehrung: Anschnitt ${zahl(gehr.anschnitt)} mm, zwischen den Schnitten ${zahl(gehr.zwischen)} mm · Schiebetür: ${zahl(gehr.saAnschnitt)} / ${zahl(gehr.saZwischen)} mm</div>${summeKosten > 0 ? `<div>Profilkosten (EK): <b>${summeKosten.toFixed(2)} €</b>${kostenKomplett ? "" : " (ohne Profile ohne hinterlegten Preis)"}</div>` : ""}</div>`;
     const hinweis = `<div class="hint">Enthalten: Spannrahmen, Drehtür, Schiebetür (Rahmen-, Flügel-, Zarge-, Schwellen-, Griffleisten-, Querprofil-, Laufschienen-Zuschnitte × Stückzahl). Profile mit gleicher Art.-Nr. und Farbe teilen sich die Stangen. Rollladen, Lichtschacht und IS KIS sind nicht eingerechnet.</div>`;
     return `<div class="so">${css}${ergebnis.length ? total + bloecke : "<p>Keine Profil-Zuschnitte vorhanden (Spannrahmen, Drehtür oder Schiebetür in den Warenkorb legen).</p>"}${hinweis}</div>`;
 }
@@ -3220,18 +3214,15 @@ function druckeSchnittoptimierung(kunde, ergebnis, stange, kerf, preise, gehr) {
     <div class="k"><img src="${LOGO_IMAGE}"><div><div class="f">${FIRMA.name} — Produktion</div><div class="t">Schnittoptimierung</div></div></div>
     <div class="m"><b>Kunde:</b> ${kunde || "—"} &nbsp;·&nbsp; <b>Datum:</b> ${heute}</div>
     ${schnittHtml(kunde, ergebnis, stange, kerf, preise, true, gehr)}</body></html>`;
-    const fenster = window.open("", "_blank");
-    if (!fenster) { alert("Bitte Pop-ups für diese Seite erlauben, um drucken zu können."); return; }
-    fenster.document.write(html);
-    fenster.document.close();
-    fenster.onload = () => { fenster.focus(); fenster.print(); };
-    setTimeout(() => { fenster.focus(); fenster.print(); }, 400);
+    zeigeDruckVorschau(html);
 }
 function Schnittoptimierung({ kunde, positionen, onClose }) {
     const [stange, setStange] = useState(6000);
     const [kerf, setKerf] = useState(4);
     const [anschnitt, setAnschnitt] = useState(55);
     const [zwischen, setZwischen] = useState(80);
+    const [saAnschnitt, setSaAnschnitt] = useState(64);
+    const [saZwischen, setSaZwischen] = useState(98);
     const [preise, setPreise] = useState(null);
     const [reste, setReste] = useState([]);
     useEffect(() => {
@@ -3241,11 +3232,12 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
             if (r && r.value) { try { const e = JSON.parse(r.value); if (Array.isArray(e)) setReste(e); } catch (x) { } }
         }).catch(() => { });
         (_a = window.storage) === null || _a === void 0 ? void 0 : _a.get("schnitt_einstellungen_v1").then((r) => {
-            if (r && r.value) { try { const e = JSON.parse(r.value); if (e.stange > 0) setStange(e.stange); if (e.kerf >= 0) setKerf(e.kerf); if (e.anschnitt >= 0) setAnschnitt(e.anschnitt); if (e.zwischen >= 0) setZwischen(e.zwischen); } catch (x) { } }
+            if (r && r.value) { try { const e = JSON.parse(r.value); if (e.stange > 0) setStange(e.stange); if (e.kerf >= 0) setKerf(e.kerf); if (e.anschnitt >= 0) setAnschnitt(e.anschnitt); if (e.zwischen >= 0) setZwischen(e.zwischen); if (e.saAnschnitt >= 0) setSaAnschnitt(e.saAnschnitt); if (e.saZwischen >= 0) setSaZwischen(e.saZwischen); } catch (x) { } }
         }).catch(() => { });
     }, []);
-    const speichern = (s, k, a, z) => { var _a; (_a = window.storage) === null || _a === void 0 ? void 0 : _a.set("schnitt_einstellungen_v1", JSON.stringify({ stange: s, kerf: k, anschnitt: a, zwischen: z })).catch(() => { }); };
-    const gehr = { anschnitt: anschnitt == null ? 0 : anschnitt, zwischen: zwischen == null ? 0 : zwischen };
+    const speichern = (s, k, a, z, sa, sz) => { var _a; (_a = window.storage) === null || _a === void 0 ? void 0 : _a.set("schnitt_einstellungen_v1", JSON.stringify({ stange: s, kerf: k, anschnitt: a, zwischen: z, saAnschnitt: sa === undefined ? saAnschnitt : sa, saZwischen: sz === undefined ? saZwischen : sz })).catch(() => { }); };
+    const n0 = (v) => (v == null ? 0 : v);
+    const gehr = { anschnitt: n0(anschnitt), zwischen: n0(zwischen), saAnschnitt: n0(saAnschnitt), saZwischen: n0(saZwischen) };
     const resteAendern = (neu) => { var _a; setReste(neu); (_a = window.storage) === null || _a === void 0 ? void 0 : _a.set("schnitt_reste_v1", JSON.stringify(neu)).catch(() => { }); };
     const ergebnis = schnittBerechnen(positionen, stange, kerf, reste, gehr);
     const grpOpt = [];
@@ -3257,14 +3249,15 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
             React.createElement("span", { className: "text-[12px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Restlager (Abfallstücke) — werden zuerst verbraucht"),
             React.createElement("button", { onClick: () => resteAendern(reste.concat([{ id: Date.now() + Math.random(), artNr: grpOpt[0] ? grpOpt[0].artNr : "", farbe: grpOpt[0] ? grpOpt[0].farbe : "", laenge: "", anzahl: 1 }])), className: "text-[12.5px] font-semibold text-[#B96A16] hover:underline" }, "+ Rest hinzufügen")),
         reste.length === 0 && React.createElement("div", { className: "text-[12px] text-[#8A8F98]" }, "Keine Reste erfasst. Mit „+ Rest hinzufügen“ Art.-Nr., Farbe, Länge und Stückzahl eintragen."),
-        reste.length > 0 && React.createElement("div", { className: "gap-2 items-center text-[10.5px] uppercase text-[#8A8F98] mb-1", style: { display: "grid", gridTemplateColumns: "1fr 1.6fr 0.9fr 0.6fr 28px" } },
-            React.createElement("span", null, "Art.-Nr."), React.createElement("span", null, "Farbe (leer = egal)"), React.createElement("span", null, "Länge mm"), React.createElement("span", null, "Stk"), React.createElement("span", null, "")),
-        reste.map((r, i) => React.createElement("div", { key: r.id || i, className: "gap-2 items-center mb-1.5", style: { display: "grid", gridTemplateColumns: "1fr 1.6fr 0.9fr 0.6fr 28px" } },
-            React.createElement("input", { className: inp, value: r.artNr, list: "schnitt-art-liste", onChange: (e) => setR(i, "artNr", e.target.value) }),
-            React.createElement("input", { className: inp, value: r.farbe || "", list: "schnitt-farb-liste", onChange: (e) => setR(i, "farbe", e.target.value) }),
-            React.createElement("input", { className: inp, type: "number", inputMode: "decimal", value: r.laenge, onChange: (e) => setR(i, "laenge", e.target.value === "" ? "" : Number(e.target.value)) }),
-            React.createElement("input", { className: inp, type: "number", value: r.anzahl, onChange: (e) => setR(i, "anzahl", e.target.value === "" ? "" : Number(e.target.value)) }),
-            React.createElement("button", { onClick: () => resteAendern(reste.filter((_, j) => j !== i)), className: "text-[#8A8F98] hover:text-[#C0392B] px-1", title: "Entfernen" }, "✕"))),
+        reste.map((r, i) => {
+            const lab = (t, child, st) => React.createElement("label", { className: "flex flex-col gap-0.5", style: st }, React.createElement("span", { className: "text-[10px] uppercase tracking-wide text-[#8A8F98]" }, t), child);
+            return React.createElement("div", { key: r.id || i, className: "border border-[#E2DFD3] rounded-md p-2 mb-2 bg-[#FBFAF6]", style: { display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "flex-end" } },
+                lab("Art.-Nr.", React.createElement("input", { className: inp, value: r.artNr, list: "schnitt-art-liste", onChange: (e) => setR(i, "artNr", e.target.value) }), { flex: "1 1 90px", minWidth: 0 }),
+                lab("Länge mm", React.createElement("input", { className: inp, type: "number", inputMode: "decimal", value: r.laenge, onChange: (e) => setR(i, "laenge", e.target.value === "" ? "" : Number(e.target.value)) }), { flex: "1 1 90px", minWidth: 0 }),
+                lab("Stk", React.createElement("input", { className: inp, type: "number", value: r.anzahl, onChange: (e) => setR(i, "anzahl", e.target.value === "" ? "" : Number(e.target.value)) }), { flex: "0 1 70px", minWidth: 0 }),
+                React.createElement("button", { onClick: () => resteAendern(reste.filter((_, j) => j !== i)), className: "text-[#8A8F98] hover:text-[#C0392B] px-2 py-1.5", title: "Entfernen" }, "✕"),
+                lab("Farbe (leer = egal)", React.createElement("input", { className: inp, value: r.farbe || "", list: "schnitt-farb-liste", onChange: (e) => setR(i, "farbe", e.target.value) }), { flex: "1 1 100%", minWidth: 0 }));
+        }),
         React.createElement("datalist", { id: "schnitt-art-liste" }, Array.from(new Set(grpOpt.map((g) => g.artNr))).map((a) => React.createElement("option", { key: a, value: a }))),
         React.createElement("datalist", { id: "schnitt-farb-liste" }, Array.from(new Set(grpOpt.map((g) => g.farbe).filter(Boolean))).map((f) => React.createElement("option", { key: f, value: f }))));
     return React.createElement("div", { className: "fixed inset-0 z-50 flex items-start justify-center overflow-y-auto", style: { background: "rgba(27,31,36,0.55)" }, onClick: (e) => { if (e.target === e.currentTarget) onClose(); } },
@@ -3272,11 +3265,13 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
             React.createElement("div", { className: "flex items-center justify-between mb-3" },
                 React.createElement("h2", { className: "text-[20px] font-oswald font-semibold text-[#1B1F24]" }, "Schnittoptimierung" + (kunde ? " — " + kunde : "")),
                 React.createElement("button", { onClick: onClose, className: "text-[13px] text-[#5B6472] hover:text-[#1B1F24]" }, "Schließen ✕")),
-            React.createElement("div", { className: "grid grid-cols-2 gap-3 mb-4" },
+            React.createElement("div", { className: "gap-3 mb-4", style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))" } },
                 React.createElement(Num, { label: "Stangenlänge", value: stange, onChange: (v) => { setStange(v); speichern(v, kerf, anschnitt, zwischen); }, unit: "mm", min: 1000 }),
                 React.createElement(Num, { label: "Sägeschnitt (gerade Profile)", value: kerf, onChange: (v) => { setKerf(v); speichern(stange, v, anschnitt, zwischen); }, unit: "mm", min: 0 }),
                 React.createElement(Num, { label: "Gehrung: Anschnitt (Abfall am Stangenanfang)", value: anschnitt, onChange: (v) => { setAnschnitt(v); speichern(stange, kerf, v, zwischen); }, unit: "mm", min: 0 }),
-                React.createElement(Num, { label: "Gehrung: Abfall zwischen den Schnitten", value: zwischen, onChange: (v) => { setZwischen(v); speichern(stange, kerf, anschnitt, v); }, unit: "mm", min: 0 })),
+                React.createElement(Num, { label: "Gehrung: Abfall zwischen den Schnitten", value: zwischen, onChange: (v) => { setZwischen(v); speichern(stange, kerf, anschnitt, v); }, unit: "mm", min: 0 }),
+                React.createElement(Num, { label: "Schiebetür (breiteres Profil): Anschnitt", value: saAnschnitt, onChange: (v) => { setSaAnschnitt(v); speichern(stange, kerf, anschnitt, zwischen, v, saZwischen); }, unit: "mm", min: 0 }),
+                React.createElement(Num, { label: "Schiebetür (breiteres Profil): zwischen den Schnitten", value: saZwischen, onChange: (v) => { setSaZwischen(v); speichern(stange, kerf, anschnitt, zwischen, saAnschnitt, v); }, unit: "mm", min: 0 })),
             restBlock,
             React.createElement("div", { dangerouslySetInnerHTML: { __html: schnittHtml(kunde, ergebnis, stange, kerf, preise, false, gehr) } }),
             React.createElement("div", { className: "flex justify-end gap-2 mt-3" },
