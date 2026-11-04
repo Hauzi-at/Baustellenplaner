@@ -3232,31 +3232,81 @@ function druckeSchnittoptimierung(kunde, ergebnis, stange, kerf, preise, gehr) {
     ${schnittHtml(kunde, ergebnis, stange, kerf, preise, true, gehr)}</body></html>`;
     zeigeDruckVorschau(html);
 }
+const SCHNITT_REST_MIN = 250;
 function Schnittoptimierung({ kunde, positionen, onClose }) {
     const [stange, setStange] = useState(6000);
     const [kerf, setKerf] = useState(4);
-    const [anschnitt, setAnschnitt] = useState(55);
-    const [zwischen, setZwischen] = useState(80);
-    const [saAnschnitt, setSaAnschnitt] = useState(64);
-    const [saZwischen, setSaZwischen] = useState(98);
+    const [anschnitt, setAnschnitt] = useState(25);
+    const [zwischen, setZwischen] = useState(20);
+    const [saAnschnitt, setSaAnschnitt] = useState(30);
+    const [saZwischen, setSaZwischen] = useState(25);
     const [preise, setPreise] = useState(null);
     const [reste, setReste] = useState([]);
     const [einstOffen, setEinstOffen] = useState(false);
+    const [uebernommen, setUebernommen] = useState(null);
+    const [meldung, setMeldung] = useState("");
+    const sig = JSON.stringify(positionen.map((p) => [p.posNr, p.produktKey, p.item.id, p.item.menge, p.item.rahmenbreite, p.item.rahmenhoehe, p.item.fluegelbreite, p.item.fluegelhoehe, p.item.config && p.item.config.laufschienenLaenge]));
     useEffect(() => {
         var _a;
         schnittLadePreise().then(setPreise);
+        (_a = window.storage) === null || _a === void 0 ? void 0 : _a.get("schnitt_uebernommen_v1").then((r) => {
+            if (r && r.value) { try { const e = JSON.parse(r.value); if (e && e[kunde || ""]) setUebernommen(e[kunde || ""]); } catch (x) { } }
+        }).catch(() => { });
         (_a = window.storage) === null || _a === void 0 ? void 0 : _a.get("schnitt_reste_v1").then((r) => {
             if (r && r.value) { try { const e = JSON.parse(r.value); if (Array.isArray(e)) setReste(e); } catch (x) { } }
         }).catch(() => { });
-        (_a = window.storage) === null || _a === void 0 ? void 0 : _a.get("schnitt_einstellungen_v1").then((r) => {
+        (_a = window.storage) === null || _a === void 0 ? void 0 : _a.get("schnitt_einstellungen_v3").then((r) => {
             if (r && r.value) { try { const e = JSON.parse(r.value); if (e.stange > 0) setStange(e.stange); if (e.kerf >= 0) setKerf(e.kerf); if (e.anschnitt >= 0) setAnschnitt(e.anschnitt); if (e.zwischen >= 0) setZwischen(e.zwischen); if (e.saAnschnitt >= 0) setSaAnschnitt(e.saAnschnitt); if (e.saZwischen >= 0) setSaZwischen(e.saZwischen); } catch (x) { } }
         }).catch(() => { });
     }, []);
-    const speichern = (s, k, a, z, sa, sz) => { var _a; (_a = window.storage) === null || _a === void 0 ? void 0 : _a.set("schnitt_einstellungen_v1", JSON.stringify({ stange: s, kerf: k, anschnitt: a, zwischen: z, saAnschnitt: sa === undefined ? saAnschnitt : sa, saZwischen: sz === undefined ? saZwischen : sz })).catch(() => { }); };
+    const speichern = (s, k, a, z, sa, sz) => { var _a; (_a = window.storage) === null || _a === void 0 ? void 0 : _a.set("schnitt_einstellungen_v3", JSON.stringify({ stange: s, kerf: k, anschnitt: a, zwischen: z, saAnschnitt: sa === undefined ? saAnschnitt : sa, saZwischen: sz === undefined ? saZwischen : sz })).catch(() => { }); };
     const n0 = (v) => (v == null ? 0 : v);
     const gehr = { anschnitt: n0(anschnitt), zwischen: n0(zwischen), saAnschnitt: n0(saAnschnitt), saZwischen: n0(saZwischen) };
     const resteAendern = (neu) => { var _a; setReste(neu); (_a = window.storage) === null || _a === void 0 ? void 0 : _a.set("schnitt_reste_v1", JSON.stringify(neu)).catch(() => { }); };
-    const ergebnis = schnittBerechnen(positionen, stange, kerf, reste, gehr);
+    const istUebernommen = !!(uebernommen && uebernommen.sig === sig);
+    const resteEff = istUebernommen ? uebernommen.resteVorher : reste;
+    const ergebnis = schnittBerechnen(positionen, stange, kerf, resteEff, gehr);
+    const uebernommenSpeichern = (wert) => {
+        var _a;
+        setUebernommen(wert);
+        const st = (_a = window.storage) === null || _a === void 0 ? void 0 : _a.get("schnitt_uebernommen_v1");
+        Promise.resolve(st).catch(() => null).then((r) => {
+            let all = {};
+            try { if (r && r.value) all = JSON.parse(r.value) || {}; } catch (x) { }
+            if (wert) all[kunde || ""] = wert; else delete all[kunde || ""];
+            return window.storage && window.storage.set("schnitt_uebernommen_v1", JSON.stringify(all));
+        }).catch(() => { });
+    };
+    const resteUebernehmen = () => {
+        const neu = reste.map((r) => Object.assign({}, r));
+        const gleicheFarbe = (r, g) => !r.farbe || !String(r.farbe).trim() || String(g.farbe || "").toLowerCase().includes(String(r.farbe).trim().toLowerCase());
+        let verbraucht = 0, neuAnz = 0;
+        ergebnis.forEach((g) => {
+            g.alle.forEach((b) => {
+                if (b.istRest) {
+                    const e = neu.find((r) => String(r.artNr).trim() === g.artNr && Number(r.laenge) === b.laenge && r.anzahl > 0 && gleicheFarbe(r, g));
+                    if (e) { e.anzahl -= 1; verbraucht++; }
+                }
+            });
+            g.alle.forEach((b) => {
+                const rest = Math.floor(b.rest);
+                if (rest >= SCHNITT_REST_MIN) {
+                    const e = neu.find((r) => String(r.artNr).trim() === g.artNr && Number(r.laenge) === rest && String(r.farbe || "") === String(g.farbe || ""));
+                    if (e) e.anzahl = Number(e.anzahl || 0) + 1; else neu.push({ id: Date.now() + Math.random(), artNr: g.artNr, farbe: g.farbe || "", laenge: rest, anzahl: 1 });
+                    neuAnz++;
+                }
+            });
+        });
+        uebernommenSpeichern({ sig, resteVorher: reste, zeit: new Date().toLocaleString("de-AT") });
+        resteAendern(neu.filter((r) => r.anzahl > 0));
+        setMeldung(neuAnz + " Rest(e) neu im Restlager, " + verbraucht + " verbrauchte(r) Rest(e) entfernt.");
+    };
+    const resteZurueck = () => {
+        if (!uebernommen) return;
+        resteAendern(uebernommen.resteVorher);
+        uebernommenSpeichern(null);
+        setMeldung("");
+    };
     const grpOpt = [];
     schnittBerechnen(positionen, stange, kerf, [], gehr).forEach((g) => { grpOpt.push(g); });
     const inp = "border border-[#D8D4C8] rounded-md bg-white px-2 py-1.5 text-[13px] w-full";
@@ -3296,11 +3346,19 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
             React.createElement("div", { className: "gap-3 mb-4", style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))" } },
                     React.createElement(Num, { label: "Stangenlänge", value: stange, onChange: (v) => { setStange(v); speichern(v, kerf, anschnitt, zwischen); }, unit: "mm", min: 1000 }),
                     React.createElement(Num, { label: "Sägeschnitt (gerade Profile)", value: kerf, onChange: (v) => { setKerf(v); speichern(stange, v, anschnitt, zwischen); }, unit: "mm", min: 0 }),
-                    React.createElement(Num, { label: "Gehrung: Anschnitt (Abfall am Stangenanfang)", value: anschnitt, onChange: (v) => { setAnschnitt(v); speichern(stange, kerf, v, zwischen); }, unit: "mm", min: 0 }),
-                    React.createElement(Num, { label: "Gehrung: Abfall zwischen den Schnitten", value: zwischen, onChange: (v) => { setZwischen(v); speichern(stange, kerf, anschnitt, v); }, unit: "mm", min: 0 }),
+                    React.createElement(Num, { label: "Gehrung: Verlust am Stangenanfang (lange Seite)", value: anschnitt, onChange: (v) => { setAnschnitt(v); speichern(stange, kerf, v, zwischen); }, unit: "mm", min: 0 }),
+                    React.createElement(Num, { label: "Gehrung: Verlust zwischen zwei Zuschnitten (lange Seite)", value: zwischen, onChange: (v) => { setZwischen(v); speichern(stange, kerf, anschnitt, v); }, unit: "mm", min: 0 }),
                     React.createElement(Num, { label: "Schiebetür (breiteres Profil): Anschnitt", value: saAnschnitt, onChange: (v) => { setSaAnschnitt(v); speichern(stange, kerf, anschnitt, zwischen, v, saZwischen); }, unit: "mm", min: 0 }),
                     React.createElement(Num, { label: "Schiebetür (breiteres Profil): zwischen den Schnitten", value: saZwischen, onChange: (v) => { setSaZwischen(v); speichern(stange, kerf, anschnitt, zwischen, saAnschnitt, v); }, unit: "mm", min: 0 })),
                 restBlock),
+            ergebnis.length > 0 && React.createElement(React.Fragment, null, istUebernommen
+                ? React.createElement("div", { className: "mb-3 rounded-lg border border-[#2E7D4F] bg-[#EAF5EE] p-3 text-[13px] text-[#1B1F24] flex flex-wrap items-center gap-2 justify-between" },
+                    React.createElement("span", null, "✔ Reste aus diesem Auftrag sind im Restlager (" + (uebernommen.zeit || "") + "). Angezeigt wird die Berechnung mit dem damaligen Restlager."),
+                    React.createElement("button", { onClick: resteZurueck, className: "px-3 py-1.5 rounded-md border border-[#2E7D4F] text-[#2E7D4F] bg-white text-[12.5px] font-semibold" }, "Rückgängig"))
+                : React.createElement("div", { className: "mb-3 flex flex-wrap items-center gap-2" },
+                    React.createElement("button", { onClick: resteUebernehmen, className: "px-3.5 py-2 rounded-md bg-[#E8963B] text-white text-[13px] font-semibold hover:bg-[#d6852e]" }, "Reste ins Restlager übernehmen (ab " + SCHNITT_REST_MIN + " mm)"),
+                    React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "Erst drücken, wenn der Auftrag gesägt ist. Verbrauchte Reste werden dabei entfernt.")),
+                meldung && React.createElement("div", { className: "text-[12.5px] text-[#2E7D4F] mb-3" }, meldung)),
             React.createElement("div", { dangerouslySetInnerHTML: { __html: schnittHtml(kunde, ergebnis, stange, kerf, preise, false, gehr) } }),
             React.createElement("div", { className: "flex justify-end gap-2 mt-3" },
                 React.createElement("button", { onClick: () => druckeSchnittoptimierung(kunde, ergebnis, stange, kerf, preise, gehr), className: "px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333]" }, "Drucken"))));
