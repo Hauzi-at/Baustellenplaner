@@ -3034,7 +3034,7 @@ function schnittTeileFuer(produktKey, item) {
     const teile = [];
     const add = (artNr, bez, laenge, anzahl, quelle, preisKey, seite) => {
         if (!(laenge > 0) || !(anzahl > 0)) return;
-        teile.push({ artNr: String(artNr), bez, laenge: Math.round(laenge * 10) / 10, anzahl: anzahl * menge, farbe, quelle, preisKey, position: item.position || "—", seite, proStk: anzahl, menge, teilName: (/^(zarge)/.test(preisKey || "") ? "Zarge" : /^fluegel/.test(preisKey || "") ? "Flügel" : /^profil/.test(preisKey || "") ? "Rahmen" : /^quersprosse/.test(preisKey || "") ? "Querprofil" : /^griffleiste/.test(preisKey || "") ? "Griffleiste" : /^schwelle/.test(preisKey || "") ? "Schwelle" : /buerstenprofil/.test(preisKey || "") ? "Bürstenprofil" : bez), gehrung: !/Querprofil|Quersprosse|Griffleiste|Bürstenprofil|Schwellen|Laufschiene/i.test(bez) });
+        teile.push({ artNr: String(artNr), bez, laenge: Math.round(laenge * 10) / 10, anzahl: anzahl * menge, farbe, quelle, preisKey, position: item.position || "—", seite, proStk: anzahl, menge, teilName: (/^Laufschiene/.test(bez) ? bez : /^(zarge)/.test(preisKey || "") ? "Zarge" : /^fluegel/.test(preisKey || "") ? "Flügel" : /^profil/.test(preisKey || "") ? "Rahmen" : /^quersprosse/.test(preisKey || "") ? "Querprofil" : /^griffleiste/.test(preisKey || "") ? "Griffleiste" : /^schwelle/.test(preisKey || "") ? "Schwelle" : /buerstenprofil/.test(preisKey || "") ? "Bürstenprofil" : bez), gehrung: !/Querprofil|Quersprosse|Griffleiste|Bürstenprofil|Schwellen|Laufschiene/i.test(bez) });
     };
     if (produktKey === "spannrahmen_liste_v1") {
         const prof = SPANNRAHMEN_PROFILE.find((p) => p.id === c.profilTyp) || SPANNRAHMEN_PROFILE[0];
@@ -3061,12 +3061,14 @@ function schnittTeileFuer(produktKey, item) {
     else if (produktKey === "schiebetuer_liste_v1") {
         const o = SCHIEBETUER_AUSFUEHRUNG.find((a) => a.id === c.ausfuehrungTyp) || SCHIEBETUER_AUSFUEHRUNG[0];
         const typ = o.id;
-        add(String(o.zargeArtNr).split(" ")[0], o.zargeLabel, item.rahmenbreite, 2, "schiebetuer", "zarge_" + typ, "B");
-        add(String(o.zargeArtNr).split(" ")[0], o.zargeLabel, item.rahmenhoehe, 2, "schiebetuer", "zarge_" + typ, "H");
+        // Bei uns ist Art. 12920 die Laufschiene OBEN und das Schwellenprofil 12921 die Laufschiene UNTEN – beide in der
+        // angegebenen Laufschienenlänge (leer = Rahmenbreite), je Spur eine. Keine Zarge 2B+2H.
+        const lsLaenge = c.laufschienenLaenge > 0 ? Number(c.laufschienenLaenge) : item.rahmenbreite;
+        const spuren = o.id === "sa2-2sp" ? 2 : 1;
+        add(String(o.zargeArtNr).split(" ")[0], "Laufschiene oben", lsLaenge, spuren, "schiebetuer", "zarge_" + typ, "L");
         add(o.fluegelArtNr, o.fluegelLabel, item.fluegelbreite, 2 * o.fluegelAnzahl, "schiebetuer", "fluegel_" + typ, "B");
         add(o.fluegelArtNr, o.fluegelLabel, item.fluegelhoehe, 2 * o.fluegelAnzahl, "schiebetuer", "fluegel_" + typ, "H");
-        add(o.schwelleArtNr, "Schwellenprofil", item.rahmenbreite, o.schwelleAnzahl, "schiebetuer", "schwelle", "B");
-        if (c.laufschienenLaenge) add("Laufschiene", "Laufschiene", c.laufschienenLaenge, 1, "schiebetuer", null, "L");
+        add(o.schwelleArtNr, "Laufschiene unten", lsLaenge, o.schwelleAnzahl, "schiebetuer", "schwelle", "L");
         if (c.griffleisteVerbaut) add("12931", "Griffleiste", item.fluegelbreite - 70, 1, "schiebetuer", "griffleiste", "B");
     }
     return teile;
@@ -3394,14 +3396,14 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
     schnittBerechnen(positionen, stange, kerf, [], gehr).forEach((g) => { grpOpt.push(g); });
     const inp = "border border-[#D8D4C8] rounded-md bg-white px-2 py-1.5 text-[13px] w-full";
     const setR = (i, feld, wert) => resteAendern(reste.map((r, j) => j === i ? Object.assign({}, r, { [feld]: wert }) : r));
-    const restBlock = React.createElement("div", { className: "mb-4 border border-[#D8D4C8] rounded-lg bg-white p-3" },
+    const restBlock = React.createElement("div", { className: "mb-4 rounded-lg p-3", style: { background: "#fff", border: "1px solid #D8D4C8" } },
         React.createElement("div", { className: "flex items-center justify-between mb-2" },
             React.createElement("span", { className: "text-[12px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Restlager (Abfallstücke) — werden zuerst verbraucht"),
             React.createElement("button", { onClick: () => resteAendern(reste.concat([{ id: Date.now() + Math.random(), artNr: grpOpt[0] ? grpOpt[0].artNr : "", farbe: grpOpt[0] ? grpOpt[0].farbe : "", laenge: "", anzahl: 1 }])), className: "text-[12.5px] font-semibold text-[#B96A16] hover:underline" }, "+ Rest hinzufügen")),
         reste.length === 0 && React.createElement("div", { className: "text-[12px] text-[#8A8F98]" }, "Keine Reste erfasst. Mit „+ Rest hinzufügen“ Art.-Nr., Farbe, Länge und Stückzahl eintragen."),
         reste.map((r, i) => {
             const lab = (t, child, st) => React.createElement("label", { className: "flex flex-col gap-0.5", style: st }, React.createElement("span", { className: "text-[10px] uppercase tracking-wide text-[#8A8F98]" }, t), child);
-            return React.createElement("div", { key: r.id || i, className: "border border-[#E2DFD3] rounded-md p-2 mb-2 bg-[#FBFAF6]", style: { display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "flex-end" } },
+            return React.createElement("div", { key: r.id || i, className: "rounded-md p-2 mb-2", style: { background: "#FBFAF6", border: "1px solid #E2DFD3", display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "flex-end" } },
                 lab("Art.-Nr.", React.createElement("input", { className: inp, value: r.artNr, list: "schnitt-art-liste", onChange: (e) => setR(i, "artNr", e.target.value) }), { flex: "1 1 90px", minWidth: 0 }),
                 lab("Länge mm", React.createElement("input", { className: inp, type: "number", inputMode: "decimal", value: r.laenge, onChange: (e) => setR(i, "laenge", e.target.value === "" ? "" : Number(e.target.value)) }), { flex: "1 1 90px", minWidth: 0 }),
                 lab("Stk", React.createElement("input", { className: inp, type: "number", value: r.anzahl, onChange: (e) => setR(i, "anzahl", e.target.value === "" ? "" : Number(e.target.value)) }), { flex: "0 1 70px", minWidth: 0 }),
@@ -3410,8 +3412,8 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
         }),
         React.createElement("datalist", { id: "schnitt-art-liste" }, Array.from(new Set(grpOpt.map((g) => g.artNr))).map((a) => React.createElement("option", { key: a, value: a }))),
         React.createElement("datalist", { id: "schnitt-farb-liste" }, Array.from(new Set(grpOpt.map((g) => g.farbe).filter(Boolean))).map((f) => React.createElement("option", { key: f, value: f }))));
-    return React.createElement("div", { className: "fixed inset-0 z-50 flex items-start justify-center overflow-y-auto", style: { background: "rgba(27,31,36,0.55)" }, onClick: (e) => { if (e.target === e.currentTarget) onClose(); } },
-        React.createElement("div", { className: "bg-[#F5F4EF] rounded-xl w-full max-w-3xl my-6 mx-3 p-5 shadow-xl" },
+    return React.createElement("div", { style: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 100000, display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", WebkitOverflowScrolling: "touch", background: "rgba(27,31,36,0.7)" }, onClick: (e) => { if (e.target === e.currentTarget) onClose(); } },
+        React.createElement("div", { style: { background: "#F5F4EF", borderRadius: "12px", width: "100%", maxWidth: "880px", margin: "24px 12px", padding: "20px", boxShadow: "0 10px 40px rgba(0,0,0,0.35)", boxSizing: "border-box" } },
             React.createElement("div", { className: "flex items-center justify-between mb-3" },
                 React.createElement("h2", { className: "text-[20px] font-oswald font-semibold text-[#1B1F24]" }, "Schnittoptimierung" + (kunde ? " — " + kunde : "")),
                 React.createElement("button", { onClick: onClose, className: "text-[13px] text-[#5B6472] hover:text-[#1B1F24]" }, "Schließen ✕")),
@@ -3438,12 +3440,12 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
                     React.createElement(Num, { label: "Schiebetür (breiteres Profil): Anschnitt", value: saAnschnitt, onChange: (v) => { setSaAnschnitt(v); speichern(stange, kerf, anschnitt, zwischen, v, saZwischen); }, unit: "mm", min: 0 }),
                     React.createElement(Num, { label: "Schiebetür (breiteres Profil): zwischen den Schnitten", value: saZwischen, onChange: (v) => { setSaZwischen(v); speichern(stange, kerf, anschnitt, zwischen, saAnschnitt, v); }, unit: "mm", min: 0 })),
                 restBlock),
-            planFix && React.createElement("div", { className: "mb-3 rounded-lg border border-[#B96A16] bg-[#FFF3E3] p-3 text-[13px] text-[#1B1F24]" },
+            planFix && React.createElement("div", { className: "mb-3 rounded-lg p-3 text-[13px] text-[#1B1F24]", style: { background: "#FFF3E3", border: "1px solid #B96A16" } },
                 "🔒 Der Plan ist festgehalten, weil du schon Stücke abgehakt hast. Er ändert sich nicht mehr – auch nicht durch andere Einstellungen oder Reste. Zum Neuberechnen unten „Haken zurücksetzen“ drücken."),
             ergebnis.length > 0 && React.createElement("div", { className: "flex gap-2 mb-3" },
                 [["stangen", "Stangen-Plan (was auf welche Stange)"], ["saege", "Sägeplan (Säge selten umstellen)"]].map(([k, t]) => React.createElement("button", { key: k, onClick: () => setAnsicht(k), className: "px-3 py-2 rounded-md text-[13px] font-semibold border " + (ansicht === k ? "bg-[#1B1F24] text-white border-[#1B1F24]" : "bg-white text-[#1B1F24] border-[#D8D4C8]") }, t))),
             ergebnis.length > 0 && React.createElement(React.Fragment, null, istUebernommen
-                ? React.createElement("div", { className: "mb-3 rounded-lg border border-[#2E7D4F] bg-[#EAF5EE] p-3 text-[13px] text-[#1B1F24] flex flex-wrap items-center gap-2 justify-between" },
+                ? React.createElement("div", { className: "mb-3 rounded-lg p-3 text-[13px] text-[#1B1F24] flex flex-wrap items-center gap-2 justify-between", style: { background: "#EAF5EE", border: "1px solid #2E7D4F" } },
                     React.createElement("span", null, "✔ Reste aus diesem Auftrag sind im Restlager (" + (uebernommen.zeit || "") + "). Angezeigt wird die Berechnung mit dem damaligen Restlager."),
                     React.createElement("button", { onClick: resteZurueck, className: "px-3 py-1.5 rounded-md border border-[#2E7D4F] text-[#2E7D4F] bg-white text-[12.5px] font-semibold" }, "Rückgängig"))
                 : React.createElement("div", { className: "mb-3 flex flex-wrap items-center gap-2" },
