@@ -3247,21 +3247,45 @@ function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr, ansi
     const total = `<div class="total">${nurRest ? `<div><b>NOCH ZU SÄGEN:</b> ${stueckGesamt - stueckFertig} Stücke (bereits gesägt: ${stueckFertig} von ${stueckGesamt})</div>` : fortschritt}<div><b>${summeStangen}</b> ${nurRest ? "Stangen werden noch gebraucht" : "neue Stangen insgesamt"}</div><div>Stangenlänge ${zahl(stange)} mm · gerade Schnitte ${zahl(kerf)} mm · Gehrung: Anschnitt ${zahl(gehr.anschnitt)} mm, zwischen den Schnitten ${zahl(gehr.zwischen)} mm · Schiebetür: ${zahl(gehr.saAnschnitt)} / ${zahl(gehr.saZwischen)} mm</div>${summeKosten > 0 ? `<div>Profilkosten (EK): <b>${summeKosten.toFixed(2)} €</b>${kostenKomplett ? "" : " (ohne Profile ohne hinterlegten Preis)"}</div>` : ""}</div>`;
     // Sägeplan: Anschlag nur einmal je Länge einstellen – alle gleich langen Stücke (über alle Stangen) hintereinander sägen.
     // Gehrungsprofile zuerst (Säge bleibt auf 45°), danach die geraden Schnitte (Winkel nur einmal umstellen).
-    let anschlaege = 0;
-    const saegeGruppen = ergebnis.slice().sort((a, b) => (b.gehrung ? 1 : 0) - (a.gehrung ? 1 : 0) || a.artNr.localeCompare(b.artNr));
-    const saegeBloecke = saegeGruppen.map((g) => {
-        const namen = barNamen(g);
+    let anschlaege = 0, anschlaegeProProfil = 0;
+    const mehrereFarben = new Set(ergebnis.map((g) => g.farbe || "")).size > 1;
+    const chipSaege = (e, mitArt) => { const fertig = gesaegt.has(e.key); return `<span class="chip${fertig ? " done" : ""}"${interaktiv ? ` data-key="${esc(e.key)}" title="Antippen = gesägt / nicht gesägt"` : ""}><b>${mitArt ? esc(String(e.g.artNr).split(" ")[0]) + (mehrereFarben && e.g.farbe ? " · " + esc(e.g.farbe) : "") + " · " : ""}${esc(e.bar)}</b><i>${esc(e.text)}</i>${e.mass ? `<i class="pm">${esc(e.mass)}</i>` : ""}</span>`; };
+    const sammle = (gruppen) => {
         const proLaenge = {};
-        g.alle.forEach((st, bi) => st.teile.forEach((l, k) => { const key = pKey(g, namen[bi], k); if (nurRest && gesaegt.has(key)) return; (proLaenge[l] = proLaenge[l] || []).push({ key, bar: namen[bi], text: (st.etiketten && st.etiketten[k]) || "", mass: "" }); }));
-        const laengen = Object.keys(proLaenge).map(Number).sort((a, b) => b - a);
-        anschlaege += laengen.length;
-        if (nurRest && !laengen.length) return "";
-        const zeilen = laengen.map((l, i) => `<tr><td class="n"><b>${i + 1}.</b> Anschlag ${zahl(l)} mm</td><td>${proLaenge[l].length} Stück: ${proLaenge[l].map((e) => { const fertig = gesaegt.has(e.key); return `<span class="chip${fertig ? " done" : ""}"${interaktiv ? ` data-key="${esc(e.key)}" title="Antippen = gesägt / nicht gesägt"` : ""}><b>${esc(e.bar)}</b><i>${esc(e.text)}</i></span>`; }).join("")}</td></tr>`).join("");
-        return `<div class="blk"><div class="kopf"><div><b>Art. ${esc(g.artNr)}</b> — ${esc(g.bez)}${g.farbe ? ` <span class="farbe">${esc(g.farbe)}</span>` : ""} <span class="farbe">${g.gehrung ? "Säge auf 45° Gehrung" : "gerader Schnitt (90°)"}</span></div>
-          <div class="sum"><b>${laengen.length} Anschlag-Einstellung${laengen.length === 1 ? "" : "en"}</b></div></div>
-          <table><thead><tr><th>Anschlag einstellen</th><th>Dann alle diese Stücke sägen (Stange · Position)</th></tr></thead><tbody>${zeilen}</tbody></table></div>`;
-    }).join("");
-    const saegeKopf = `<div class="total">${nurRest ? `<div><b>NOCH ZU SÄGEN:</b> ${stueckGesamt - stueckFertig} Stücke (bereits gesägt: ${stueckFertig} von ${stueckGesamt})</div>` : fortschritt}<div><b>${anschlaege}</b> Anschlag-Einstellungen ${nurRest ? "noch" : "insgesamt"} (eine je Länge und Profil)</div><div>Reihenfolge: erst alle Gehrungs-Profile, dann die geraden Schnitte. Jeweils von der längsten zur kürzesten Länge – so stellst du den Anschlag nur einmal je Länge ein.</div></div>`;
+        gruppen.forEach((g) => { const namen = barNamen(g); g.alle.forEach((st, bi) => st.teile.forEach((l, k) => { const key = pKey(g, namen[bi], k); if (nurRest && gesaegt.has(key)) return; const lk = Math.round(l * 10) / 10; (proLaenge[lk] = proLaenge[lk] || []).push({ key, g, bar: namen[bi], text: (st.etiketten && st.etiketten[k]) || "", mass: (st.massen && st.massen[k]) || "" }); })); });
+        return proLaenge;
+    };
+    const sortEintraege = (arr) => arr.sort((x, y) => x.g.artNr.localeCompare(y.g.artNr) || String(x.g.farbe || "").localeCompare(String(y.g.farbe || "")) || x.bar.localeCompare(y.bar, "de", { numeric: true }));
+    // Zählung "je Profil" (zum Vergleich) – immer mitrechnen
+    ergebnis.forEach((g) => { anschlaegeProProfil += Object.keys(sammle([g])).length; });
+    let saegeBloecke = "";
+    if (opts.saegeAlle) {
+        // Der Anschlag hängt nur von der LÄNGE und dem Winkel ab – nicht vom Profil. Darum alle Profile zusammen nach Länge.
+        const teile = [[true, "Säge auf 45° (Gehrung) – alle Gehrungs-Profile zusammen"], [false, "Säge auf 90° (gerader Schnitt) – alle geraden Profile zusammen"]];
+        saegeBloecke = teile.map(([gehrFlag, titel]) => {
+            const gr = ergebnis.filter((g) => !!g.gehrung === gehrFlag);
+            const proLaenge = sammle(gr);
+            const laengen = Object.keys(proLaenge).map(Number).sort((x, y) => y - x);
+            if (!laengen.length) return "";
+            anschlaege += laengen.length;
+            const zeilen = laengen.map((l, i) => { const arr = sortEintraege(proLaenge[l]); return `<tr><td class="n"><b>${i + 1}.</b> Anschlag<br><b style="font-size:15px">${zahl(l)} mm</b></td><td>${arr.length} Stück: ${arr.map((e) => chipSaege(e, true)).join("")}</td></tr>`; }).join("");
+            return `<div class="blk"><div class="kopf"><div><b>${titel}</b></div><div class="sum"><b>${laengen.length} Anschlag-Einstellung${laengen.length === 1 ? "" : "en"}</b></div></div>
+              <table><thead><tr><th>Anschlag einstellen</th><th>Dann alle diese Stücke sägen (Profil · Stange · Position · Maß)</th></tr></thead><tbody>${zeilen}</tbody></table></div>`;
+        }).join("");
+    } else {
+        const saegeGruppen = ergebnis.slice().sort((a, b) => (b.gehrung ? 1 : 0) - (a.gehrung ? 1 : 0) || a.artNr.localeCompare(b.artNr));
+        saegeBloecke = saegeGruppen.map((g) => {
+            const proLaenge = sammle([g]);
+            const laengen = Object.keys(proLaenge).map(Number).sort((a, b) => b - a);
+            anschlaege += laengen.length;
+            if (nurRest && !laengen.length) return "";
+            const zeilen = laengen.map((l, i) => `<tr><td class="n"><b>${i + 1}.</b> Anschlag<br><b style="font-size:15px">${zahl(l)} mm</b></td><td>${proLaenge[l].length} Stück: ${proLaenge[l].map((e) => chipSaege(e, false)).join("")}</td></tr>`).join("");
+            return `<div class="blk"><div class="kopf"><div><b>Art. ${esc(g.artNr)}</b> — ${esc(g.bez)}${g.farbe ? ` <span class="farbe">${esc(g.farbe)}</span>` : ""} <span class="farbe">${g.gehrung ? "Säge auf 45° Gehrung" : "gerader Schnitt (90°)"}</span></div>
+              <div class="sum"><b>${laengen.length} Anschlag-Einstellung${laengen.length === 1 ? "" : "en"}</b></div></div>
+              <table><thead><tr><th>Anschlag einstellen</th><th>Dann alle diese Stücke sägen (Stange · Position · Maß)</th></tr></thead><tbody>${zeilen}</tbody></table></div>`;
+        }).join("");
+    }
+    const saegeKopf = `<div class="total">${nurRest ? `<div><b>NOCH ZU SÄGEN:</b> ${stueckGesamt - stueckFertig} Stücke (bereits gesägt: ${stueckFertig} von ${stueckGesamt})</div>` : fortschritt}<div><b>${anschlaege}</b> Anschlag-Einstellungen ${nurRest ? "noch" : "insgesamt"}${opts.saegeAlle ? (anschlaegeProProfil > anschlaege ? ` (statt ${anschlaegeProProfil}, wenn man Profil für Profil sägt)` : " (eine je Länge)") : " (eine je Länge und Profil)"}</div><div>Reihenfolge: erst alle Gehrungs-Schnitte (Säge bleibt auf 45°), dann die geraden Schnitte (Winkel nur einmal umstellen). Jeweils von der längsten zur kürzesten Länge – jede Länge wird nur einmal eingestellt und alles Gleichlange in einem Rutsch gesägt.</div></div>`;
     const hinweis = `<div class="hint">Enthalten: Spannrahmen, Drehtür, Schiebetür (Rahmen-, Flügel-, Zarge-, Schwellen-, Griffleisten-, Querprofil-, Laufschienen-Zuschnitte × Stückzahl). Profile mit gleicher Art.-Nr. und Farbe teilen sich die Stangen. Rollladen, Lichtschacht und IS KIS sind nicht eingerechnet.</div>`;
     return `<div class="so">${css}${ergebnis.length ? (ansicht === "saege" ? saegeKopf + saegeBloecke : total + bloecke) : "<p>Keine Profil-Zuschnitte vorhanden (Spannrahmen, Drehtür oder Schiebetür in den Warenkorb legen).</p>"}${hinweis}</div>`;
 }
@@ -3289,7 +3313,8 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
     const [reste, setReste] = useState([]);
     const [einstOffen, setEinstOffen] = useState(false);
     const [uebernommen, setUebernommen] = useState(null);
-    const [ansicht, setAnsicht] = useState("stangen");
+    const [ansicht, setAnsicht] = useState("saege");
+    const [saegeAlle, setSaegeAlle] = useState(true);
     const [gesaegt, setGesaegt] = useState([]);
     const [fixPlan, setFixPlan] = useState(null);
     const [meldung, setMeldung] = useState("");
@@ -3412,11 +3437,11 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
         }),
         React.createElement("datalist", { id: "schnitt-art-liste" }, Array.from(new Set(grpOpt.map((g) => g.artNr))).map((a) => React.createElement("option", { key: a, value: a }))),
         React.createElement("datalist", { id: "schnitt-farb-liste" }, Array.from(new Set(grpOpt.map((g) => g.farbe).filter(Boolean))).map((f) => React.createElement("option", { key: f, value: f }))));
-    return React.createElement("div", { style: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 100000, display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", WebkitOverflowScrolling: "touch", background: "rgba(27,31,36,0.7)" }, onClick: (e) => { if (e.target === e.currentTarget) onClose(); } },
-        React.createElement("div", { style: { background: "#F5F4EF", borderRadius: "12px", width: "100%", maxWidth: "880px", margin: "24px 12px", padding: "20px", boxShadow: "0 10px 40px rgba(0,0,0,0.35)", boxSizing: "border-box" } },
+    return React.createElement("div", { style: { background: "#F5F4EF", minHeight: "100vh", width: "100%", boxSizing: "border-box", padding: "12px" } },
+        React.createElement("div", { style: { background: "#F5F4EF", width: "100%", maxWidth: "880px", margin: "0 auto", padding: "4px 0 40px", boxSizing: "border-box" } },
             React.createElement("div", { className: "flex items-center justify-between mb-3" },
                 React.createElement("h2", { className: "text-[20px] font-oswald font-semibold text-[#1B1F24]" }, "Schnittoptimierung" + (kunde ? " — " + kunde : "")),
-                React.createElement("button", { onClick: onClose, className: "text-[13px] text-[#5B6472] hover:text-[#1B1F24]" }, "Schließen ✕")),
+                React.createElement("button", { onClick: onClose, style: { background: "#1B1F24", color: "#fff", border: 0, borderRadius: "8px", padding: "9px 14px", fontSize: "14px", fontWeight: 600, cursor: "pointer", flexShrink: 0 } }, "← Zurück")),
             React.createElement("div", { className: "text-[13px] text-[#5B6472] bg-white border border-[#D8D4C8] rounded-lg p-3 mb-3 leading-relaxed" },
                 React.createElement("b", { className: "text-[#1B1F24]" }, "So liest du die Liste: "),
                 "Pro Profil (Art.-Nr. + Farbe) siehst du, wie viele 6-m-Stangen du brauchst. Jede Zeile „Stange 1, 2, …“ ist EINE Stange. Die Kästchen daneben sind die Stücke, die du von dieser Stange absägst – oben die Länge, darunter die Position und ob es Breite oder Höhe ist (zum Beschriften). „Rest“ ist das, was von der Stange übrig bleibt. Tippe ein Stück an (oder „ganze Stange gesägt“), sobald es geschnitten ist – dann kannst du unten „Rest drucken“ wählen und bekommst nur noch, was fehlt."),
@@ -3443,7 +3468,8 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
             planFix && React.createElement("div", { className: "mb-3 rounded-lg p-3 text-[13px] text-[#1B1F24]", style: { background: "#FFF3E3", border: "1px solid #B96A16" } },
                 "🔒 Der Plan ist festgehalten, weil du schon Stücke abgehakt hast. Er ändert sich nicht mehr – auch nicht durch andere Einstellungen oder Reste. Zum Neuberechnen unten „Haken zurücksetzen“ drücken."),
             ergebnis.length > 0 && React.createElement("div", { className: "flex gap-2 mb-3" },
-                [["stangen", "Stangen-Plan (was auf welche Stange)"], ["saege", "Sägeplan (Säge selten umstellen)"]].map(([k, t]) => React.createElement("button", { key: k, onClick: () => setAnsicht(k), className: "px-3 py-2 rounded-md text-[13px] font-semibold border " + (ansicht === k ? "bg-[#1B1F24] text-white border-[#1B1F24]" : "bg-white text-[#1B1F24] border-[#D8D4C8]") }, t))),
+                [["saege", "Sägeplan (Säge selten umstellen)"], ["stangen", "Stangen-Plan (was auf welche Stange)"]].map(([k, t]) => React.createElement("button", { key: k, onClick: () => setAnsicht(k), className: "px-3 py-2 rounded-md text-[13px] font-semibold border " + (ansicht === k ? "bg-[#1B1F24] text-white border-[#1B1F24]" : "bg-white text-[#1B1F24] border-[#D8D4C8]") }, t)),
+                ansicht === "saege" && React.createElement("label", { style: { display: "flex", alignItems: "center", gap: "6px", fontSize: "12.5px", marginLeft: "6px" } }, React.createElement("input", { type: "checkbox", checked: saegeAlle, onChange: (e) => setSaegeAlle(e.target.checked) }), "alle Profile zusammen nach Länge")),
             ergebnis.length > 0 && React.createElement(React.Fragment, null, istUebernommen
                 ? React.createElement("div", { className: "mb-3 rounded-lg p-3 text-[13px] text-[#1B1F24] flex flex-wrap items-center gap-2 justify-between", style: { background: "#EAF5EE", border: "1px solid #2E7D4F" } },
                     React.createElement("span", null, "✔ Reste aus diesem Auftrag sind im Restlager (" + (uebernommen.zeit || "") + "). Angezeigt wird die Berechnung mit dem damaligen Restlager."),
@@ -3452,11 +3478,12 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
                     React.createElement("button", { onClick: resteUebernehmen, className: "px-3.5 py-2 rounded-md bg-[#E8963B] text-white text-[13px] font-semibold hover:bg-[#d6852e]" }, "Reste ins Restlager übernehmen (ab " + SCHNITT_REST_MIN + " mm)"),
                     React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "Erst drücken, wenn der Auftrag gesägt ist. Verbrauchte Reste werden dabei entfernt.")),
                 meldung && React.createElement("div", { className: "text-[12.5px] text-[#2E7D4F] mb-3" }, meldung)),
-            React.createElement("div", { onClick: ergebnisKlick, dangerouslySetInnerHTML: { __html: schnittHtml(kunde, ergebnis, stangeA, kerfA, preise, false, gehrA, ansicht, { gesaegt, interaktiv: true }) } }),
+            React.createElement("div", { onClick: ergebnisKlick, dangerouslySetInnerHTML: { __html: schnittHtml(kunde, ergebnis, stangeA, kerfA, preise, false, gehrA, ansicht, { gesaegt, interaktiv: true, saegeAlle }) } }),
+            React.createElement("div", { style: { fontSize: "10.5px", color: "#8A8F98", marginTop: "14px" } }, "Schnittoptimierung · Stand 06.11.2026 (Sägeplan zuerst)"),
             React.createElement("div", { className: "flex justify-end gap-2 mt-3" },
                 gesaegt.length > 0 && React.createElement("button", { onClick: () => gesaegtSpeichern([]), className: "px-3.5 py-2 rounded-md border border-[#D8D4C8] bg-white text-[#5B6472] text-[13px] font-semibold" }, "Haken zurücksetzen"),
-                gesaegt.length > 0 && React.createElement("button", { onClick: () => druckeSchnittoptimierung(kunde, ergebnis, stangeA, kerfA, preise, gehrA, ansicht, { gesaegt, nurRest: true }), className: "px-3.5 py-2 rounded-md bg-[#E8963B] text-white text-[13px] font-semibold hover:bg-[#d6852e]" }, "Rest drucken (noch zu sägen)"),
-                React.createElement("button", { onClick: () => druckeSchnittoptimierung(kunde, ergebnis, stangeA, kerfA, preise, gehrA, ansicht, { gesaegt }), className: "px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333]" }, "Drucken"))));
+                gesaegt.length > 0 && React.createElement("button", { onClick: () => druckeSchnittoptimierung(kunde, ergebnis, stangeA, kerfA, preise, gehrA, ansicht, { gesaegt, nurRest: true, saegeAlle }), className: "px-3.5 py-2 rounded-md bg-[#E8963B] text-white text-[13px] font-semibold hover:bg-[#d6852e]" }, "Rest drucken (noch zu sägen)"),
+                React.createElement("button", { onClick: () => druckeSchnittoptimierung(kunde, ergebnis, stangeA, kerfA, preise, gehrA, ansicht, { gesaegt, saegeAlle }), className: "px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333]" }, "Drucken"))));
 }
 // ============================================================
 // GEMEINSAME KUNDENVERWALTUNG (produktübergreifend, alle 6 Konfiguratoren teilen sich diese Liste)
@@ -6877,9 +6904,9 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
     const etikettenDrucken = () => {
         druckeEtiketten(ausgewaehlt, positionen);
     };
+    if (schnittOffen) return React.createElement(Schnittoptimierung, { kunde: ausgewaehlt, positionen: positionen, onClose: () => setSchnittOffen(false) });
     return (React.createElement("div", { className: "min-h-screen w-full overflow-x-hidden", style: { background: "#F5F4EF" } },
         React.createElement("style", null, `* { font-family: 'Inter', -apple-system, sans-serif; } .font-oswald { font-family: 'Oswald', sans-serif; }`),
-        schnittOffen && React.createElement(Schnittoptimierung, { kunde: ausgewaehlt, positionen: positionen, onClose: () => setSchnittOffen(false) }),
         React.createElement("div", { className: "max-w-5xl mx-auto px-4 py-6 md:py-10" },
             React.createElement("button", { onClick: ausgewaehlt ? () => { setAusgewaehlt(null); setPositionen([]); setKundeAdresse(null); } : onZurueck, className: "text-[12px] text-[#5B6472] hover:text-[#1B1F24] mb-3 flex items-center gap-1" },
                 "\u2190 ",
@@ -7002,9 +7029,9 @@ function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, kundeDe
     const warenkorbEtikettenDrucken = () => {
         druckeEtiketten(aktiverKunde, warenkorb);
     };
+    if (schnittOffen) return React.createElement(Schnittoptimierung, { kunde: aktiverKunde, positionen: warenkorb, onClose: () => setSchnittOffen(false) });
     return (React.createElement("div", { className: "min-h-screen w-full overflow-x-hidden", style: { background: "#F5F4EF" } },
         React.createElement("style", null, `* { font-family: 'Inter', -apple-system, sans-serif; } .font-oswald { font-family: 'Oswald', sans-serif; }`),
-        schnittOffen && React.createElement(Schnittoptimierung, { kunde: aktiverKunde, positionen: warenkorb, onClose: () => setSchnittOffen(false) }),
         React.createElement("div", { className: "max-w-5xl mx-auto px-4 py-8 md:py-14" },
             React.createElement("div", { className: "flex items-center gap-3 mb-8" },
                 React.createElement("img", { src: LOGO_IMAGE, alt: "TH Sonnenschutz", className: "w-14 h-14 shrink-0" }),

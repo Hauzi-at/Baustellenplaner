@@ -225,7 +225,7 @@
     display: flex; background: var(--card); border-top: 1px solid var(--line);
     z-index: 20; padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
   }
-  .bottomnav .navlink { flex-direction: column; gap: 3px; font-size: 11px; padding: 7px 4px; border-radius: 10px; }
+  .bottomnav .navlink { flex-direction: column; align-items: center; gap: 3px; font-size: 11px; padding: 7px 2px; border-radius: 10px; flex: 1 1 0; width: auto; min-width: 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bottomnav .navlink.active { background: var(--slate); color: #fff; }
 
   @media (min-width: 880px) {
@@ -267,8 +267,10 @@
   .field { display: flex; flex-direction: column; gap: 5px; }
   .field label { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
   .field .hint { font-size: 11.5px; color: var(--muted); }
-  .field-row { display: grid; gap: 12px; grid-template-columns: 1fr; }
-  @media (min-width: 560px) { .field-row.cols-2 { grid-template-columns: 1fr 1fr; } .field-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; } }
+  .field-row { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+  .field-row > * { min-width: 0; }
+  @media (min-width: 560px) { .field-row.cols-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+  @media (min-width: 720px) { .field-row.cols-3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); } }
 
   .tag {
     display: inline-flex; align-items: center; gap: 5px;
@@ -325,7 +327,8 @@
 
   /* ---------- Planning (week) ---------- */
   .week-nav { display: flex; align-items: center; gap: 8px; }
-  .week-nav .label { font-weight: 600; font-size: 14px; min-width: 168px; text-align: center; }
+  .week-nav .label { font-weight: 600; font-size: 14px; min-width: 0; flex: 0 1 168px; text-align: center; }
+  .week-nav { flex-wrap: wrap; justify-content: center; }
   .week-grid-scroll { display: flex; flex-direction: column; }
   .week-grid {
     display: flex; flex-direction: column; gap: 12px;
@@ -410,7 +413,8 @@
   .type-choice input { margin: 0; }
   .type-choice.checked { border-color: var(--slate); background: var(--slate); color: #fff; }
   .fixed-date-field { display: flex; gap: 6px; }
-  .fixed-date-field input { flex: 1; background: var(--card-raised); }
+  .fixed-date-field input { flex: 1; min-width: 0; background: var(--card-raised); }
+  .fixed-date-field .btn { flex-shrink: 0; }
   .section-title { font-family: 'Barlow Semi Condensed', sans-serif; font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-soft); margin: 0; }
   .customer-suggest { position: relative; }
   .suggest-list {
@@ -528,21 +532,30 @@
        "visibility:hidden" — sonst bleibt ihre volle (oft sehr lange) Layout-Höhe erhalten und
        es entstehen zusätzliche, leere Seiten nach dem eigentlichen Ausdruck. */
     #app, #modal-root, #sig-fullscreen-root, #konfigurator-frame { display: none !important; }
+    html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; height: auto !important; overflow: visible !important; }
     body * { visibility: hidden; }
     #print-area, #print-area * { visibility: visible; }
+    /* Hintergrundfarben/-flächen (Kopfleiste, Karten, Tabellenkopf) werden von Safari/Chrome beim
+       Drucken sonst standardmäßig WEGGELASSEN ("Hintergründe drucken" aus) und Textfarben teils
+       aufgehellt — dann fehlen Kopfleiste und Blöcke, und die Seite wirkt unausgewogen/blass.
+       "exact" erzwingt die Darstellung exakt wie auf dem Bildschirm. */
+    #print-area, #print-area * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    /* position: relative statt absolute — absolut positionierte Elemente werden von Safari/Firefox
+       beim Drucken nicht zuverlässig auf mehrere Seiten umbrochen (Inhalt jenseits der ersten
+       Seite wird dann abgeschnitten); im normalen Fluss paginiert er korrekt. */
     #print-area {
-      display: block !important; position: absolute; top: 0; left: 0; width: 100%; padding: 16mm 18mm 16mm;
+      display: block !important; position: relative; top: 0; left: 0; width: 100%; padding: 14mm 16mm 12mm;
       color: var(--p-ink); background: #fff;
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      font-size: 11px; line-height: 1.55;
+      font-size: 11px; line-height: 1.5;
       --p-accent: var(--slate-deep, #2f5069);
       --p-accent-soft: var(--slate, #4f7691);
       --p-accent-tint: #eaf1f6;
-      --p-tint: #f6f7f6;
-      --p-line: #e3e7e5;
+      --p-tint: #f4f6f5;
+      --p-line: #d9dfdd;
       --p-ink: #1c2b38;
-      --p-muted: #6c7a80;
-      --p-shadow: 0 1px 2px rgba(28,43,56,0.05), 0 6px 18px rgba(28,43,56,0.07);
+      --p-muted: #56656c;
+      --p-shadow: none;
     }
     /* Schlanke, zweifarbige Kopfleiste über die ganze Seitenbreite — gibt dem Ausdruck einen
        Briefpapier-Charakter, ohne dass dafür Markup geändert werden musste. */
@@ -554,12 +567,12 @@
        Trennlinie — zieht bis an die Seitenränder, damit er wie echtes Briefpapier wirkt. */
     .p-header {
       display: flex; justify-content: space-between; align-items: center; gap: 18px;
-      margin: -16mm -18mm 20px; padding: 14mm 18mm 16px;
+      margin: -14mm -16mm 16px; padding: 12mm 16mm 12px;
       background: var(--p-accent-tint);
       border-bottom: 1px solid var(--p-line);
     }
     .p-brand { display: flex; align-items: center; gap: 14px; }
-    .p-header img { height: 54px; width: 54px; object-fit: contain; flex-shrink: 0; border-radius: 50%; background: #fff; box-shadow: var(--p-shadow); }
+    .p-header img { height: 50px; width: 50px; object-fit: contain; flex-shrink: 0; border-radius: 50%; background: #fff; box-shadow: var(--p-shadow); }
     .p-header .company-name { font-size: 9.5px; letter-spacing: .15em; text-transform: uppercase; color: var(--p-accent-soft); font-weight: 700; margin-bottom: 4px; }
     .p-header .company { font-size: 10px; line-height: 1.65; color: var(--p-muted); }
     .p-doctitle { text-align: right; flex-shrink: 0; }
@@ -571,31 +584,31 @@
     /* Kerndaten (Auftraggeber/Baustelle/Datum/Monteur) als eigene Karte statt freistehender
        Felder — fasst sie optisch zu einer Einheit zusammen und grenzt sie klar vom Fließtext
        darunter ab. */
-    .p-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; margin-bottom: 16px; background: #fff; border: 1px solid var(--p-line); border-radius: 10px; padding: 4px 16px; box-shadow: var(--p-shadow); }
-    .p-field { padding: 8px 0; font-size: 12px; border-bottom: 1px solid var(--p-line); }
-    .p-field:last-child { border-bottom: none; }
-    .p-field .l { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: var(--p-accent-soft); font-weight: 700; display: block; margin-bottom: 3px; }
-    /* Inhaltsblöcke (Beschreibung, Vermerke, Material) als Karte mit farbigem Akzentstreifen
-       links — macht auf einen Blick klar, wo ein neuer Abschnitt beginnt, statt reinem
-       Hintergrund-Ton. */
-    .p-block { background: var(--p-tint); border-radius: 0 9px 9px 0; border-left: 3px solid var(--p-accent-soft); margin-bottom: 12px; }
-    .p-block .l { font-weight: 700; font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--p-accent); padding: 10px 14px 0; }
-    .p-block .c { padding: 4px 14px 12px; font-size: 12px; min-height: 20px; white-space: pre-wrap; }
-    .p-sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 24px; }
+    .p-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; margin-bottom: 12px; background: #fff; border: 1px solid var(--p-line); border-radius: 8px; padding: 2px 14px; break-inside: avoid; page-break-inside: avoid; }
+    .p-field { padding: 6px 0; font-size: 11.5px; border-bottom: 1px solid var(--p-line); min-width: 0; overflow-wrap: anywhere; }
+    .p-field.last, .p-field:last-child { border-bottom: none; }
+    .p-field .l { font-size: 8.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--p-accent); font-weight: 700; display: block; margin-bottom: 2px; }
+    /* Fahrzeit/Ankunft/Abfahrt als schmale Zeile mit gleich breiten Spalten (Anzahl per Inline-Style). */
+    .p-grid.p-times .p-field { border-bottom: none; }
+    /* Inhaltsblöcke (Beschreibung, Vermerke, Material) als Karte mit farbigem Akzentstreifen links. */
+    .p-block { background: var(--p-tint); border-radius: 0 8px 8px 0; border-left: 3px solid var(--p-accent-soft); margin-bottom: 10px; break-inside: avoid; page-break-inside: avoid; }
+    .p-block .l { font-weight: 700; font-size: 9px; text-transform: uppercase; letter-spacing: .06em; color: var(--p-accent); padding: 8px 12px 0; }
+    .p-block .c { padding: 3px 12px 9px; font-size: 11.5px; min-height: 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .p-sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 14px; break-inside: avoid; page-break-inside: avoid; }
     .p-sig-box {
-      position: relative; background: #fdfdfc; border: 1.3px dashed var(--p-line); border-radius: 9px;
-      padding: 26px 14px 8px; min-height: 148px; display: flex; flex-direction: column; justify-content: flex-end;
+      position: relative; background: #fdfdfc; border: 1.3px dashed #b8c2c0; border-radius: 8px;
+      padding: 24px 12px 6px; min-height: 118px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden;
     }
-    /* Beschriftung, welche Unterschrift hier hin soll — sitzt direkt IM Kästchen, nicht nur in
-       der Zeile darunter, damit ein noch leeres Feld nicht wie ein kaputtes Element aussieht,
-       sondern klar als "hier unterschreiben" erkennbar ist. */
+    /* Beschriftung, welche Unterschrift hier hin soll — sitzt direkt IM Kästchen, damit ein noch
+       leeres Feld klar als "hier unterschreiben" erkennbar ist. */
     .p-sig-box .p-sig-label {
-      position: absolute; top: 10px; left: 14px; font-size: 9px; text-transform: uppercase;
-      letter-spacing: .08em; font-weight: 700; color: var(--p-accent-soft);
+      position: absolute; top: 8px; left: 12px; font-size: 8.5px; text-transform: uppercase;
+      letter-spacing: .08em; font-weight: 700; color: var(--p-accent);
     }
-    .p-sig-box.filled { border-style: solid; background: #fff; box-shadow: var(--p-shadow); }
-    .p-sig-box img { height: 150px; display: block; margin-bottom: 2px; object-fit: contain; object-position: left bottom; max-width: 100%; }
-    .p-sig-line { border-top: 1px solid var(--p-line); padding-top: 6px; font-size: 10px; color: var(--p-muted); }
+    .p-sig-box.filled { border-style: solid; border-color: var(--p-line); background: #fff; }
+    /* Unterschrift skaliert in das Feld (Höhe begrenzt), statt es zu sprengen. */
+    .p-sig-box img { max-height: 84px; max-width: 100%; display: block; margin-bottom: 2px; object-fit: contain; object-position: left bottom; }
+    .p-sig-line { border-top: 1px solid var(--p-line); padding-top: 5px; font-size: 9.5px; color: var(--p-muted); }
     .p-doc-title { font-family: 'Barlow Semi Condensed', 'Inter', sans-serif; font-weight: 700; font-size: 19px; color: var(--p-accent); margin: 4px 0 2px; }
     .p-doc-sub { font-size: 11px; color: var(--p-muted); margin: 0 0 16px; }
     /* Stundenliste (Monats-Tabelle) — die Rundung sitzt am Wrapper, nicht direkt an <table>:
@@ -603,14 +616,17 @@
     .p-hours-table-wrap { border: 1px solid var(--p-line); border-radius: 9px; overflow: hidden; margin-top: 4px; box-shadow: var(--p-shadow); }
     .p-hours-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
     .p-hours-table th { background: var(--p-accent); color: #fff; font-weight: 600; text-align: left; padding: 6px 7px; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; }
-    .p-hours-table td { padding: 4.5px 7px; border-bottom: 1px solid var(--p-line); }
+    .p-hours-table td { padding: 2px 7px; border-bottom: 1px solid var(--p-line); line-height: 1.35; }
+    .p-hours-table thead { display: table-header-group; }
+    .p-hours-table tr { break-inside: avoid; page-break-inside: avoid; }
     .p-hours-table tbody tr:nth-child(even) { background: var(--p-tint); }
     .p-hours-table tr.we td { color: var(--p-accent-soft); }
     .p-hours-summary {
+      break-inside: avoid; page-break-inside: avoid;
       background: var(--p-tint); border-left: 3px solid var(--p-accent-soft); border-radius: 0 9px 9px 0; padding: 12px 16px; margin-top: 16px;
       font-size: 11.5px; line-height: 1.75; color: var(--p-ink);
     }
-    .p-footer { margin-top: 28px; padding-top: 10px; border-top: 1px solid var(--p-line); font-size: 9px; color: var(--p-muted); display: flex; justify-content: space-between; gap: 10px; }
+    .p-footer { margin-top: 10px; padding-top: 8px; break-inside: avoid; page-break-inside: avoid; border-top: 1px solid var(--p-line); font-size: 9px; color: var(--p-muted); display: flex; justify-content: space-between; gap: 10px; }
     .p-footer .fn { text-transform: uppercase; letter-spacing: .1em; font-weight: 700; color: var(--p-accent-soft); }
   }
 
@@ -3247,13 +3263,13 @@
 
     if (hoursDayDraft) view.appendChild(renderHoursDayEditor());
 
-    var navRow = el("div", { style: "display:flex;align-items:center;gap:10px;" });
+    var navRow = el("div", { style: "display:flex;align-items:center;gap:8px;flex-wrap:wrap;" });
     var prevBtn = el("button", { class: "btn btn-icon btn-sm" }, []); prevBtn.innerHTML = icon("chevronL", 16);
     prevBtn.addEventListener("click", function () { hoursMonth = shiftMonth(hoursMonth, -1); render(); });
     var nextBtn = el("button", { class: "btn btn-icon btn-sm" }, []); nextBtn.innerHTML = icon("chevronR", 16);
     nextBtn.addEventListener("click", function () { hoursMonth = shiftMonth(hoursMonth, 1); render(); });
     var mp = hoursMonth.split("-");
-    var monthLabel = el("span", { style: "font-weight:700;min-width:150px;text-align:center;font-family:'Barlow Semi Condensed',sans-serif;font-size:15px;" },
+    var monthLabel = el("span", { style: "font-weight:700;min-width:120px;text-align:center;font-family:'Barlow Semi Condensed',sans-serif;font-size:15px;" },
       [MONTHS[parseInt(mp[1], 10) - 1] + " " + mp[0]]);
     var todayBtn = el("button", { class: "btn btn-sm" }, ["Heute"]);
     todayBtn.addEventListener("click", function () { hoursMonth = todayIso().slice(0, 7); render(); });
@@ -4764,17 +4780,29 @@
     html += '</div>';
     html += '<div class="p-doctitle"><div class="t">' + escapeHtml(r.type || "Bericht") + '</div><div class="d">' + escapeHtml(r.datum || "") + '</div></div>';
     html += '</div>';
+    // Kerndaten als EIN flaches Raster mit festen Zeilenpaaren (links: Auftraggeber/Adresse,
+    // rechts: Baustelle/Datum/Monteur) — so liegen die Trennlinien beider Spalten auf gleicher Höhe
+    // und die Karte ist ausgewogen gefüllt (vorher stand rechts nur Datum/Monteur, links 4–5 Felder).
+    var linksFelder = [
+      ["Auftraggeber", r.auftraggeber],
+      [r.baustelleAbweichend ? "Straße (Auftraggeber)" : "Straße", r.strasse],
+      [r.baustelleAbweichend ? "Ort/PLZ (Auftraggeber)" : "Ort/PLZ", r.ort],
+      [r.baustelleAbweichend ? "Telefon (Auftraggeber)" : "Telefon", r.telefon]
+    ].filter(function (f) { return f[1]; });
+    var rechtsFelder = [
+      ["Baustelle", r.baustelle],
+      ["Datum", r.datum],
+      ["Monteur", r.monteur]
+    ].filter(function (f) { return f[1]; });
+    var kernZeilen = Math.max(linksFelder.length, rechtsFelder.length);
     html += '<div class="p-grid">';
-    html += '<div>';
-    html += pField("Auftraggeber", r.auftraggeber);
-    html += pField("Baustelle", r.baustelle);
-    html += pField(r.baustelleAbweichend ? "Straße (Auftraggeber)" : "Straße", r.strasse);
-    html += pField(r.baustelleAbweichend ? "Ort/PLZ (Auftraggeber)" : "Ort/PLZ", r.ort);
-    html += pField(r.baustelleAbweichend ? "Telefon (Auftraggeber)" : "Telefon", r.telefon);
-    html += "</div><div>";
-    html += pField("Datum", r.datum);
-    html += pField("Monteur", r.monteur);
-    html += "</div></div>";
+    for (var zi = 0; zi < kernZeilen; zi++) {
+      var zCls = zi === kernZeilen - 1 ? " last" : "";
+      [linksFelder[zi], rechtsFelder[zi]].forEach(function (f) {
+        html += f ? pField(f[0], f[1], zCls) : '<div class="p-field' + zCls + '"></div>';
+      });
+    }
+    html += "</div>";
     // Wenn die Baustelle eine eigene, vom Auftraggeber abweichende Adresse hat, wird sie deutlich
     // hervorgehoben ausgegeben — damit das Montageteam auf den ersten Blick sieht, wohin es
     // tatsächlich fahren muss, statt versehentlich zur Firmenadresse des Auftraggebers zu fahren.
@@ -4784,9 +4812,15 @@
     }
     html += pBlock("Beschreibung vom Kunden", r.beschreibungKunde);
     html += pBlock("Beschreibung der Tätigkeit", r.beschreibungTaetigkeit);
-    var fahrtFelder = pField("Fahrzeit", r.fahrzeit) + pField("Ankunft", r.ankunft) + pField("Abfahrt", r.abfahrt);
-    var materialBlock = pBlock("Materialaufwand", r.material);
-    if (fahrtFelder || materialBlock) html += '<div class="p-grid"><div>' + fahrtFelder + "</div><div>" + materialBlock + "</div></div>";
+    // Fahrzeit/Ankunft/Abfahrt als schmale Zeile mit gleich breiten Spalten; das Material steht
+    // danach als eigener, volle Breite nutzender Block (statt halbleer in einer Karte daneben).
+    var zeitFelder = [["Fahrzeit", r.fahrzeit], ["Ankunft", r.ankunft], ["Abfahrt", r.abfahrt]].filter(function (f) { return f[1]; });
+    if (zeitFelder.length) {
+      html += '<div class="p-grid p-times" style="grid-template-columns:repeat(' + zeitFelder.length + ',1fr);">';
+      zeitFelder.forEach(function (f) { html += pField(f[0], f[1]); });
+      html += "</div>";
+    }
+    html += pBlock("Materialaufwand", r.material);
     html += pBlock("Sonstige Vermerke", r.vermerke);
     html += '<div class="p-sig-grid">';
     html += '<div><div class="p-sig-box' + (r.sigKunde ? ' filled' : '') + '"><span class="p-sig-label">Unterschrift Kunde</span>' + (r.sigKunde ? '<img src="' + r.sigKunde + '">' : "") + '</div><div class="p-sig-line">Datum, Unterschrift Kunde — ' + escapeHtml(r.datumUnterschrift || "") + '</div></div>';
@@ -4797,9 +4831,9 @@
   }
   // Leere, nicht ausgefüllte Felder werden gar nicht erst ins Dokument aufgenommen (statt als
   // nackte leere Zeile) — nicht jede Situation braucht alle Angaben (z. B. Baustelle/Telefon).
-  function pField(label, value) {
+  function pField(label, value, extraCls) {
     if (!value) return "";
-    return '<div class="p-field"><span class="l">' + escapeHtml(label) + '</span>' + escapeHtml(value) + "</div>";
+    return '<div class="p-field' + (extraCls || "") + '"><span class="l">' + escapeHtml(label) + '</span>' + escapeHtml(value) + "</div>";
   }
   function pBlock(label, value) {
     if (!value) return "";
