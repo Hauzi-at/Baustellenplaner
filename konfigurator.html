@@ -1783,6 +1783,8 @@ function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, default
     // Warenkorb: die Liste-Tab zeigt nur die Positionen des aktuell aktiven Kunden (nicht mehr alle Kunden gemischt).
     const listeAktuellerKunde = list.filter((i) => i.kunde === (kunde || "—"));
     const gesamtBrutto = listeAktuellerKunde.reduce((s, i) => s + i.preisBrutto * i.menge, 0);
+    const [rab, rabAendern] = useRabatte(kunde);
+    const calc = rabattRechnen(listeAktuellerKunde.map((it) => ({ produktKey: "positionsliste_v2", item: it })), rab);
     const gesamtEk = listeAktuellerKunde.reduce((s, i) => { var _a; return s + ((_a = i.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * i.menge; }, 0);
     // Aggregierte Bestellliste über alle Positionen des aktuellen Kunden (Menge je Position berücksichtigt)
     const bestellliste = {};
@@ -2547,6 +2549,7 @@ function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, default
                                         React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "Menge"),
                                         kostenSichtbar && React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "EK"),
                                         React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "VK (brutto)"),
+                                        React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "Rabatt"),
                                         React.createElement("th", { className: "px-2 py-2" }))),
                                 React.createElement("tbody", null, listeAktuellerKunde.map((i, __posIdx) => {
                                     var _a;
@@ -2580,33 +2583,27 @@ function RollladenKonfigurator({ onZurueck, editRequest, onEditConsumed, default
                                             (((_a = i.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * i.menge).toFixed(2),
                                             " \u20AC"),
                                         React.createElement("td", { className: "px-3 py-2 text-right font-['IBM_Plex_Mono'] text-[#1B1F24]" },
-                                            (i.preisBrutto * i.menge).toFixed(2),
+                                            (calc.zeilen[listeAktuellerKunde.indexOf(i)] || { rabatt: 0 }).rabatt > 0 && React.createElement("div", { style: { textDecoration: "line-through", color: "#8A8F98", fontSize: "11px" } }, (i.preisBrutto * i.menge).toFixed(2) + " \u20AC"),
+                                            (calc.zeilen[listeAktuellerKunde.indexOf(i)] || { netto: i.preisBrutto * i.menge }).netto.toFixed(2),
                                             " \u20AC"),
+                                        React.createElement("td", { className: "px-3 py-2 text-right" },
+                                            React.createElement(RabattFeld, { wert: (rab.pos || {})[rabattPosKey({ produktKey: "positionsliste_v2", item: i })], onChange: (v) => rabAendern((r) => Object.assign({}, r, { pos: Object.assign({}, r.pos, { [rabattPosKey({ produktKey: "positionsliste_v2", item: i })]: v }) })), titel: "Rabatt auf diese Position" })),
                                         React.createElement("td", { className: "px-2 py-2 text-right whitespace-nowrap" },
                                             React.createElement("button", { onClick: () => ladeZumBearbeiten(i), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: "Bearbeiten" },
                                                 React.createElement(Pencil, { size: 14 })),
-                                            i.positionstext && (React.createElement("button", { onClick: () => setOffenerPositionstext(textOffen ? null : i.id), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: textOffen ? "Positionstext ausblenden" : "Positionstext anzeigen" },
+                                            istChef && i.positionstext && (React.createElement("button", { onClick: () => setOffenerPositionstext(textOffen ? null : i.id), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: textOffen ? "Positionstext ausblenden" : "Positionstext anzeigen" },
                                                 React.createElement(textOffen ? ChevronUp : ChevronDown, { size: 14 }))),
-                                            i.positionstext && (React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: "Positionstext kopieren" },
+                                            istChef && i.positionstext && (React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: "Positionstext kopieren" },
                                                 React.createElement(Copy, { size: 14 }))),
                                             React.createElement("button", { onClick: () => removeFromList(i.id), className: "text-[#8A8F98] hover:text-[#C0392B]" },
                                                 React.createElement(Trash2, { size: 14 })))),
-                                    textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
-                                        React.createElement("td", { colSpan: kostenSichtbar ? 9 : 8, className: "px-3 py-3" },
+                                    istChef && textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
+                                        React.createElement("td", { colSpan: kostenSichtbar ? 10 : 9, className: "px-3 py-3" },
                                             React.createElement("div", { className: "flex items-start justify-between gap-3" },
                                                 React.createElement("pre", { className: "whitespace-pre-wrap flex-1 m-0 text-[12px] font-['IBM_Plex_Mono'] text-[#1B1F24]" }, i.positionstext),
                                                 React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1B1F24] text-white text-[12px] font-medium hover:bg-[#333] transition-colors" }, "Kopieren"))))));
                                 })))),
-                        React.createElement("div", { className: "flex justify-end items-center gap-4 px-1" },
-                            kostenSichtbar && (React.createElement("span", { className: "text-[13px] text-[#5B6472]" },
-                                "EK gesamt: ",
-                                React.createElement("span", { className: "font-['IBM_Plex_Mono'] text-[#1B1F24]" },
-                                    gesamtEk.toFixed(2),
-                                    " \u20AC"))),
-                            React.createElement("span", { className: "text-[13px] text-[#5B6472]" }, "Gesamt (brutto)"),
-                            React.createElement("span", { className: "text-[18px] font-['IBM_Plex_Mono'] font-semibold text-[#1B1F24]" },
-                                gesamtBrutto.toFixed(2),
-                                " \u20AC")),
+                        React.createElement(RabattSummen, { calc, rab, aendere: rabAendern, ek: kostenSichtbar ? gesamtEk : null }),
                         React.createElement(Section, { title: "Bestellliste \u2014 was ben\u00F6tigt wird", defaultOpen: false },
                             React.createElement("div", { className: "border border-[#E2DFD3] rounded-lg bg-white overflow-hidden" },
                                 React.createElement("table", { className: "w-full text-[12.5px]" },
@@ -2703,7 +2700,11 @@ function zeigeDruckVorschau(html) {
     document.body.appendChild(box);
     const schliessen = () => { box.remove(); };
     zurueck.onclick = schliessen;
-    drucken.onclick = () => { try { rahmen.contentWindow.focus(); rahmen.contentWindow.print(); } catch (e) { window.print(); } };
+    drucken.onclick = () => {
+        // In der App (Konfigurator liegt in einem iframe) druckt die oberste Seite – sonst druckt iOS die ganze App statt der Liste.
+        try { if (window.parent && window.parent !== window && typeof window.parent.thDruckeHtml === "function" && window.parent.thDruckeHtml(html)) return; } catch (e) { }
+        try { rahmen.contentWindow.focus(); rahmen.contentWindow.print(); } catch (e) { window.print(); }
+    };
     rahmen.srcdoc = html;
 }
 function druckeUebersicht(titel, kunde, zeilen, hinweis) {
@@ -2736,11 +2737,92 @@ function druckeUebersicht(titel, kunde, zeilen, hinweis) {
     </body></html>`;
     zeigeDruckVorschau(html);
 }
+// ============================================================
+// Rabatte (je Kunde gespeichert): pro Position und/oder auf die Gesamtsumme, in % oder in €.
+// Gespeichert getrennt von den Positionen: { [kunde]: { pos: { "produktKey|itemId": {typ:"pct"|"eur", wert} }, gesamt: {typ, wert} } }
+// ============================================================
+const RABATT_KEY = "warenkorb_rabatte_v1";
+function rabattPosKey(p) { return p.produktKey + "|" + p.item.id; }
+function rabattZahl(w) { const n = Number(String(w == null ? "" : w).replace(",", ".")); return isFinite(n) && n > 0 ? n : 0; }
+function rabattBetrag(basis, r) {
+    if (!r || !(rabattZahl(r.wert) > 0) || !(basis > 0)) return 0;
+    const w = rabattZahl(r.wert);
+    const b = r.typ === "eur" ? w : basis * Math.min(w, 100) / 100;
+    return Math.max(0, Math.min(basis, Math.round(b * 100) / 100));
+}
+function rabattRechnen(positionen, rab) {
+    rab = rab || {};
+    const pos = rab.pos || {};
+    let summe = 0, posRab = 0;
+    const zeilen = positionen.map((p) => {
+        const brutto = Math.round((p.item.preisBrutto || 0) * p.item.menge * 100) / 100;
+        const rb = rabattBetrag(brutto, pos[rabattPosKey(p)]);
+        summe += brutto; posRab += rb;
+        return { brutto, rabatt: rb, netto: brutto - rb };
+    });
+    const nachPos = summe - posRab;
+    const gesRab = rabattBetrag(nachPos, rab.gesamt);
+    return { zeilen, summe, positionsRabatt: posRab, nachPositionsRabatt: nachPos, gesamtRabatt: gesRab, end: nachPos - gesRab, hatRabatt: posRab > 0 || gesRab > 0 };
+}
+function rabattText(r) { return !r || !(rabattZahl(r.wert) > 0) ? "" : r.typ === "eur" ? "−" + rabattZahl(r.wert).toFixed(2) + " €" : "−" + String(rabattZahl(r.wert)).replace(".", ",") + " %"; }
+async function rabattLaden(kunde) {
+    var _a;
+    try {
+        const r = await ((_a = window.storage) === null || _a === void 0 ? void 0 : _a.get(RABATT_KEY).catch(() => null));
+        const alle = r && r.value ? JSON.parse(r.value) : {};
+        const k = alle[kunde] || {};
+        return { pos: k.pos || {}, gesamt: k.gesamt || null };
+    }
+    catch (e) { return { pos: {}, gesamt: null }; }
+}
+async function rabattSpeichern(kunde, rab) {
+    var _a;
+    try {
+        const r = await ((_a = window.storage) === null || _a === void 0 ? void 0 : _a.get(RABATT_KEY).catch(() => null));
+        const alle = r && r.value ? JSON.parse(r.value) : {};
+        alle[kunde] = rab;
+        await window.storage.set(RABATT_KEY, JSON.stringify(alle));
+    }
+    catch (e) { }
+}
+function useRabatte(kunde) {
+    const [rab, setRab] = useState({ pos: {}, gesamt: null });
+    useEffect(() => {
+        let aktiv = true;
+        setRab({ pos: {}, gesamt: null });
+        if (kunde) rabattLaden(kunde).then((r) => { if (aktiv) setRab(r); });
+        return () => { aktiv = false; };
+    }, [kunde]);
+    const aendere = (fn) => { const neu = fn(rab); setRab(neu); if (kunde) rabattSpeichern(kunde, neu); };
+    return [rab, aendere];
+}
+function RabattFeld({ wert, onChange, titel }) {
+    const r = wert || { typ: "pct", wert: "" };
+    return React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: "3px", whiteSpace: "nowrap" }, title: titel || "Rabatt" },
+        React.createElement("input", { type: "text", inputMode: "decimal", value: r.wert == null ? "" : r.wert, placeholder: "0", onChange: (e) => onChange({ typ: r.typ || "pct", wert: e.target.value }), style: { width: "58px", padding: "5px 6px", border: "1px solid #D8D4C8", borderRadius: "6px", fontSize: "13px", textAlign: "right", background: "#fff", fontFamily: "IBM Plex Mono, monospace" } }),
+        React.createElement("button", { type: "button", onClick: () => onChange({ typ: r.typ === "eur" ? "pct" : "eur", wert: r.wert }), title: "Umschalten zwischen % und €", style: { minWidth: "30px", padding: "5px 6px", border: "1px solid #E8963B", borderRadius: "6px", background: "#FFF8EF", color: "#B96A16", fontSize: "13px", fontWeight: 700, cursor: "pointer" } }, r.typ === "eur" ? "€" : "%"));
+}
+// Summenblock mit Rabatt auf die Gesamtsumme (Hauptseite-Warenkorb und Kundenübersicht)
+function RabattSummen({ calc, rab, aendere, ek }) {
+    const zeile = (l, w, st) => React.createElement("div", { style: Object.assign({ display: "flex", justifyContent: "space-between", gap: "18px", fontSize: "13px", color: "#5B6472", alignItems: "center" }, st || {}) }, React.createElement("span", null, l), w);
+    const mono = { fontFamily: "IBM Plex Mono, monospace", color: "#1B1F24" };
+    return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: "5px", minWidth: "250px", marginLeft: "auto" } },
+        ek != null && zeile("EK gesamt", React.createElement("span", { style: mono }, ek.toFixed(2) + " €")),
+        (calc.positionsRabatt > 0 || calc.gesamtRabatt > 0) && zeile("Summe vor Rabatt", React.createElement("span", { style: mono }, calc.summe.toFixed(2) + " €")),
+        calc.positionsRabatt > 0 && zeile("Positionsrabatte", React.createElement("span", { style: Object.assign({}, mono, { color: "#C0392B" }) }, "−" + calc.positionsRabatt.toFixed(2) + " €")),
+        zeile("Rabatt auf Gesamtsumme", React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: "8px" } },
+            React.createElement(RabattFeld, { wert: rab.gesamt, onChange: (v) => aendere((r) => Object.assign({}, r, { gesamt: v })), titel: "Rabatt auf die gesamte Summe" }),
+            calc.gesamtRabatt > 0 && React.createElement("span", { style: Object.assign({}, mono, { color: "#C0392B", minWidth: "78px", textAlign: "right" }) }, "−" + calc.gesamtRabatt.toFixed(2) + " €"))),
+        zeile("Gesamt (brutto)", React.createElement("span", { style: Object.assign({}, mono, { fontSize: "18px", fontWeight: 600 }) }, calc.end.toFixed(2) + " €"), { borderTop: "1px solid #E2DFD3", paddingTop: "5px" }));
+}
 // Eigener, repräsentativer Ausdruck für "Kompletten Kundenauftrag drucken" (Kundenübersicht) —
 // mit vollständigem Briefkopf (Logo + Firmenadresse) und der Adresse des Kunden, damit der
 // Ausdruck als richtiges Auftragsdokument taugt statt nur als interne Zuschnitt-Notiz.
-function druckeKundenauftrag(kunde, kundeAdresse, positionen, gesamtEk, gesamtBrutto) {
+function druckeKundenauftrag(kunde, kundeAdresse, positionen, gesamtEk, gesamtBrutto, rabatte) {
     const heute = new Date().toLocaleDateString("de-AT");
+    const rc = rabattRechnen(positionen, rabatte);
+    const rabattSp = rc.hatRabatt;
+    const eur = (n) => n.toFixed(2).replace(".", ",") + " €";
     const zeilenHtml = positionen.map((p, idx) => {
         var _a;
         const ekWert = (((_a = p.item.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * p.item.menge).toFixed(2);
@@ -2754,6 +2836,7 @@ function druckeKundenauftrag(kunde, kundeAdresse, positionen, gesamtEk, gesamtBr
       <td style="padding:7px 4px;color:#5B6472;text-align:right;border-bottom:1px solid #D8D4C8;">${p.item.menge}×</td>
       <td style="padding:7px 4px;color:#8A8F98;text-align:right;font-family:monospace;border-bottom:1px solid #D8D4C8;">${ekWert} €</td>
       <td style="padding:7px 4px;color:#1B1F24;font-weight:700;text-align:right;font-family:monospace;border-bottom:1px solid #D8D4C8;">${vkWert} €</td>
+      ${rabattSp ? `<td style="padding:7px 4px;color:#C0392B;text-align:right;font-family:monospace;border-bottom:1px solid #D8D4C8;">${rc.zeilen[idx].rabatt > 0 ? rabattText((rabatte.pos || {})[rabattPosKey(p)]) + (((rabatte.pos || {})[rabattPosKey(p)] || {}).typ === "eur" ? "" : " (−" + rc.zeilen[idx].rabatt.toFixed(2) + " €)") : ""}</td><td style="padding:7px 4px;color:#1B1F24;font-weight:700;text-align:right;font-family:monospace;border-bottom:1px solid #D8D4C8;">${rc.zeilen[idx].netto.toFixed(2)} €</td>` : ""}
     </tr>`;
     }).join("");
     const adressZeile = [kundeAdresse === null || kundeAdresse === void 0 ? void 0 : kundeAdresse.street, kundeAdresse === null || kundeAdresse === void 0 ? void 0 : kundeAdresse.city].filter(Boolean).join(", ");
@@ -2795,10 +2878,14 @@ function druckeKundenauftrag(kunde, kundeAdresse, positionen, gesamtEk, gesamtBr
         ${(kundeAdresse === null || kundeAdresse === void 0 ? void 0 : kundeAdresse.isBusiness) && (kundeAdresse === null || kundeAdresse === void 0 ? void 0 : kundeAdresse.uid) ? `<div class="adresse">UID: ${kundeAdresse.uid}</div>` : ""}
       </div>
       <table>
-        <thead><tr><th style="text-align:right;">Pos.</th><th>Info</th><th>Produkt</th><th>Beschreibung</th><th style="text-align:right;">Menge</th><th style="text-align:right;">EK</th><th style="text-align:right;">VK (brutto)</th></tr></thead>
+        <thead><tr><th style="text-align:right;">Pos.</th><th>Info</th><th>Produkt</th><th>Beschreibung</th><th style="text-align:right;">Menge</th><th style="text-align:right;">EK</th><th style="text-align:right;">VK (brutto)</th>${rabattSp ? `<th style="text-align:right;">Rabatt</th><th style="text-align:right;">Preis</th>` : ""}</tr></thead>
         <tbody>${zeilenHtml}</tbody>
         <tfoot>
-          <tr><td colspan="5"></td><td style="text-align:right;color:#8A8F98;">${gesamtEk.toFixed(2)} €</td><td style="text-align:right;font-size:15px;">${gesamtBrutto.toFixed(2)} €</td></tr>
+          ${rabattSp ? `
+          <tr><td colspan="${5}"></td><td style="text-align:right;color:#8A8F98;">${gesamtEk.toFixed(2)} €</td><td style="text-align:right;">${eur(rc.summe)}</td><td style="text-align:right;color:#C0392B;">${rc.positionsRabatt > 0 ? "−" + eur(rc.positionsRabatt) : ""}</td><td style="text-align:right;">${eur(rc.nachPositionsRabatt)}</td></tr>
+          ${rc.gesamtRabatt > 0 ? `<tr><td colspan="7" style="text-align:right;color:#5B6472;font-weight:400;padding-top:4px;">Rabatt auf Gesamtsumme ${rabattText(rabatte.gesamt)}</td><td></td><td style="text-align:right;color:#C0392B;padding-top:4px;">−${eur(rc.gesamtRabatt)}</td></tr>` : ""}
+          <tr><td colspan="7" style="text-align:right;border-top:2px solid #1B1F24;font-size:14px;">Gesamt (brutto) nach Rabatt</td><td style="border-top:2px solid #1B1F24;"></td><td style="text-align:right;font-size:16px;border-top:2px solid #1B1F24;">${eur(rc.end)}</td></tr>` : `
+          <tr><td colspan="5"></td><td style="text-align:right;color:#8A8F98;">${gesamtEk.toFixed(2)} €</td><td style="text-align:right;font-size:15px;">${gesamtBrutto.toFixed(2)} €</td></tr>`}
         </tfoot>
       </table>
       <p class="hinweis">${positionen.length} Position(en) über alle Produkte.</p>
@@ -2810,6 +2897,22 @@ function druckeKundenauftrag(kunde, kundeAdresse, positionen, gesamtEk, gesamtBr
 // Speichern einer Position ohnehin schon als fertigen, mehrzeiligen Maß-/Zuschnitt-/Artikeltext
 // ablegt (siehe z. B. Rollladen "const positionstext = buildPositionstext();"). Dadurch muss hier
 // nichts neu berechnet werden — jede Position bringt ihre Fertigungsangaben schon fix und fertig mit.
+// Ältere Drehtür-Positionen haben im gespeicherten Positionstext noch kein Maß für Teilsprosse/Trittschutzblech/Griffleiste –
+// beim Drucken der Produktionsliste werden sie aus der Flügelbreite ergänzt (DT 3-seitig und DT 4-seitig).
+function ergaenzeDrehtuerText(p, text) {
+    if (p.produktKey !== "drehtuer_liste_v1") return text;
+    const c = p.item.config || {};
+    const o = DREHTUER_AUSFUEHRUNG.find((a) => a.id === c.ausfuehrungTyp);
+    const fb = Number(p.item.fluegelbreite);
+    if (!o || !o.teilsprosse || !(fb > 0)) return text;
+    let zeilen = String(text).split("\n").map((z) => z.replace(/^Querprofil \(Art\. 12930\)/, "Teilsprosse (Art. 12930)"));
+    const neu = [];
+    if (!zeilen.some((z) => /^Teilsprosse/.test(z))) neu.push(`Teilsprosse (Art. 12930): ${Math.round(fb - 70)} mm`);
+    if (!zeilen.some((z) => /^Trittschutzblech/.test(z))) neu.push(`Trittschutzblech: ${Math.round(fb - 44)} mm`);
+    if (c.griffleisteVerbaut && !zeilen.some((z) => /^Griffleiste/.test(z))) neu.push(`Griffleiste (Art. 12931): ${Math.round(fb - 70)} mm, Position: ${c.griffleistePosition === "mass" ? "Maß UK Rahmen–Mitte Griffleiste = " + (c.griffleisteMass != null ? c.griffleisteMass : "?") + " mm" : "mittig"}`);
+    if (neu.length) { const i = zeilen.findIndex((z) => /^Farbe:/.test(z)); if (i < 0) zeilen = zeilen.concat(neu); else zeilen.splice(i, 0, ...neu); }
+    return zeilen.join("\n");
+}
 function druckeProduktionsliste(kunde, kundeAdresse, positionen) {
     const heute = new Date().toLocaleDateString("de-AT");
     // Die Zeile mit dem Rahmen-/Elementmaß ist das Schnittmaß für die Säge — das ist die mit
@@ -2818,7 +2921,7 @@ function druckeProduktionsliste(kunde, kundeAdresse, positionen) {
     // (siehe etikettenMasseFuer-Kommentar), deshalb hier auf alle gängigen Varianten prüfen.
     const SCHNITTMASS_ZEILE = /^(Rahmenmaß|Rahmenbreite|Elementbreite)/;
     const positionenHtml = positionen.map((p, idx) => {
-        const zeilenHtml = (p.item.positionstext || "—").split("\n").map((z) => SCHNITTMASS_ZEILE.test(z)
+        const zeilenHtml = ergaenzeDrehtuerText(p, p.item.positionstext || "—").split("\n").map((z) => SCHNITTMASS_ZEILE.test(z)
             ? `<div style="padding:5px 8px;margin:2px 0;background:#FFF8EF;border-left:3px solid #E8963B;color:#B96A16;font-weight:700;font-size:13.5px;border-radius:0 4px 4px 0;">✂️ ${z}</div>`
             : `<div style="padding:3px 0;border-bottom:1px solid #EEEBE0;">${z}</div>`).join("");
         return `
@@ -2911,7 +3014,9 @@ function etikettenDetailFuer(produktKey, item) {
         case "drehtuer_liste_v1":
             ausfuehrung = kurz(item.ausfuehrungLabel);
             if (item.anschlag) zusatz.push("Anschlag " + (item.anschlag === "links" ? "links" : "rechts"));
-            if (c.griffleisteVerbaut) zusatz.push("Griffleiste" + (c.griffleistePosition === "mass" ? ` (UK–Mitte ${c.griffleisteMass != null ? c.griffleisteMass : "?"})` : " mittig"));
+            { const fb = Number(item.fluegelbreite), dtTyp = c.ausfuehrungTyp;
+              if (c.griffleisteVerbaut) zusatz.push("Griffleiste" + (fb > 0 && (dtTyp === "dt3" || dtTyp === "dt4") ? " " + Math.round(fb - 70) : "") + (c.griffleistePosition === "mass" ? ` (UK–Mitte ${c.griffleisteMass != null ? c.griffleisteMass : "?"})` : " mittig"));
+              if (fb > 0 && (dtTyp === "dt3" || dtTyp === "dt4")) { zusatz.push("Teilsprosse " + Math.round(fb - 70)); zusatz.push("Trittschutzblech " + Math.round(fb - 44)); } }
             if (item.fluegelbreite != null) zusatz.push(`Flügel ${Number(Number(item.fluegelbreite).toFixed(1))} × ${Number(Number(item.fluegelhoehe).toFixed(1))}`);
             break;
         case "schiebetuer_liste_v1":
@@ -3034,7 +3139,7 @@ function schnittTeileFuer(produktKey, item) {
     const teile = [];
     const add = (artNr, bez, laenge, anzahl, quelle, preisKey, seite) => {
         if (!(laenge > 0) || !(anzahl > 0)) return;
-        teile.push({ artNr: String(artNr), bez, laenge: Math.round(laenge * 10) / 10, anzahl: anzahl * menge, farbe, quelle, preisKey, position: item.position || "—", seite, proStk: anzahl, menge, teilName: (/^Laufschiene/.test(bez) ? bez : /^(zarge)/.test(preisKey || "") ? "Zarge" : /^fluegel/.test(preisKey || "") ? "Flügel" : /^profil/.test(preisKey || "") ? "Rahmen" : /^quersprosse/.test(preisKey || "") ? "Querprofil" : /^griffleiste/.test(preisKey || "") ? "Griffleiste" : /^schwelle/.test(preisKey || "") ? "Schwelle" : /buerstenprofil/.test(preisKey || "") ? "Bürstenprofil" : bez), gehrung: !/Querprofil|Quersprosse|Griffleiste|Bürstenprofil|Schwellen|Laufschiene/i.test(bez) });
+        teile.push({ artNr: String(artNr), bez, laenge: Math.round(laenge * 10) / 10, anzahl: anzahl * menge, farbe, quelle, preisKey, position: item.position || "—", seite, proStk: anzahl, menge, teilName: (/^Laufschiene/.test(bez) ? bez : /^(zarge)/.test(preisKey || "") ? "Zarge" : /^fluegel/.test(preisKey || "") ? "Flügel" : /^profil/.test(preisKey || "") ? "Rahmen" : /^quersprosse/.test(preisKey || "") ? "Teilsprosse" : /^griffleiste/.test(preisKey || "") ? "Griffleiste" : /^schwelle/.test(preisKey || "") ? "Schwelle" : /buerstenprofil/.test(preisKey || "") ? "Bürstenprofil" : bez), gehrung: !/Querprofil|Teilsprosse|Quersprosse|Griffleiste|Bürstenprofil|Schwellen|Laufschiene/i.test(bez) });
     };
     if (produktKey === "spannrahmen_liste_v1") {
         const prof = SPANNRAHMEN_PROFILE.find((p) => p.id === c.profilTyp) || SPANNRAHMEN_PROFILE[0];
@@ -3048,10 +3153,8 @@ function schnittTeileFuer(produktKey, item) {
         add(o.zargeArtNr, o.zargeLabel, item.rahmenhoehe, 2, "drehtuer", "zarge_" + typ, "H");
         add(o.fluegelArtNr, o.fluegelLabel, item.fluegelbreite, 2, "drehtuer", "fluegel_" + typ, "B");
         add(o.fluegelArtNr, o.fluegelLabel, item.fluegelhoehe, 2, "drehtuer", "fluegel_" + typ, "H");
-        if (o.dt3Zusatz) {
-            add("12930", "Querprofil", item.fluegelbreite - 70, 1, "drehtuer", "quersprosse", "B");
-            add("12919", "Bürstenprofil unten", item.fluegelbreite, 1, "drehtuer", "buerstenprofil_unten", "B");
-        }
+        if (o.teilsprosse) add("12930", "Teilsprosse", item.fluegelbreite - 70, 1, "drehtuer", "quersprosse", "B");
+        if (o.dt3Zusatz) add("12919", "Bürstenprofil unten", item.fluegelbreite, 1, "drehtuer", "buerstenprofil_unten", "B");
         if (o.griffleisteOptional && c.griffleisteVerbaut) add("12931", "Griffleiste", item.fluegelbreite - 70, 1, "drehtuer", "griffleiste", "B");
         if (o.pendelZusatz) {
             add("12931", "Griffleiste", item.rahmenbreite, 1, "drehtuer", "griffleiste", "B");
@@ -3098,11 +3201,45 @@ function schnittPacken(laengen, stange, kerf, reste, anschnitt) {
         return bars;
     };
     const neu = (bars) => bars.filter((b) => !b.istRest).length;
-    const bewerte = (bars) => neu(bars) * 1e6 - Math.max(0, ...bars.filter((b) => !b.istRest || b.teile.length).map((b) => b.cap - b.used)) - bars.filter((b) => b.istRest && b.teile.length).length * 0.001;
+    // Schritte = wie oft eine Stange für eine Länge auf die Säge gelegt werden muss (je Stange und Länge ein Schritt).
+    const schritte = (bars) => bars.reduce((n, b) => n + new Set(b.teile).size, 0);
+    // Reihenfolge der Kriterien: 1. wenige neue Stangen, 2. wenige Schritte (je Anschlag eine Stange möglichst voll sägen), 3. großer Restrest.
+    const bewerte = (bars) => neu(bars) * 1e9 + schritte(bars) * 1e4 - Math.max(0, ...bars.filter((b) => !b.istRest || b.teile.length).map((b) => b.cap - b.used)) - bars.filter((b) => b.istRest && b.teile.length).length * 0.001;
     const basis = laengen.slice().sort((a, b) => b - a);
     const restAsc = reste.slice().reverse();
+    // Anschlag für Anschlag (längste Länge zuerst): so viele Stücke dieser Länge wie möglich aus EINER Stange sägen, dann der Rest weiter.
+    const laufStop = (restReihenfolge, modus) => {
+        const bars = start(restReihenfolge);
+        const anz = {};
+        basis.forEach((l) => { anz[l] = (anz[l] || 0) + 1; });
+        const ls = Object.keys(anz).map(Number).sort((a, b) => b - a);
+        for (const l of ls) {
+            let n = anz[l];
+            while (n > 0) {
+                let ziel = -1, bestM = 0, bestRest = Infinity;
+                for (let i = 0; i < bars.length; i++) {
+                    const room = bars[i].cap - bars[i].used;
+                    const m = Math.min(n, Math.floor(room / (l + kerf)));
+                    if (m <= 0) continue;
+                    const rest = room - m * (l + kerf);
+                    const besser = modus === 0 ? (m > bestM || (m === bestM && rest < bestRest)) : (rest < bestRest || (rest === bestRest && m > bestM));
+                    if (besser) { ziel = i; bestM = m; bestRest = rest; }
+                }
+                if (ziel < 0) {
+                    const m = Math.max(1, Math.min(n, Math.floor(cap / (l + kerf))));
+                    bars.push({ teile: new Array(m).fill(l), used: m * (l + kerf), cap, istRest: false });
+                    n -= m;
+                } else {
+                    for (let q = 0; q < bestM; q++) bars[ziel].teile.push(l);
+                    bars[ziel].used += bestM * (l + kerf);
+                    n -= bestM;
+                }
+            }
+        }
+        return bars;
+    };
     let besteBars = lauf(basis, false, reste), besteWert = bewerte(besteBars);
-    const kand = [lauf(basis, true, reste), lauf(basis, false, restAsc), lauf(basis, true, restAsc)];
+    const kand = [lauf(basis, true, reste), lauf(basis, false, restAsc), lauf(basis, true, restAsc), laufStop(reste, 0), laufStop(reste, 1), laufStop(restAsc, 0), laufStop(restAsc, 1)];
     const rnd = schnittRng(12345);
     for (let i = 0; i < 400; i++) {
         const gest = basis.map((l) => ({ l, k: l * (1 + (rnd() - 0.5) * 0.3) })).sort((a, b) => b.k - a.k).map((x) => x.l);
@@ -3111,7 +3248,9 @@ function schnittPacken(laengen, stange, kerf, reste, anschnitt) {
     for (const k of kand) { const w = bewerte(k); if (w < besteWert) { besteWert = w; besteBars = k; } }
     const out = besteBars.filter((b) => !b.istRest || b.teile.length).map((b) => ({ teile: b.teile.slice().sort((x, y) => y - x), rest: b.cap - b.used, istRest: !!b.istRest, laenge: b.istRest ? b.laenge : stange }));
     // Restlager-Stücke zuerst, dann neue Stangen
-    return out.sort((x, y) => (y.istRest ? 1 : 0) - (x.istRest ? 1 : 0));
+    // Stangen nach ihrem längsten Stück nummerieren (Stange 1 = wird am ersten Anschlag gebraucht)
+    const lex = (x, y) => { for (let i = 0; i < Math.max(x.teile.length, y.teile.length); i++) { const a = x.teile[i] || 0, b = y.teile[i] || 0; if (a !== b) return b - a; } return 0; };
+    return out.sort((x, y) => (y.istRest ? 1 : 0) - (x.istRest ? 1 : 0) || lex(x, y));
 }
 function schnittBerechnen(positionen, stange, kerf, reste, gehr) {
     gehr = gehr || { anschnitt: 0, zwischen: kerf, saAnschnitt: 0, saZwischen: kerf };
@@ -3182,6 +3321,18 @@ function schnittPreisFuer(gruppe, preise) {
     }
     return 0;
 }
+// Zusatzteile, die NICHT aus der 6-m-Stange kommen (Trittschutzblech der Drehtüren DT3/DT4) — nur zur Info mit Maß.
+function schnittZusatzteile(positionen) {
+    const out = [];
+    (positionen || []).forEach((p, idx) => {
+        if (p.produktKey !== "drehtuer_liste_v1") return;
+        const c = p.item.config || {};
+        const o = DREHTUER_AUSFUEHRUNG.find((a) => a.id === c.ausfuehrungTyp);
+        if (!o || !o.teilsprosse || !(p.item.fluegelbreite > 0)) return;
+        out.push({ pos: "Pos. " + (p.posNr || (100 + idx * 10)), name: "Trittschutzblech", laenge: Math.round((p.item.fluegelbreite - 44) * 10) / 10, anzahl: p.item.menge || 1 });
+    });
+    return out;
+}
 function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr, ansicht, opts) {
     opts = opts || {};
     const gesaegt = new Set(opts.gesaegt || []);
@@ -3215,7 +3366,7 @@ function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr, ansi
         if (nurRest && !zeilen) return "";
         return `<div class="blk">
           <div class="kopf"><div><b>Art. ${esc(g.artNr)}</b> — ${esc(g.bez)}${g.farbe ? ` <span class="farbe">${esc(g.farbe)}</span>` : ""} <span class="farbe">${g.gehrung ? `Gehrung 45° · Anschnitt ${zahl(g.gehrEff.anschnitt)} · zwischen ${zahl(g.gehrEff.zwischen)} mm` : `gerader Schnitt · ${zahl(kerf)} mm`}</span></div>
-          <div class="sum"><b>${neueOffen} ${nurRest ? "Stange" + (neueOffen === 1 ? "" : "n") + " noch" : "neue Stange" + (neueOffen === 1 ? "" : "n")}</b> à ${zahl(stange)} mm${g.restStuecke.length ? ` + ${g.restStuecke.length} Reststück${g.restStuecke.length === 1 ? "" : "e"}` : ""} · ${nurRest ? g.alle.reduce((n, st, bi) => n + offen(st, bi), 0) + " Teile offen" : g.anzahlTeile + " Teile · Verschnitt " + g.verschnittProzent.toFixed(1) + " %"}${preis > 0 ? ` · ${kosten.toFixed(2)} €` : ""}</div></div>
+          <div class="sum"><b>${neueOffen} ${nurRest ? "Stange" + (neueOffen === 1 ? "" : "n") + " noch" : "neue Stange" + (neueOffen === 1 ? "" : "n")}</b> à ${zahl(stange)} mm${g.restStuecke.length ? ` + ${g.restStuecke.length} Reststück${g.restStuecke.length === 1 ? "" : "e"}` : ""} · ${nurRest ? g.alle.reduce((n, st, bi) => n + offen(st, bi), 0) + " Teile offen" : g.anzahlTeile + " Teile · Verschnitt " + g.verschnittProzent.toFixed(1) + " %"}${preis > 0 && !istDruck ? ` · ${kosten.toFixed(2)} €` : ""}</div></div>
           ${g.zuLang.length ? `<div class="warn">⚠ ${g.zuLang.length} Teil(e) länger als eine Stange (${g.zuLang.map(zahl).join(", ")} mm) — nicht eingeplant.</div>` : ""}
           <table><thead><tr><th></th><th>Zuschnitte (mm)</th><th class="r">Rest</th></tr></thead><tbody>${zeilen}</tbody></table></div>`;
     }).join("");
@@ -3242,22 +3393,58 @@ function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr, ansi
       .so .warn { background: #FDEDEB; color: #C0392B; border-radius: 6px; padding: 5px 8px; margin-bottom: 6px; }
       .so .total { background: #FFF8EF; border: 1px solid #E8963B; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; display: flex; gap: 18px; flex-wrap: wrap; }
       .so .hint { font-size: 11px; color: #8A8F98; }
+      .so .step { border-left: 3px solid #E8963B; padding: 2px 0 2px 8px; margin: 0 0 6px 0; }
+      .so .step .sh { font-family: Arial, sans-serif; font-size: 12px; margin-bottom: 1px; }
+      .so .step .vl { color: #8A8F98; font-size: 11px; margin: 0 4px; }
+      .so .step .nx { color: #B96A16; font-weight: 700; font-size: 11.5px; }
+      .so .step .nx.ok { color: #2E7D4F; }
     </style>`;
     const fortschritt = stueckGesamt ? `<div><b>${stueckFertig}</b> von ${stueckGesamt} Stücken gesägt · <b>noch ${stueckGesamt - stueckFertig}</b></div>` : "";
-    const total = `<div class="total">${nurRest ? `<div><b>NOCH ZU SÄGEN:</b> ${stueckGesamt - stueckFertig} Stücke (bereits gesägt: ${stueckFertig} von ${stueckGesamt})</div>` : fortschritt}<div><b>${summeStangen}</b> ${nurRest ? "Stangen werden noch gebraucht" : "neue Stangen insgesamt"}</div><div>Stangenlänge ${zahl(stange)} mm · gerade Schnitte ${zahl(kerf)} mm · Gehrung: Anschnitt ${zahl(gehr.anschnitt)} mm, zwischen den Schnitten ${zahl(gehr.zwischen)} mm · Schiebetür: ${zahl(gehr.saAnschnitt)} / ${zahl(gehr.saZwischen)} mm</div>${summeKosten > 0 ? `<div>Profilkosten (EK): <b>${summeKosten.toFixed(2)} €</b>${kostenKomplett ? "" : " (ohne Profile ohne hinterlegten Preis)"}</div>` : ""}</div>`;
+    const total = `<div class="total">${nurRest ? `<div><b>NOCH ZU SÄGEN:</b> ${stueckGesamt - stueckFertig} Stücke (bereits gesägt: ${stueckFertig} von ${stueckGesamt})</div>` : fortschritt}<div><b>${summeStangen}</b> ${nurRest ? "Stangen werden noch gebraucht" : "neue Stangen insgesamt"}</div><div>Stangenlänge ${zahl(stange)} mm · gerade Schnitte ${zahl(kerf)} mm · Gehrung: Anschnitt ${zahl(gehr.anschnitt)} mm, zwischen den Schnitten ${zahl(gehr.zwischen)} mm · Schiebetür: ${zahl(gehr.saAnschnitt)} / ${zahl(gehr.saZwischen)} mm</div>${summeKosten > 0 && !istDruck ? `<div>Profilkosten (EK): <b>${summeKosten.toFixed(2)} €</b>${kostenKomplett ? "" : " (ohne Profile ohne hinterlegten Preis)"}</div>` : ""}</div>`;
     // Sägeplan: Anschlag nur einmal je Länge einstellen – alle gleich langen Stücke (über alle Stangen) hintereinander sägen.
     // Gehrungsprofile zuerst (Säge bleibt auf 45°), danach die geraden Schnitte (Winkel nur einmal umstellen).
     let anschlaege = 0, anschlaegeProProfil = 0;
     const mehrereFarben = new Set(ergebnis.map((g) => g.farbe || "")).size > 1;
-    const chipSaege = (e, mitArt) => { const fertig = gesaegt.has(e.key); return `<span class="chip${fertig ? " done" : ""}"${interaktiv ? ` data-key="${esc(e.key)}" title="Antippen = gesägt / nicht gesägt"` : ""}><b>${mitArt ? esc(String(e.g.artNr).split(" ")[0]) + (mehrereFarben && e.g.farbe ? " · " + esc(e.g.farbe) : "") + " · " : ""}${esc(e.bar)}</b><i>${esc(e.text)}</i>${e.mass ? `<i class="pm">${esc(e.mass)}</i>` : ""}</span>`; };
+    // Ein "Schritt" = eine Stange liegt auf der Säge, Anschlag steht auf Länge L, alle Stücke dieser Länge aus dieser Stange werden gesägt.
+    // Danach wandert der Rest der Stange zum nächsten (kürzeren) Anschlag weiter.
+    const chipSaege = (e) => { const fertig = gesaegt.has(e.key); return `<span class="chip${fertig ? " done" : ""}"${interaktiv ? ` data-key="${esc(e.key)}" title="Antippen = gesägt / nicht gesägt"` : ""}><b>${esc(e.text)}</b>${e.mass ? `<i class="pm">${esc(e.mass)}</i>` : ""}</span>`; };
     const sammle = (gruppen) => {
         const proLaenge = {};
-        gruppen.forEach((g) => { const namen = barNamen(g); g.alle.forEach((st, bi) => st.teile.forEach((l, k) => { const key = pKey(g, namen[bi], k); if (nurRest && gesaegt.has(key)) return; const lk = Math.round(l * 10) / 10; (proLaenge[lk] = proLaenge[lk] || []).push({ key, g, bar: namen[bi], text: (st.etiketten && st.etiketten[k]) || "", mass: (st.massen && st.massen[k]) || "" }); })); });
+        gruppen.forEach((g) => {
+            const namen = barNamen(g);
+            const kerfG = g.gehrung && g.gehrEff ? g.gehrEff.zwischen : kerf;
+            const anschG = g.gehrung && g.gehrEff ? g.gehrEff.anschnitt : 0;
+            g.alle.forEach((st, bi) => {
+                const capB = st.laenge - anschG + kerfG;
+                let verbraucht = 0, vorher = st.laenge;
+                const laengenBar = Array.from(new Set(st.teile));
+                laengenBar.forEach((l, li) => {
+                    const items = [];
+                    st.teile.forEach((tl, k) => { if (tl !== l) return; verbraucht += tl + kerfG; const key = pKey(g, namen[bi], k); if (nurRest && gesaegt.has(key)) return; items.push({ key, text: (st.etiketten && st.etiketten[k]) || "", mass: (st.massen && st.massen[k]) || "" }); });
+                    const nachher = capB - verbraucht;
+                    const naechste = laengenBar.slice(li + 1).filter((nl) => !nurRest || st.teile.some((tt, kk) => tt === nl && !gesaegt.has(pKey(g, namen[bi], kk))))[0];
+                    const stepVorher = vorher;
+                    vorher = nachher;
+                    if (!items.length) return;
+                    const lk = Math.round(l * 10) / 10;
+                    (proLaenge[lk] = proLaenge[lk] || []).push({ g, bar: namen[bi], istRest: st.istRest, erster: li === 0, vorher: stepVorher, nachher, naechste, items });
+                });
+            });
+        });
         return proLaenge;
     };
     const sortEintraege = (arr) => arr.sort((x, y) => x.g.artNr.localeCompare(y.g.artNr) || String(x.g.farbe || "").localeCompare(String(y.g.farbe || "")) || x.bar.localeCompare(y.bar, "de", { numeric: true }));
     // Zählung "je Profil" (zum Vergleich) – immer mitrechnen
     ergebnis.forEach((g) => { anschlaegeProProfil += Object.keys(sammle([g])).length; });
+    const schrittHtml = (e, mitArt) => {
+        const art = String(e.g.artNr).split(" ")[0] + (mehrereFarben && e.g.farbe ? " · " + e.g.farbe : "");
+        const endrest = e.naechste == null;
+        const nach = endrest
+            ? (e.nachher >= SCHNITT_REST_MIN ? `<span class="nx ok">Endrest ${zahl(e.nachher)} mm → Restlager</span>` : `<span class="nx">Endrest ${zahl(e.nachher)} mm = Abfall</span>`)
+            : `<span class="nx">Rest ${zahl(e.nachher)} mm → weiter bei Anschlag ${zahl(e.naechste)} mm</span>`;
+        const vl = e.erster ? (e.istRest ? `Reststück ${zahl(e.vorher)} mm aus dem Lager` : `neue Stange ${zahl(e.vorher)} mm`) : `Rest ${zahl(e.vorher)} mm vom vorigen Anschlag`;
+        return `<div class="step"><div class="sh"><b>${esc(mitArt ? art + " · " : "")}${esc(e.bar)}</b> <span class="vl">${vl}</span> ${nach}</div>${e.items.map(chipSaege).join("")}</div>`;
+    };
     let saegeBloecke = "";
     if (opts.saegeAlle) {
         // Der Anschlag hängt nur von der LÄNGE und dem Winkel ab – nicht vom Profil. Darum alle Profile zusammen nach Länge.
@@ -3268,9 +3455,9 @@ function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr, ansi
             const laengen = Object.keys(proLaenge).map(Number).sort((x, y) => y - x);
             if (!laengen.length) return "";
             anschlaege += laengen.length;
-            const zeilen = laengen.map((l, i) => { const arr = sortEintraege(proLaenge[l]); return `<tr><td class="n"><b>${i + 1}.</b> Anschlag<br><b style="font-size:15px">${zahl(l)} mm</b></td><td>${arr.length} Stück: ${arr.map((e) => chipSaege(e, true)).join("")}</td></tr>`; }).join("");
+            const zeilen = laengen.map((l, i) => { const arr = sortEintraege(proLaenge[l]); const nStk = arr.reduce((n, e) => n + e.items.length, 0); return `<tr><td class="n"><b>${i + 1}.</b> Anschlag<br><b style="font-size:15px">${zahl(l)} mm</b><br>${nStk} Stück</td><td>${arr.map((e) => schrittHtml(e, true)).join("")}</td></tr>`; }).join("");
             return `<div class="blk"><div class="kopf"><div><b>${titel}</b></div><div class="sum"><b>${laengen.length} Anschlag-Einstellung${laengen.length === 1 ? "" : "en"}</b></div></div>
-              <table><thead><tr><th>Anschlag einstellen</th><th>Dann alle diese Stücke sägen (Profil · Stange · Position · Maß)</th></tr></thead><tbody>${zeilen}</tbody></table></div>`;
+              <table><thead><tr><th>Anschlag einstellen</th><th>Stangen der Reihe nach auflegen und alle Stücke sägen</th></tr></thead><tbody>${zeilen}</tbody></table></div>`;
         }).join("");
     } else {
         const saegeGruppen = ergebnis.slice().sort((a, b) => (b.gehrung ? 1 : 0) - (a.gehrung ? 1 : 0) || a.artNr.localeCompare(b.artNr));
@@ -3279,15 +3466,18 @@ function schnittHtml(kunde, ergebnis, stange, kerf, preise, istDruck, gehr, ansi
             const laengen = Object.keys(proLaenge).map(Number).sort((a, b) => b - a);
             anschlaege += laengen.length;
             if (nurRest && !laengen.length) return "";
-            const zeilen = laengen.map((l, i) => `<tr><td class="n"><b>${i + 1}.</b> Anschlag<br><b style="font-size:15px">${zahl(l)} mm</b></td><td>${proLaenge[l].length} Stück: ${proLaenge[l].map((e) => chipSaege(e, false)).join("")}</td></tr>`).join("");
+            const zeilen = laengen.map((l, i) => { const arr = sortEintraege(proLaenge[l]); const nStk = arr.reduce((n, e) => n + e.items.length, 0); return `<tr><td class="n"><b>${i + 1}.</b> Anschlag<br><b style="font-size:15px">${zahl(l)} mm</b><br>${nStk} Stück</td><td>${arr.map((e) => schrittHtml(e, false)).join("")}</td></tr>`; }).join("");
             return `<div class="blk"><div class="kopf"><div><b>Art. ${esc(g.artNr)}</b> — ${esc(g.bez)}${g.farbe ? ` <span class="farbe">${esc(g.farbe)}</span>` : ""} <span class="farbe">${g.gehrung ? "Säge auf 45° Gehrung" : "gerader Schnitt (90°)"}</span></div>
               <div class="sum"><b>${laengen.length} Anschlag-Einstellung${laengen.length === 1 ? "" : "en"}</b></div></div>
-              <table><thead><tr><th>Anschlag einstellen</th><th>Dann alle diese Stücke sägen (Stange · Position · Maß)</th></tr></thead><tbody>${zeilen}</tbody></table></div>`;
+              <table><thead><tr><th>Anschlag einstellen</th><th>Stangen der Reihe nach auflegen und alle Stücke sägen</th></tr></thead><tbody>${zeilen}</tbody></table></div>`;
         }).join("");
     }
-    const saegeKopf = `<div class="total">${nurRest ? `<div><b>NOCH ZU SÄGEN:</b> ${stueckGesamt - stueckFertig} Stücke (bereits gesägt: ${stueckFertig} von ${stueckGesamt})</div>` : fortschritt}<div><b>${anschlaege}</b> Anschlag-Einstellungen ${nurRest ? "noch" : "insgesamt"}${opts.saegeAlle ? (anschlaegeProProfil > anschlaege ? ` (statt ${anschlaegeProProfil}, wenn man Profil für Profil sägt)` : " (eine je Länge)") : " (eine je Länge und Profil)"}</div><div>Reihenfolge: erst alle Gehrungs-Schnitte (Säge bleibt auf 45°), dann die geraden Schnitte (Winkel nur einmal umstellen). Jeweils von der längsten zur kürzesten Länge – jede Länge wird nur einmal eingestellt und alles Gleichlange in einem Rutsch gesägt.</div></div>`;
-    const hinweis = `<div class="hint">Enthalten: Spannrahmen, Drehtür, Schiebetür (Rahmen-, Flügel-, Zarge-, Schwellen-, Griffleisten-, Querprofil-, Laufschienen-Zuschnitte × Stückzahl). Profile mit gleicher Art.-Nr. und Farbe teilen sich die Stangen. Rollladen, Lichtschacht und IS KIS sind nicht eingerechnet.</div>`;
-    return `<div class="so">${css}${ergebnis.length ? (ansicht === "saege" ? saegeKopf + saegeBloecke : total + bloecke) : "<p>Keine Profil-Zuschnitte vorhanden (Spannrahmen, Drehtür oder Schiebetür in den Warenkorb legen).</p>"}${hinweis}</div>`;
+    const material = ergebnis.map((g) => { const nn = g.alle.filter((st) => !st.istRest).length; const nr = g.alle.filter((st) => st.istRest).length; return `<div>Art. ${esc(String(g.artNr).split(" ")[0])}${g.farbe ? " · " + esc(g.farbe) : ""}: <b>${nn} Stange${nn === 1 ? "" : "n"}</b>${nr ? ` + ${nr} Reststück${nr === 1 ? "" : "e"} aus dem Lager` : ""} à ${zahl(stange)} mm</div>`; }).join("");
+    const saegeKopf = `<div class="total">${nurRest ? "" : "<div><b>Material:</b></div>" + material}${nurRest ? `<div><b>NOCH ZU SÄGEN:</b> ${stueckGesamt - stueckFertig} Stücke (bereits gesägt: ${stueckFertig} von ${stueckGesamt})</div>` : fortschritt}<div><b>${anschlaege}</b> Anschlag-Einstellungen ${nurRest ? "noch" : "insgesamt"}${opts.saegeAlle ? (anschlaegeProProfil > anschlaege ? ` (statt ${anschlaegeProProfil}, wenn man Profil für Profil sägt)` : " (eine je Länge)") : " (eine je Länge und Profil)"}</div><div>Reihenfolge: erst alle Gehrungs-Schnitte (Säge bleibt auf 45°), dann die geraden Schnitte (Winkel nur einmal umstellen). Jeweils von der längsten zur kürzesten Länge – jede Länge wird nur einmal eingestellt und alles Gleichlange in einem Rutsch gesägt.</div></div>`;
+    const zusatzteile = (opts.zusatzteile || []);
+    const zusatzHtml = zusatzteile.length ? `<div class="blk"><div class="kopf"><div><b>Zusatzteile (nicht aus der 6-m-Stange)</b></div></div><table><thead><tr><th>Teil</th><th>Position</th><th class="r">Maß</th><th class="r">Stück</th></tr></thead><tbody>${zusatzteile.map((z) => `<tr><td class="n" style="width:auto">${esc(z.name)}</td><td>${esc(z.pos)}</td><td class="r"><b>${zahl(z.laenge)} mm</b></td><td class="r">${z.anzahl}×</td></tr>`).join("")}</tbody></table></div>` : "";
+    const hinweis = `<div class="hint">Enthalten: Spannrahmen, Drehtür, Schiebetür (Rahmen-, Flügel-, Zarge-, Schwellen-, Griffleisten-, Teilsprossen-, Laufschienen-Zuschnitte × Stückzahl). Profile mit gleicher Art.-Nr. und Farbe teilen sich die Stangen. Rollladen, Lichtschacht und IS KIS sind nicht eingerechnet.</div>`;
+    return `<div class="so">${css}${ergebnis.length ? (ansicht === "saege" ? saegeKopf + saegeBloecke : total + bloecke) + zusatzHtml : "<p>Keine Profil-Zuschnitte vorhanden (Spannrahmen, Drehtür oder Schiebetür in den Warenkorb legen).</p>"}${hinweis}</div>`;
 }
 function druckeSchnittoptimierung(kunde, ergebnis, stange, kerf, preise, gehr, ansicht, opts) {
     const heute = new Date().toLocaleDateString("de-AT");
@@ -3444,7 +3634,7 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
                 React.createElement("button", { onClick: onClose, style: { background: "#1B1F24", color: "#fff", border: 0, borderRadius: "8px", padding: "9px 14px", fontSize: "14px", fontWeight: 600, cursor: "pointer", flexShrink: 0 } }, "← Zurück")),
             React.createElement("div", { className: "text-[13px] text-[#5B6472] bg-white border border-[#D8D4C8] rounded-lg p-3 mb-3 leading-relaxed" },
                 React.createElement("b", { className: "text-[#1B1F24]" }, "So liest du die Liste: "),
-                "Pro Profil (Art.-Nr. + Farbe) siehst du, wie viele 6-m-Stangen du brauchst. Jede Zeile „Stange 1, 2, …“ ist EINE Stange. Die Kästchen daneben sind die Stücke, die du von dieser Stange absägst – oben die Länge, darunter die Position und ob es Breite oder Höhe ist (zum Beschriften). „Rest“ ist das, was von der Stange übrig bleibt. Tippe ein Stück an (oder „ganze Stange gesägt“), sobald es geschnitten ist – dann kannst du unten „Rest drucken“ wählen und bekommst nur noch, was fehlt."),
+                "Der Sägeplan ist Schnittoptimierung und Säge-Reihenfolge in einem: Anschlag auf die genannte Länge stellen, die aufgelisteten Stangen der Reihe nach auflegen und alle Stücke dieser Länge sägen. Der Rest jeder Stange wird dann beim nächsten genannten Anschlag weiterverwendet (steht dabei). Unter jedem Stück steht die Position und ob es Breite oder Höhe ist (zum Beschriften). Tippe ein Stück an, sobald es gesägt ist – dann kannst du unten „Rest drucken“ wählen und bekommst nur noch, was fehlt. Im Stangen-Plan siehst du dasselbe nach Stangen sortiert."),
             React.createElement("div", { className: "text-[12.5px] bg-white border border-[#D8D4C8] rounded-lg p-3 mb-3" },
                 React.createElement("div", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium mb-1.5" }, "Berechnet aus dem Warenkorb (" + positionen.length + " Positionen)"),
                 positionen.map((p, i) => React.createElement("div", { key: i, className: "flex gap-2 py-0.5", style: { borderTop: i ? "1px solid #EEEBE0" : "none" } },
@@ -3478,12 +3668,12 @@ function Schnittoptimierung({ kunde, positionen, onClose }) {
                     React.createElement("button", { onClick: resteUebernehmen, className: "px-3.5 py-2 rounded-md bg-[#E8963B] text-white text-[13px] font-semibold hover:bg-[#d6852e]" }, "Reste ins Restlager übernehmen (ab " + SCHNITT_REST_MIN + " mm)"),
                     React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "Erst drücken, wenn der Auftrag gesägt ist. Verbrauchte Reste werden dabei entfernt.")),
                 meldung && React.createElement("div", { className: "text-[12.5px] text-[#2E7D4F] mb-3" }, meldung)),
-            React.createElement("div", { onClick: ergebnisKlick, dangerouslySetInnerHTML: { __html: schnittHtml(kunde, ergebnis, stangeA, kerfA, preise, false, gehrA, ansicht, { gesaegt, interaktiv: true, saegeAlle }) } }),
+            React.createElement("div", { onClick: ergebnisKlick, dangerouslySetInnerHTML: { __html: schnittHtml(kunde, ergebnis, stangeA, kerfA, preise, false, gehrA, ansicht, { gesaegt, interaktiv: true, saegeAlle, zusatzteile: schnittZusatzteile(positionen) }) } }),
             React.createElement("div", { style: { fontSize: "10.5px", color: "#8A8F98", marginTop: "14px" } }, "Schnittoptimierung · Stand 06.11.2026 (Sägeplan zuerst)"),
             React.createElement("div", { className: "flex justify-end gap-2 mt-3" },
                 gesaegt.length > 0 && React.createElement("button", { onClick: () => gesaegtSpeichern([]), className: "px-3.5 py-2 rounded-md border border-[#D8D4C8] bg-white text-[#5B6472] text-[13px] font-semibold" }, "Haken zurücksetzen"),
-                gesaegt.length > 0 && React.createElement("button", { onClick: () => druckeSchnittoptimierung(kunde, ergebnis, stangeA, kerfA, preise, gehrA, ansicht, { gesaegt, nurRest: true, saegeAlle }), className: "px-3.5 py-2 rounded-md bg-[#E8963B] text-white text-[13px] font-semibold hover:bg-[#d6852e]" }, "Rest drucken (noch zu sägen)"),
-                React.createElement("button", { onClick: () => druckeSchnittoptimierung(kunde, ergebnis, stangeA, kerfA, preise, gehrA, ansicht, { gesaegt, saegeAlle }), className: "px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333]" }, "Drucken"))));
+                gesaegt.length > 0 && React.createElement("button", { onClick: () => druckeSchnittoptimierung(kunde, ergebnis, stangeA, kerfA, preise, gehrA, ansicht, { gesaegt, nurRest: true, saegeAlle, zusatzteile: schnittZusatzteile(positionen) }), className: "px-3.5 py-2 rounded-md bg-[#E8963B] text-white text-[13px] font-semibold hover:bg-[#d6852e]" }, "Rest drucken (noch zu sägen)"),
+                React.createElement("button", { onClick: () => druckeSchnittoptimierung(kunde, ergebnis, stangeA, kerfA, preise, gehrA, ansicht, { gesaegt, saegeAlle, zusatzteile: schnittZusatzteile(positionen) }), className: "px-3.5 py-2 rounded-md bg-[#1B1F24] text-white text-[13px] font-semibold hover:bg-[#333]" }, "Drucken"))));
 }
 // ============================================================
 // GEMEINSAME KUNDENVERWALTUNG (produktübergreifend, alle 6 Konfiguratoren teilen sich diese Liste)
@@ -3556,6 +3746,10 @@ function saveAktiverKunde(name) { var _a; (_a = window.storage) === null || _a =
 // bestehenden Ein-/Ausschalter in den Einstellungen; der Schalter bleibt zusätzlich bestehen,
 // falls der Chef sich selbst diese Tabs vorübergehend ausblenden möchte. "Kunde zuweisen"
 // (Abschluss) und "Liste" sind für alle sichtbar.
+// Beschreibungen, Hinweise und Berechnungen (Zuschläge, Formeln, Art.-Nr.-Erklärungen) sieht nur der Chef —
+// Mitarbeiter bekommen nur Eingabefelder und die gedruckten Fertigungsmaße.
+function chefP(istChef, props, ...kinder) { return istChef ? React.createElement("p", props, ...kinder) : null; }
+function chefDiv(istChef, props, ...kinder) { return istChef ? React.createElement("div", props, ...kinder) : null; }
 function baueTabs(einstellungen, listenAnzahl, istChef) {
     const tabs = [["konfiguration", "Konfiguration"]];
     // Chef sieht Produktion + Kalkulation IMMER (die frueheren Ausblende-Schalter wirken nicht mehr);
@@ -4025,6 +4219,8 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     // Warenkorb: die Liste-Tab zeigt nur die Positionen des aktuell aktiven Kunden (nicht mehr alle Kunden gemischt).
     const listeAktuellerKunde = liste.filter((i) => i.kunde === (kunde || "—"));
     const gesamtBrutto = listeAktuellerKunde.reduce((s, i) => s + i.preisBrutto * i.menge, 0);
+    const [rab, rabAendern] = useRabatte(kunde);
+    const calc = rabattRechnen(listeAktuellerKunde.map((it) => ({ produktKey: "spannrahmen_liste_v1", item: it })), rab);
     const gesamtEk = listeAktuellerKunde.reduce((s, i) => { var _a; return s + ((_a = i.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * i.menge; }, 0);
     return (React.createElement("div", { className: "min-h-screen w-full overflow-x-hidden", style: { background: "#F5F4EF" } },
         React.createElement("style", null, `* { font-family: 'Inter', -apple-system, sans-serif; } .font-oswald { font-family: 'Oswald', sans-serif; }`),
@@ -4071,20 +4267,20 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                                     React.createElement("label", { className: "flex flex-col gap-1 col-span-2" },
                                         React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Bemerkung (optional)"),
                                         React.createElement("input", { type: "text", value: b.bemerkung, onChange: (e) => upd({ bemerkung: e.target.value }), placeholder: "z.B. von unten ca. 5 cm", className: "border border-[#D8D4C8] rounded-md bg-white px-2.5 py-1.5 text-[14px] text-[#1B1F24] outline-none focus:border-[#E8963B] transition-colors" }))),
-                                React.createElement("p", { className: "text-[11px] text-[#8A8F98] mt-1.5" }, "Zuschnitt: " + buerstenLaengeMm(b, rahmenbreite, rahmenhoehe) + " mm"));
+                                chefP(istChef, { className: "text-[11px] text-[#8A8F98] mt-1.5" }, "Zuschnitt: " + buerstenLaengeMm(b, rahmenbreite, rahmenhoehe) + " mm"));
                         })),
                     React.createElement(Select, { label: "Gewebe", value: gewebeTyp, onChange: setGewebeTyp, options: GEWEBE_TYPEN.map((g) => ({ value: g.id, label: `${g.label} (${g.farbe})` })), className: "col-span-2" })),
-                React.createElement("p", { className: "text-[11px] text-[#8A8F98] -mt-2" }, gewebeObj.info),
-                React.createElement("p", { className: "text-[11px] text-[#8A8F98] -mt-2" },
+                chefP(istChef, { className: "text-[11px] text-[#8A8F98] -mt-2" }, gewebeObj.info),
+                chefP(istChef, { className: "text-[11px] text-[#8A8F98] -mt-2" },
                     "Art.-Nr. Rahmenprofil ",
                     profilObj.artNr,
                     " \u00B7 ",
                     profilObj.hinweis),
-                profilObj.schiebeverriegelung && (React.createElement("p", { className: "text-[11.5px] text-[#B96A16] bg-[#FFF8EF] border border-[#E8963B44] rounded-md px-3 py-2" },
+                profilObj.schiebeverriegelung && (chefP(istChef, { className: "text-[11.5px] text-[#B96A16] bg-[#FFF8EF] border border-[#E8963B44] rounded-md px-3 py-2" },
                     "\u26A0 ",
                     profilObj.label,
                     " ben\u00F6tigt Schiebeverriegelung (Art. 11845, 2 Stk pro Element) \u2014 Preis unter \u201EKalkulation \u2192 Produktpreise\" hinterlegen.")),
-                React.createElement("p", { className: "text-[11.5px] text-[#B96A16] bg-[#FFF8EF] border border-[#E8963B44] rounded-md px-3 py-2" },
+                chefP(istChef, { className: "text-[11.5px] text-[#B96A16] bg-[#FFF8EF] border border-[#E8963B44] rounded-md px-3 py-2" },
                     "\u2139 Einh\u00E4ngewinkel: Hakenma\u00DF = Falzma\u00DF + 2mm = ",
                     hakenmass,
                     "mm \u2192 passend: ",
@@ -4094,7 +4290,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                     " (bis ", einhaengewinkelObj === null || einhaengewinkelObj === void 0 ? void 0 :
                     einhaengewinkelObj.h,
                     "mm, 4 Stk pro Element \u2014 2 oben, 2 unten) \u2014 Preis unter \u201EKalkulation \u2192 Produktpreise\" hinterlegen."),
-                hakenversatzAktiv && (React.createElement("p", { className: "text-[11.5px] text-[#B96A16] bg-[#FFF8EF] border border-[#E8963B44] rounded-md px-3 py-2" },
+                hakenversatzAktiv && (chefP(istChef, { className: "text-[11.5px] text-[#B96A16] bg-[#FFF8EF] border border-[#E8963B44] rounded-md px-3 py-2" },
                     "\u26A0 Ma\u00DF-Info Hakenversatz (X-Ma\u00DF ",
                     xMass,
                     "mm): Lichte H\u00F6he \u2212 Versatz = ",
@@ -4341,6 +4537,7 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                                 React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "Menge"),
                                 kostenSichtbar && React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "EK"),
                                 React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "VK (brutto)"),
+                                React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "Rabatt"),
                                 React.createElement("th", { className: "px-2 py-2" }))),
                         React.createElement("tbody", null, listeAktuellerKunde.map((i, __posIdx) => {
                             var _a;
@@ -4364,33 +4561,27 @@ function SpannrahmenKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                                     (((_a = i.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * i.menge).toFixed(2),
                                     " \u20AC"),
                                 React.createElement("td", { className: "px-3 py-2 text-right font-['IBM_Plex_Mono'] text-[#1B1F24]" },
-                                    (i.preisBrutto * i.menge).toFixed(2),
+                                    (calc.zeilen[listeAktuellerKunde.indexOf(i)] || { rabatt: 0 }).rabatt > 0 && React.createElement("div", { style: { textDecoration: "line-through", color: "#8A8F98", fontSize: "11px" } }, (i.preisBrutto * i.menge).toFixed(2) + " \u20AC"),
+                                    (calc.zeilen[listeAktuellerKunde.indexOf(i)] || { netto: i.preisBrutto * i.menge }).netto.toFixed(2),
                                     " \u20AC"),
+                                React.createElement("td", { className: "px-3 py-2 text-right" },
+                                    React.createElement(RabattFeld, { wert: (rab.pos || {})[rabattPosKey({ produktKey: "spannrahmen_liste_v1", item: i })], onChange: (v) => rabAendern((r) => Object.assign({}, r, { pos: Object.assign({}, r.pos, { [rabattPosKey({ produktKey: "spannrahmen_liste_v1", item: i })]: v }) })), titel: "Rabatt auf diese Position" })),
                                 React.createElement("td", { className: "px-2 py-2 text-right whitespace-nowrap" },
                                     React.createElement("button", { onClick: () => ladeZumBearbeiten(i), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: "Bearbeiten" },
                                         React.createElement(Pencil, { size: 14 })),
-                                    i.positionstext && (React.createElement("button", { onClick: () => setOffenerPositionstext(textOffen ? null : i.id), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: textOffen ? "Positionstext ausblenden" : "Positionstext anzeigen" },
+                                    istChef && i.positionstext && (React.createElement("button", { onClick: () => setOffenerPositionstext(textOffen ? null : i.id), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: textOffen ? "Positionstext ausblenden" : "Positionstext anzeigen" },
                                         React.createElement(textOffen ? ChevronUp : ChevronDown, { size: 14 }))),
                                     React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: "Positionstext kopieren" },
                                         React.createElement(Copy, { size: 14 })),
                                     React.createElement("button", { onClick: () => removeFromListe(i.id), className: "text-[#8A8F98] hover:text-[#C0392B]" },
                                         React.createElement(Trash2, { size: 14 })))),
-                                textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
-                                    React.createElement("td", { colSpan: kostenSichtbar ? 9 : 8, className: "px-3 py-3" },
+                                istChef && textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
+                                    React.createElement("td", { colSpan: kostenSichtbar ? 10 : 9, className: "px-3 py-3" },
                                         React.createElement("div", { className: "flex items-start justify-between gap-3" },
                                             React.createElement("pre", { className: "whitespace-pre-wrap flex-1 m-0 text-[12px] font-['IBM_Plex_Mono'] text-[#1B1F24]" }, i.positionstext),
                                             React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1B1F24] text-white text-[12px] font-medium hover:bg-[#333] transition-colors" }, "Kopieren"))))));
                         })))),
-                React.createElement("div", { className: "flex justify-end items-center gap-4 px-1" },
-                    kostenSichtbar && React.createElement("span", { className: "text-[13px] text-[#5B6472]" },
-                        "EK gesamt: ",
-                        React.createElement("span", { className: "font-['IBM_Plex_Mono'] text-[#1B1F24]" },
-                            gesamtEk.toFixed(2),
-                            " \u20AC")),
-                    React.createElement("span", { className: "text-[13px] text-[#5B6472]" }, "Gesamt (brutto)"),
-                    React.createElement("span", { className: "text-[18px] font-['IBM_Plex_Mono'] font-semibold text-[#1B1F24]" },
-                        gesamtBrutto.toFixed(2),
-                        " \u20AC")))))))));
+                React.createElement(RabattSummen, { calc, rab, aendere: rabAendern, ek: kostenSichtbar ? gesamtEk : null }))))))));
 }
 // ============================================================
 // DREHTÜR-KONFIGURATOR (heroal IS Insektenschutz)
@@ -4414,6 +4605,7 @@ const DREHTUER_AUSFUEHRUNG = [
         breiteBasis: "lichte", zuschlagBreite: -2,
         fluegelZuschlagHoehe: -47.7, fluegelZuschlagBreite: -47.4,
         dt3Zusatz: true,
+        teilsprosse: true,
         griffleisteOptional: true,
         hinweis: "heroal Katalog S. 109. Ohne Wetterschenkel/Schwelle (3-seitige Zarge). Korrektur von Thomas (18.09.2026): Rahmenhöhe = angegebenes Maß ohne Abzug, Flügelhöhe = Rahmenhöhe − 47,7mm. Querprofil 12930 & Bürstenprofil unten 12919 werden immer mitgerechnet, Trittschutzblech ist ein Fixpreis, Griffleiste 12931 nur wenn ausgewählt (dann +2× Griffleistenbreite beim Keder).",
     },
@@ -4433,6 +4625,7 @@ const DREHTUER_AUSFUEHRUNG = [
         fluegelZuschlagHoehe: -47.4, fluegelZuschlagBreite: -47.4,
         hinweis: "heroal Katalog S. 111. Mit Schwellenprofil 12921, umlaufende 4-seitige Zarge. Griffleiste 12931 optional (lt. Thomas, 18.09.2026 auch bei DT4 übernommen).",
         schwelleArtNr: "12921",
+        teilsprosse: true,
         griffleisteOptional: true,
     },
     {
@@ -4601,6 +4794,7 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
     // DT3-Tür mitgerechnet. Griffleiste 12931 nur wenn ausgewählt — dann zählt beim Keder zusätzlich
     // 2x die Griffleistenbreite mit (Keder oberhalb + unterhalb der Griffleiste im Gewebe).
     const querprofilLaengeMm = fluegelbreite - 70;
+    const trittschutzblechLaengeMm = fluegelbreite - 44; // Zuschnitt Trittschutzblech (DT3 + DT4) — reiner Produktionswert
     const griffleisteLaengeMm = fluegelbreite - 70;
     const buerstenprofilLaengeMm = fluegelbreite;
     const kederZusatzMm = (ausfuehrungObj.griffleisteOptional && griffleisteVerbaut) ? 2 * griffleisteLaengeMm : 0;
@@ -4646,7 +4840,8 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
         `Zarge: ${ausfuehrungObj.zargeLabel} (Art. ${ausfuehrungObj.zargeArtNr})`,
         `Flügelprofil: ${ausfuehrungObj.fluegelLabel} (Art. ${ausfuehrungObj.fluegelArtNr})`,
         `Scharnier: ${ausfuehrungObj.scharnierLabel} (Art. ${ausfuehrungObj.scharnierArtNr}, ${ausfuehrungObj.scharnierAnzahl}x)`,
-        ausfuehrungObj.dt3Zusatz ? `Querprofil (Art. 12930): ${querprofilLaengeMm.toFixed(0)} mm` : null,
+        ausfuehrungObj.teilsprosse ? `Teilsprosse (Art. 12930): ${querprofilLaengeMm.toFixed(0)} mm` : null,
+        ausfuehrungObj.teilsprosse ? `Trittschutzblech: ${trittschutzblechLaengeMm.toFixed(0)} mm` : null,
         ausfuehrungObj.dt3Zusatz ? `Bürstenprofil unten (Art. 12919): ${buerstenprofilLaengeMm.toFixed(0)} mm` : null,
         ausfuehrungObj.griffleisteOptional && griffleisteVerbaut ? `Griffleiste (Art. 12931): ${griffleisteLaengeMm.toFixed(0)} mm, Position: ${griffleistePosition === "mittig" ? "mittig" : `Maß UK Rahmen–Mitte Griffleiste = ${griffleisteMass !== null && griffleisteMass !== void 0 ? griffleisteMass : "?"} mm`}` : null,
         `Farbe: ${displayLabel}`,
@@ -4656,7 +4851,6 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
     // lt. Thomas (18.09.2026) sollen in der Produktion-Ansicht ALLE Teile aufgelistet sein, nicht nur die Maße.
     // Trittschutzblech (nur DT3): Zuschnitt Flügelbreite − 44mm — reiner Produktionswert, der Preis bleibt
     // lt. Thomas ein Fixpreis (siehe trittblechKosten oben) und hängt NICHT von diesem Maß ab.
-    const trittschutzblechLaengeMm = fluegelbreite - 44;
     const teileliste = [
         { label: "Zarge", artNr: ausfuehrungObj.zargeArtNr, menge: `${zargeUmfangM.toFixed(2)} lfm` },
         { label: "Flügelprofil", artNr: ausfuehrungObj.fluegelArtNr, menge: `${fluegelUmfangM.toFixed(2)} lfm` },
@@ -4700,6 +4894,8 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
     // Warenkorb: die Liste-Tab zeigt nur die Positionen des aktuell aktiven Kunden (nicht mehr alle Kunden gemischt).
     const listeAktuellerKunde = liste.filter((i) => i.kunde === (kunde || "—"));
     const gesamtBrutto = listeAktuellerKunde.reduce((s, i) => s + i.preisBrutto * i.menge, 0);
+    const [rab, rabAendern] = useRabatte(kunde);
+    const calc = rabattRechnen(listeAktuellerKunde.map((it) => ({ produktKey: "drehtuer_liste_v1", item: it })), rab);
     const gesamtEk = listeAktuellerKunde.reduce((s, i) => { var _a; return s + ((_a = i.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * i.menge; }, 0);
     return (React.createElement("div", { className: "min-h-screen w-full overflow-x-hidden", style: { background: "#F5F4EF" } },
         React.createElement("style", null, `* { font-family: 'Inter', -apple-system, sans-serif; } .font-oswald { font-family: 'Oswald', sans-serif; }`),
@@ -4727,8 +4923,8 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                     griffleisteVerbaut && (React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6" },
                         React.createElement(Select, { label: "Griffleiste Position", value: griffleistePosition, onChange: setGriffleistePosition, options: [{ value: "mittig", label: "Mittig" }, { value: "mass", label: "Eigenes Ma\u00DF" }] }),
                         griffleistePosition === "mass" && React.createElement(Num, { label: "Ma\u00DF UK Rahmen \u2013 Mitte Griffleiste", value: griffleisteMass, onChange: setGriffleisteMass, unit: "mm", min: 0, allowEmpty: true }))))),
-                React.createElement("p", { className: "text-[11px] text-[#8A8F98] -mt-2" }, gewebeObj.info),
-                React.createElement("div", { className: "border border-[#D8D4C8] rounded-md bg-[#FFF8EF] px-3 py-2 text-[11.5px] text-[#8A6438]" },
+                chefP(istChef, { className: "text-[11px] text-[#8A8F98] -mt-2" }, gewebeObj.info),
+                chefDiv(istChef, { className: "border border-[#D8D4C8] rounded-md bg-[#FFF8EF] px-3 py-2 text-[11.5px] text-[#8A6438]" },
                     React.createElement("b", null, ausfuehrungObj.label),
                     " \u2014 Zarge: ",
                     ausfuehrungObj.zargeLabel,
@@ -4797,20 +4993,26 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                             " ",
                             React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm")),
                         React.createElement("div", { className: "text-[10px] text-[#8A8F98] mt-0.5" },
+                            `Rechenweg: Fl\u00FCgelbreite ${fluegelbreite.toFixed(1)} \u2212 70 = ${griffleisteLaengeMm.toFixed(1)} mm \u00B7 `,
                             "Art. 12931 \u00B7 Position: ",
                             griffleistePosition === "mittig" ? "mittig" : `UK Rahmen\u2013Mitte = ${griffleisteMass !== null && griffleisteMass !== void 0 ? griffleisteMass : "?"} mm`))),
-                    ausfuehrungObj.dt3Zusatz && (React.createElement("div", { className: "border-2 border-[#E8963B] rounded-lg bg-[#FFF8EF] px-3.5 py-2.5" },
+                    ausfuehrungObj.griffleisteOptional && !griffleisteVerbaut && (React.createElement("div", { className: "border border-dashed border-[#D8D4C8] rounded-lg bg-white px-3.5 py-2.5" },
+                        React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "Griffleiste"),
+                        React.createElement("div", { className: "text-[12px] text-[#8A8F98] mt-1" }, "nicht verbaut \u2013 in \u201EKonfiguration\u201C anhaken, dann erscheint hier das Ma\u00DF (Fl\u00FCgelbreite \u2212 70 = " + (fluegelbreite - 70).toFixed(0) + " mm)"))),
+                    ausfuehrungObj.teilsprosse && (React.createElement("div", { className: "border-2 border-[#E8963B] rounded-lg bg-[#FFF8EF] px-3.5 py-2.5" },
                         React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "Trittschutzblech"),
                         React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#B96A16] font-semibold mt-0.5" },
                             trittschutzblechLaengeMm.toFixed(0),
                             " ",
-                            React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm")))),
-                    ausfuehrungObj.dt3Zusatz && (React.createElement("div", { className: "border-2 border-[#E8963B] rounded-lg bg-[#FFF8EF] px-3.5 py-2.5" },
-                        React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "Querprofil"),
+                            React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm")),
+                        React.createElement("div", { className: "text-[10px] text-[#8A8F98] mt-0.5" }, `Rechenweg: Fl\u00FCgelbreite ${fluegelbreite.toFixed(1)} \u2212 44 = ${trittschutzblechLaengeMm.toFixed(1)} mm`))),
+                    ausfuehrungObj.teilsprosse && (React.createElement("div", { className: "border-2 border-[#E8963B] rounded-lg bg-[#FFF8EF] px-3.5 py-2.5" },
+                        React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "Teilsprosse (Art. 12930)"),
                         React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#B96A16] font-semibold mt-0.5" },
                             querprofilLaengeMm.toFixed(0),
                             " ",
-                            React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm")))),
+                            React.createElement("span", { className: "text-[12px] text-[#8A8F98]" }, "mm")),
+                        React.createElement("div", { className: "text-[10px] text-[#8A8F98] mt-0.5" }, `Rechenweg: Fl\u00FCgelbreite ${fluegelbreite.toFixed(1)} \u2212 70 = ${querprofilLaengeMm.toFixed(1)} mm`))),
                     ausfuehrungObj.dt3Zusatz && (React.createElement("div", { className: "border-2 border-[#E8963B] rounded-lg bg-[#FFF8EF] px-3.5 py-2.5" },
                         React.createElement("div", { className: "text-[10.5px] uppercase tracking-wide text-[#8A8F98] font-medium" }, "B\u00FCrstenprofil unten"),
                         React.createElement("div", { className: "text-[19px] font-['IBM_Plex_Mono'] text-[#B96A16] font-semibold mt-0.5" },
@@ -4865,9 +5067,11 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                         ["Rahmenbreite (Zarge)", `${rahmenbreite} mm`, true], ["Rahmenhöhe (Zarge)", `${rahmenhoehe} mm`, true],
                         ["Flügelbreite", `${fluegelbreite.toFixed(1)} mm`, true], ["Flügelhöhe", `${fluegelhoehe.toFixed(1)} mm`, true],
                         ...(ausfuehrungObj.griffleisteOptional && griffleisteVerbaut ? [["Griffleiste (Art. 12931)", `${griffleisteLaengeMm.toFixed(0)} mm — Position: ${griffleistePosition === "mittig" ? "mittig" : `UK Rahmen–Mitte = ${griffleisteMass !== null && griffleisteMass !== void 0 ? griffleisteMass : "?"} mm`}`, true]] : []),
-                        ...(ausfuehrungObj.dt3Zusatz ? [
+                        ...(ausfuehrungObj.teilsprosse ? [
                             ["Trittschutzblech", `${trittschutzblechLaengeMm.toFixed(0)} mm`, true],
-                            ["Querprofil (Art. 12930)", `${querprofilLaengeMm.toFixed(0)} mm`, true],
+                            ["Teilsprosse (Art. 12930)", `${querprofilLaengeMm.toFixed(0)} mm`, true],
+                        ] : []),
+                        ...(ausfuehrungObj.dt3Zusatz ? [
                             ["Bürstenprofil unten (Art. 12919)", `${buerstenprofilLaengeMm.toFixed(0)} mm`, true],
                         ] : []),
                         ["Türanschlag", anschlag === "links" ? "Links" : "Rechts"],
@@ -5127,6 +5331,7 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                                 React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "Menge"),
                                 kostenSichtbar && React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "EK"),
                                 React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "VK (brutto)"),
+                                React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "Rabatt"),
                                 React.createElement("th", { className: "px-2 py-2" }))),
                         React.createElement("tbody", null, listeAktuellerKunde.map((i, __posIdx) => {
                             var _a;
@@ -5153,33 +5358,27 @@ function DrehtuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultK
                                     (((_a = i.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * i.menge).toFixed(2),
                                     " \u20AC"),
                                 React.createElement("td", { className: "px-3 py-2 text-right font-['IBM_Plex_Mono'] text-[#1B1F24]" },
-                                    (i.preisBrutto * i.menge).toFixed(2),
+                                    (calc.zeilen[listeAktuellerKunde.indexOf(i)] || { rabatt: 0 }).rabatt > 0 && React.createElement("div", { style: { textDecoration: "line-through", color: "#8A8F98", fontSize: "11px" } }, (i.preisBrutto * i.menge).toFixed(2) + " \u20AC"),
+                                    (calc.zeilen[listeAktuellerKunde.indexOf(i)] || { netto: i.preisBrutto * i.menge }).netto.toFixed(2),
                                     " \u20AC"),
+                                React.createElement("td", { className: "px-3 py-2 text-right" },
+                                    React.createElement(RabattFeld, { wert: (rab.pos || {})[rabattPosKey({ produktKey: "drehtuer_liste_v1", item: i })], onChange: (v) => rabAendern((r) => Object.assign({}, r, { pos: Object.assign({}, r.pos, { [rabattPosKey({ produktKey: "drehtuer_liste_v1", item: i })]: v }) })), titel: "Rabatt auf diese Position" })),
                                 React.createElement("td", { className: "px-2 py-2 text-right whitespace-nowrap" },
                                     React.createElement("button", { onClick: () => ladeZumBearbeiten(i), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: "Bearbeiten" },
                                         React.createElement(Pencil, { size: 14 })),
-                                    i.positionstext && (React.createElement("button", { onClick: () => setOffenerPositionstext(textOffen ? null : i.id), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: textOffen ? "Positionstext ausblenden" : "Positionstext anzeigen" },
+                                    istChef && i.positionstext && (React.createElement("button", { onClick: () => setOffenerPositionstext(textOffen ? null : i.id), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: textOffen ? "Positionstext ausblenden" : "Positionstext anzeigen" },
                                         React.createElement(textOffen ? ChevronUp : ChevronDown, { size: 14 }))),
                                     React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: "Positionstext kopieren" },
                                         React.createElement(Copy, { size: 14 })),
                                     React.createElement("button", { onClick: () => removeFromListe(i.id), className: "text-[#8A8F98] hover:text-[#C0392B]" },
                                         React.createElement(Trash2, { size: 14 })))),
-                                textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
-                                    React.createElement("td", { colSpan: kostenSichtbar ? 9 : 8, className: "px-3 py-3" },
+                                istChef && textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
+                                    React.createElement("td", { colSpan: kostenSichtbar ? 10 : 9, className: "px-3 py-3" },
                                         React.createElement("div", { className: "flex items-start justify-between gap-3" },
                                             React.createElement("pre", { className: "whitespace-pre-wrap flex-1 m-0 text-[12px] font-['IBM_Plex_Mono'] text-[#1B1F24]" }, i.positionstext),
                                             React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1B1F24] text-white text-[12px] font-medium hover:bg-[#333] transition-colors" }, "Kopieren"))))));
                         })))),
-                React.createElement("div", { className: "flex justify-end items-center gap-4 px-1" },
-                    kostenSichtbar && React.createElement("span", { className: "text-[13px] text-[#5B6472]" },
-                        "EK gesamt: ",
-                        React.createElement("span", { className: "font-['IBM_Plex_Mono'] text-[#1B1F24]" },
-                            gesamtEk.toFixed(2),
-                            " \u20AC")),
-                    React.createElement("span", { className: "text-[13px] text-[#5B6472]" }, "Gesamt (brutto)"),
-                    React.createElement("span", { className: "text-[18px] font-['IBM_Plex_Mono'] font-semibold text-[#1B1F24]" },
-                        gesamtBrutto.toFixed(2),
-                        " \u20AC")))))))));
+                React.createElement(RabattSummen, { calc, rab, aendere: rabAendern, ek: kostenSichtbar ? gesamtEk : null }))))))));
 }
 // ============================================================
 // SCHIEBETÜR-KONFIGURATOR (heroal IS Insektenschutz)
@@ -5418,6 +5617,8 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
     // Warenkorb: die Liste-Tab zeigt nur die Positionen des aktuell aktiven Kunden (nicht mehr alle Kunden gemischt).
     const listeAktuellerKunde = liste.filter((i) => i.kunde === (kunde || "—"));
     const gesamtBrutto = listeAktuellerKunde.reduce((s, i) => s + i.preisBrutto * i.menge, 0);
+    const [rab, rabAendern] = useRabatte(kunde);
+    const calc = rabattRechnen(listeAktuellerKunde.map((it) => ({ produktKey: "schiebetuer_liste_v1", item: it })), rab);
     const gesamtEk = listeAktuellerKunde.reduce((s, i) => { var _a; return s + ((_a = i.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * i.menge; }, 0);
     return (React.createElement("div", { className: "min-h-screen w-full overflow-x-hidden", style: { background: "#F5F4EF" } },
         React.createElement("style", null, `* { font-family: 'Inter', -apple-system, sans-serif; } .font-oswald { font-family: 'Oswald', sans-serif; }`),
@@ -5463,7 +5664,7 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                                 React.createElement("label", { className: "flex flex-col gap-1 col-span-2" },
                                     React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Bemerkung (optional)"),
                                     React.createElement("input", { type: "text", value: b.bemerkung, onChange: (e) => upd({ bemerkung: e.target.value }), placeholder: "z.B. von unten ca. 5 cm", className: "border border-[#D8D4C8] rounded-md bg-white px-2.5 py-1.5 text-[14px] text-[#1B1F24] outline-none focus:border-[#E8963B] transition-colors" }))),
-                            React.createElement("p", { className: "text-[11px] text-[#8A8F98] mt-1.5" }, "Zuschnitt: " + buerstenLaengeMm(b, fluegelbreite, fluegelhoehe) + " mm"));
+                            chefP(istChef, { className: "text-[11px] text-[#8A8F98] mt-1.5" }, "Zuschnitt: " + buerstenLaengeMm(b, fluegelbreite, fluegelhoehe) + " mm"));
                     })),
                 React.createElement("div", { className: "border border-[#D8D4C8] rounded-md bg-white px-3 py-2.5 flex flex-col gap-2" },
                     React.createElement("label", { className: "flex items-center gap-2 text-[13px] text-[#1B1F24]" },
@@ -5472,8 +5673,8 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                     griffleisteVerbaut && (React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6" },
                         React.createElement(Select, { label: "Griffleiste Position", value: griffleistePosition, onChange: setGriffleistePosition, options: [{ value: "mittig", label: "Mittig" }, { value: "mass", label: "Eigenes Ma\u00DF" }] }),
                         griffleistePosition === "mass" && React.createElement(Num, { label: "Ma\u00DF UK Rahmen \u2013 Mitte Griffleiste", value: griffleisteMass, onChange: setGriffleisteMass, unit: "mm", min: 0, allowEmpty: true })))),
-                React.createElement("p", { className: "text-[11px] text-[#8A8F98] -mt-2" }, gewebeObj.info),
-                React.createElement("div", { className: `border rounded-md px-3 py-2 text-[11.5px] ${ausfuehrungObj.bestaetigtBreite ? "border-[#D8D4C8] bg-[#FFF8EF] text-[#8A6438]" : "border-[#C0392B] bg-[#FDEDEB] text-[#C0392B]"}` },
+                chefP(istChef, { className: "text-[11px] text-[#8A8F98] -mt-2" }, gewebeObj.info),
+                chefDiv(istChef, { className: `border rounded-md px-3 py-2 text-[11.5px] ${ausfuehrungObj.bestaetigtBreite ? "border-[#D8D4C8] bg-[#FFF8EF] text-[#8A6438]" : "border-[#C0392B] bg-[#FDEDEB] text-[#C0392B]"}` },
                     !ausfuehrungObj.bestaetigtBreite && "⚠ ",
                     React.createElement("b", null, ausfuehrungObj.label),
                     " \u2014 Zarge: ",
@@ -5762,6 +5963,7 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                                 React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "Menge"),
                                 kostenSichtbar && React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "EK"),
                                 React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "VK (brutto)"),
+                                React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "Rabatt"),
                                 React.createElement("th", { className: "px-2 py-2" }))),
                         React.createElement("tbody", null, listeAktuellerKunde.map((i, __posIdx) => {
                             var _a;
@@ -5788,33 +5990,27 @@ function SchiebetuerKonfigurator({ onZurueck, editRequest, onEditConsumed, defau
                                     (((_a = i.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * i.menge).toFixed(2),
                                     " \u20AC"),
                                 React.createElement("td", { className: "px-3 py-2 text-right font-['IBM_Plex_Mono'] text-[#1B1F24]" },
-                                    (i.preisBrutto * i.menge).toFixed(2),
+                                    (calc.zeilen[listeAktuellerKunde.indexOf(i)] || { rabatt: 0 }).rabatt > 0 && React.createElement("div", { style: { textDecoration: "line-through", color: "#8A8F98", fontSize: "11px" } }, (i.preisBrutto * i.menge).toFixed(2) + " \u20AC"),
+                                    (calc.zeilen[listeAktuellerKunde.indexOf(i)] || { netto: i.preisBrutto * i.menge }).netto.toFixed(2),
                                     " \u20AC"),
+                                React.createElement("td", { className: "px-3 py-2 text-right" },
+                                    React.createElement(RabattFeld, { wert: (rab.pos || {})[rabattPosKey({ produktKey: "schiebetuer_liste_v1", item: i })], onChange: (v) => rabAendern((r) => Object.assign({}, r, { pos: Object.assign({}, r.pos, { [rabattPosKey({ produktKey: "schiebetuer_liste_v1", item: i })]: v }) })), titel: "Rabatt auf diese Position" })),
                                 React.createElement("td", { className: "px-2 py-2 text-right whitespace-nowrap" },
                                     React.createElement("button", { onClick: () => ladeZumBearbeiten(i), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: "Bearbeiten" },
                                         React.createElement(Pencil, { size: 14 })),
-                                    i.positionstext && (React.createElement("button", { onClick: () => setOffenerPositionstext(textOffen ? null : i.id), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: textOffen ? "Positionstext ausblenden" : "Positionstext anzeigen" },
+                                    istChef && i.positionstext && (React.createElement("button", { onClick: () => setOffenerPositionstext(textOffen ? null : i.id), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: textOffen ? "Positionstext ausblenden" : "Positionstext anzeigen" },
                                         React.createElement(textOffen ? ChevronUp : ChevronDown, { size: 14 }))),
                                     React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: "Positionstext kopieren" },
                                         React.createElement(Copy, { size: 14 })),
                                     React.createElement("button", { onClick: () => removeFromListe(i.id), className: "text-[#8A8F98] hover:text-[#C0392B]" },
                                         React.createElement(Trash2, { size: 14 })))),
-                                textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
-                                    React.createElement("td", { colSpan: kostenSichtbar ? 9 : 8, className: "px-3 py-3" },
+                                istChef && textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
+                                    React.createElement("td", { colSpan: kostenSichtbar ? 10 : 9, className: "px-3 py-3" },
                                         React.createElement("div", { className: "flex items-start justify-between gap-3" },
                                             React.createElement("pre", { className: "whitespace-pre-wrap flex-1 m-0 text-[12px] font-['IBM_Plex_Mono'] text-[#1B1F24]" }, i.positionstext),
                                             React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1B1F24] text-white text-[12px] font-medium hover:bg-[#333] transition-colors" }, "Kopieren"))))));
                         })))),
-                React.createElement("div", { className: "flex justify-end items-center gap-4 px-1" },
-                    kostenSichtbar && React.createElement("span", { className: "text-[13px] text-[#5B6472]" },
-                        "EK gesamt: ",
-                        React.createElement("span", { className: "font-['IBM_Plex_Mono'] text-[#1B1F24]" },
-                            gesamtEk.toFixed(2),
-                            " \u20AC")),
-                    React.createElement("span", { className: "text-[13px] text-[#5B6472]" }, "Gesamt (brutto)"),
-                    React.createElement("span", { className: "text-[18px] font-['IBM_Plex_Mono'] font-semibold text-[#1B1F24]" },
-                        gesamtBrutto.toFixed(2),
-                        " \u20AC")))))))));
+                React.createElement(RabattSummen, { calc, rab, aendere: rabAendern, ek: kostenSichtbar ? gesamtEk : null }))))))));
 }
 // ============================================================
 // LICHTSCHACHTABDECKUNG-KONFIGURATOR (heroal IS Insektenschutz)
@@ -5980,6 +6176,8 @@ function LichtschachtKonfigurator({ onZurueck, editRequest, onEditConsumed, defa
     // Warenkorb: die Liste-Tab zeigt nur die Positionen des aktuell aktiven Kunden (nicht mehr alle Kunden gemischt).
     const listeAktuellerKunde = liste.filter((i) => i.kunde === (kunde || "—"));
     const gesamtBrutto = listeAktuellerKunde.reduce((s, i) => s + i.preisBrutto * i.menge, 0);
+    const [rab, rabAendern] = useRabatte(kunde);
+    const calc = rabattRechnen(listeAktuellerKunde.map((it) => ({ produktKey: "lichtschacht_liste_v1", item: it })), rab);
     const gesamtEk = listeAktuellerKunde.reduce((s, i) => { var _a; return s + ((_a = i.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * i.menge; }, 0);
     return (React.createElement("div", { className: "min-h-screen w-full overflow-x-hidden", style: { background: "#F5F4EF" } },
         React.createElement("style", null, `* { font-family: 'Inter', -apple-system, sans-serif; } .font-oswald { font-family: 'Oswald', sans-serif; }`),
@@ -5999,8 +6197,8 @@ function LichtschachtKonfigurator({ onZurueck, editRequest, onEditConsumed, defa
                     React.createElement(Num, { label: "Rahmenh\u00F6he", value: rahmenhoehe, onChange: setRahmenhoehe, unit: "mm", min: 200, allowEmpty: true }),
                     React.createElement(Select, { label: "Ausf\u00FChrung", value: ausfuehrungTyp, onChange: setAusfuehrungTyp, options: LICHTSCHACHT_AUSFUEHRUNG.map((a) => ({ value: a.id, label: a.label })), className: "col-span-2" }),
                     React.createElement(Select, { label: "Abdeckmaterial", value: materialTyp, onChange: setMaterialTyp, options: LICHTSCHACHT_MATERIAL.map((m) => ({ value: m.id, label: `${m.label} (${m.farbe})` })), className: "col-span-2" })),
-                React.createElement("p", { className: "text-[11px] text-[#8A8F98] -mt-2" }, materialObj.info),
-                React.createElement("p", { className: "text-[11px] text-[#8A8F98]" }, ausfuehrungObj.id === "offen" ? "Einsatzbereich: Unterhalb liegende Kellerfenster." : "Einsatzbereich: Unterhalb liegende oder oberhalb überstehende Kellerfenster, mit Acrylglas-Option."))),
+                chefP(istChef, { className: "text-[11px] text-[#8A8F98] -mt-2" }, materialObj.info),
+                chefP(istChef, { className: "text-[11px] text-[#8A8F98]" }, ausfuehrungObj.id === "offen" ? "Einsatzbereich: Unterhalb liegende Kellerfenster." : "Einsatzbereich: Unterhalb liegende oder oberhalb überstehende Kellerfenster, mit Acrylglas-Option."))),
             tab === "konfiguration" && (React.createElement("div", { className: "border-t border-[#E2DFD3] pt-4 flex flex-col sm:flex-row items-stretch sm:items-end gap-3" },
                 React.createElement("label", { className: "flex flex-col gap-1 flex-1" },
                     React.createElement("span", { className: "text-[11px] uppercase tracking-wide text-[#5B6472] font-medium" }, "Info-Position für Monteure (optional)"),
@@ -6177,6 +6375,7 @@ function LichtschachtKonfigurator({ onZurueck, editRequest, onEditConsumed, defa
                                 React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "Menge"),
                                 kostenSichtbar && React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "EK"),
                                 React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "VK (brutto)"),
+                                React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "Rabatt"),
                                 React.createElement("th", { className: "px-2 py-2" }))),
                         React.createElement("tbody", null, listeAktuellerKunde.map((i, __posIdx) => {
                             var _a;
@@ -6200,33 +6399,27 @@ function LichtschachtKonfigurator({ onZurueck, editRequest, onEditConsumed, defa
                                     (((_a = i.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * i.menge).toFixed(2),
                                     " \u20AC"),
                                 React.createElement("td", { className: "px-3 py-2 text-right font-['IBM_Plex_Mono'] text-[#1B1F24]" },
-                                    (i.preisBrutto * i.menge).toFixed(2),
+                                    (calc.zeilen[listeAktuellerKunde.indexOf(i)] || { rabatt: 0 }).rabatt > 0 && React.createElement("div", { style: { textDecoration: "line-through", color: "#8A8F98", fontSize: "11px" } }, (i.preisBrutto * i.menge).toFixed(2) + " \u20AC"),
+                                    (calc.zeilen[listeAktuellerKunde.indexOf(i)] || { netto: i.preisBrutto * i.menge }).netto.toFixed(2),
                                     " \u20AC"),
+                                React.createElement("td", { className: "px-3 py-2 text-right" },
+                                    React.createElement(RabattFeld, { wert: (rab.pos || {})[rabattPosKey({ produktKey: "lichtschacht_liste_v1", item: i })], onChange: (v) => rabAendern((r) => Object.assign({}, r, { pos: Object.assign({}, r.pos, { [rabattPosKey({ produktKey: "lichtschacht_liste_v1", item: i })]: v }) })), titel: "Rabatt auf diese Position" })),
                                 React.createElement("td", { className: "px-2 py-2 text-right whitespace-nowrap" },
                                     React.createElement("button", { onClick: () => ladeZumBearbeiten(i), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: "Bearbeiten" },
                                         React.createElement(Pencil, { size: 14 })),
-                                    i.positionstext && (React.createElement("button", { onClick: () => setOffenerPositionstext(textOffen ? null : i.id), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: textOffen ? "Positionstext ausblenden" : "Positionstext anzeigen" },
+                                    istChef && i.positionstext && (React.createElement("button", { onClick: () => setOffenerPositionstext(textOffen ? null : i.id), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: textOffen ? "Positionstext ausblenden" : "Positionstext anzeigen" },
                                         React.createElement(textOffen ? ChevronUp : ChevronDown, { size: 14 }))),
                                     React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: "Positionstext kopieren" },
                                         React.createElement(Copy, { size: 14 })),
                                     React.createElement("button", { onClick: () => removeFromListe(i.id), className: "text-[#8A8F98] hover:text-[#C0392B]" },
                                         React.createElement(Trash2, { size: 14 })))),
-                                textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
-                                    React.createElement("td", { colSpan: kostenSichtbar ? 9 : 8, className: "px-3 py-3" },
+                                istChef && textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
+                                    React.createElement("td", { colSpan: kostenSichtbar ? 10 : 9, className: "px-3 py-3" },
                                         React.createElement("div", { className: "flex items-start justify-between gap-3" },
                                             React.createElement("pre", { className: "whitespace-pre-wrap flex-1 m-0 text-[12px] font-['IBM_Plex_Mono'] text-[#1B1F24]" }, i.positionstext),
                                             React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1B1F24] text-white text-[12px] font-medium hover:bg-[#333] transition-colors" }, "Kopieren"))))));
                         })))),
-                React.createElement("div", { className: "flex justify-end items-center gap-4 px-1" },
-                    kostenSichtbar && React.createElement("span", { className: "text-[13px] text-[#5B6472]" },
-                        "EK gesamt: ",
-                        React.createElement("span", { className: "font-['IBM_Plex_Mono'] text-[#1B1F24]" },
-                            gesamtEk.toFixed(2),
-                            " \u20AC")),
-                    React.createElement("span", { className: "text-[13px] text-[#5B6472]" }, "Gesamt (brutto)"),
-                    React.createElement("span", { className: "text-[18px] font-['IBM_Plex_Mono'] font-semibold text-[#1B1F24]" },
-                        gesamtBrutto.toFixed(2),
-                        " \u20AC")))))))));
+                React.createElement(RabattSummen, { calc, rab, aendere: rabAendern, ek: kostenSichtbar ? gesamtEk : null }))))))));
 }
 // ============================================================
 // IS KIS-KONFIGURATOR (Insektengitter Rollo, heroal IS Katalog S. 218-219)
@@ -6428,6 +6621,8 @@ function KisKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde,
     // Warenkorb: die Liste-Tab zeigt nur die Positionen des aktuell aktiven Kunden (nicht mehr alle Kunden gemischt).
     const listeAktuellerKunde = liste.filter((i) => i.kunde === (kunde || "—"));
     const gesamtBrutto = listeAktuellerKunde.reduce((s, i) => s + i.preisBrutto * i.menge, 0);
+    const [rab, rabAendern] = useRabatte(kunde);
+    const calc = rabattRechnen(listeAktuellerKunde.map((it) => ({ produktKey: "kis_liste_v1", item: it })), rab);
     const gesamtEk = listeAktuellerKunde.reduce((s, i) => { var _a; return s + ((_a = i.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * i.menge; }, 0);
     return (React.createElement("div", { className: "min-h-screen w-full overflow-x-hidden", style: { background: "#F5F4EF" } },
         React.createElement("style", null, `* { font-family: 'Inter', -apple-system, sans-serif; } .font-oswald { font-family: 'Oswald', sans-serif; }`),
@@ -6688,6 +6883,7 @@ function KisKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde,
                                 React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "Menge"),
                                 kostenSichtbar && React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "EK"),
                                 React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "VK (brutto)"),
+                                React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "Rabatt"),
                                 React.createElement("th", { className: "px-2 py-2" }))),
                         React.createElement("tbody", null, listeAktuellerKunde.map((i, __posIdx) => {
                             var _a;
@@ -6708,33 +6904,27 @@ function KisKonfigurator({ onZurueck, editRequest, onEditConsumed, defaultKunde,
                                     (((_a = i.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * i.menge).toFixed(2),
                                     " \u20AC"),
                                 React.createElement("td", { className: "px-3 py-2 text-right font-['IBM_Plex_Mono'] text-[#1B1F24]" },
-                                    (i.preisBrutto * i.menge).toFixed(2),
+                                    (calc.zeilen[listeAktuellerKunde.indexOf(i)] || { rabatt: 0 }).rabatt > 0 && React.createElement("div", { style: { textDecoration: "line-through", color: "#8A8F98", fontSize: "11px" } }, (i.preisBrutto * i.menge).toFixed(2) + " \u20AC"),
+                                    (calc.zeilen[listeAktuellerKunde.indexOf(i)] || { netto: i.preisBrutto * i.menge }).netto.toFixed(2),
                                     " \u20AC"),
+                                React.createElement("td", { className: "px-3 py-2 text-right" },
+                                    React.createElement(RabattFeld, { wert: (rab.pos || {})[rabattPosKey({ produktKey: "kis_liste_v1", item: i })], onChange: (v) => rabAendern((r) => Object.assign({}, r, { pos: Object.assign({}, r.pos, { [rabattPosKey({ produktKey: "kis_liste_v1", item: i })]: v }) })), titel: "Rabatt auf diese Position" })),
                                 React.createElement("td", { className: "px-2 py-2 text-right whitespace-nowrap" },
                                     React.createElement("button", { onClick: () => ladeZumBearbeiten(i), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: "Bearbeiten" },
                                         React.createElement(Pencil, { size: 14 })),
-                                    i.positionstext && (React.createElement("button", { onClick: () => setOffenerPositionstext(textOffen ? null : i.id), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: textOffen ? "Positionstext ausblenden" : "Positionstext anzeigen" },
+                                    istChef && i.positionstext && (React.createElement("button", { onClick: () => setOffenerPositionstext(textOffen ? null : i.id), className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: textOffen ? "Positionstext ausblenden" : "Positionstext anzeigen" },
                                         React.createElement(textOffen ? ChevronUp : ChevronDown, { size: 14 }))),
                                     React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "text-[#8A8F98] hover:text-[#1B1F24] mr-2", title: "Positionstext kopieren" },
                                         React.createElement(Copy, { size: 14 })),
                                     React.createElement("button", { onClick: () => removeFromListe(i.id), className: "text-[#8A8F98] hover:text-[#C0392B]" },
                                         React.createElement(Trash2, { size: 14 })))),
-                                textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
-                                    React.createElement("td", { colSpan: kostenSichtbar ? 9 : 8, className: "px-3 py-3" },
+                                istChef && textOffen && i.positionstext && React.createElement("tr", { className: "border-t border-[#E2DFD3] bg-[#F5F4EF]" },
+                                    React.createElement("td", { colSpan: kostenSichtbar ? 10 : 9, className: "px-3 py-3" },
                                         React.createElement("div", { className: "flex items-start justify-between gap-3" },
                                             React.createElement("pre", { className: "whitespace-pre-wrap flex-1 m-0 text-[12px] font-['IBM_Plex_Mono'] text-[#1B1F24]" }, i.positionstext),
                                             React.createElement("button", { onClick: () => { var _a; return (_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText(i.positionstext); }, className: "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1B1F24] text-white text-[12px] font-medium hover:bg-[#333] transition-colors" }, "Kopieren"))))));
                         })))),
-                React.createElement("div", { className: "flex justify-end items-center gap-4 px-1" },
-                    kostenSichtbar && React.createElement("span", { className: "text-[13px] text-[#5B6472]" },
-                        "EK gesamt: ",
-                        React.createElement("span", { className: "font-['IBM_Plex_Mono'] text-[#1B1F24]" },
-                            gesamtEk.toFixed(2),
-                            " \u20AC")),
-                    React.createElement("span", { className: "text-[13px] text-[#5B6472]" }, "Gesamt (brutto)"),
-                    React.createElement("span", { className: "text-[18px] font-['IBM_Plex_Mono'] font-semibold text-[#1B1F24]" },
-                        gesamtBrutto.toFixed(2),
-                        " \u20AC")))))))));
+                React.createElement(RabattSummen, { calc, rab, aendere: rabAendern, ek: kostenSichtbar ? gesamtEk : null }))))))));
 }
 // ============================================================
 // KUNDENÜBERSICHT — führt Positionen aus allen 6 Produktlisten pro Kunde zusammen
@@ -6837,6 +7027,7 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
     const [kundeAdresse, setKundeAdresse] = useState(null); // {street, city, phone, email, isBusiness, uid} — für den Briefkopf im Ausdruck
     const [positionen, setPositionen] = useState([]); // [{produktKey, produktLabel, item}]
     const [ladeStatus, setLadeStatus] = useState("idle");
+    const [rab, rabAendern] = useRabatte(ausgewaehlt);
     useEffect(() => {
         loadKunden(setKunden);
         (async () => {
@@ -6891,8 +7082,9 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
     const kundeWaehlen = (name) => { setAusgewaehlt(name); setKundeAdresse(null); loadKundeVollDetails(name, setKundeAdresse); ladePositionen(name); };
     const gesamtEk = positionen.reduce((s, p) => { var _a; return s + ((_a = p.item.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * p.item.menge; }, 0);
     const gesamtBrutto = positionen.reduce((s, p) => { var _a; return s + ((_a = p.item.preisBrutto) !== null && _a !== void 0 ? _a : 0) * p.item.menge; }, 0);
+    const calc = rabattRechnen(positionen, rab);
     const alleDrucken = () => {
-        druckeKundenauftrag(ausgewaehlt, kundeAdresse, positionen, gesamtEk, gesamtBrutto);
+        druckeKundenauftrag(ausgewaehlt, kundeAdresse, positionen, gesamtEk, gesamtBrutto, rab);
     };
     const produktionDrucken = () => {
         druckeProduktionsliste(ausgewaehlt, kundeAdresse, positionen);
@@ -6947,6 +7139,7 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
                                     React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "Menge"),
                                     React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "EK"),
                                     React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "VK (brutto)"),
+                                    React.createElement("th", { className: "text-right px-3 py-2 font-medium" }, "Rabatt"),
                                     React.createElement("th", { className: "px-2 py-2" }))),
                             React.createElement("tbody", null, positionen.map((p, i) => {
                                 var _a;
@@ -6960,22 +7153,16 @@ function KundenUebersicht({ onZurueck, onBearbeiten }) {
                                         (((_a = p.item.preisEinzelEk) !== null && _a !== void 0 ? _a : 0) * p.item.menge).toFixed(2),
                                         " \u20AC"),
                                     React.createElement("td", { className: "px-3 py-2 text-right font-['IBM_Plex_Mono'] text-[#1B1F24]" },
-                                        (p.item.preisBrutto * p.item.menge).toFixed(2),
+                                        calc.zeilen[i] && calc.zeilen[i].rabatt > 0 && React.createElement("div", { style: { textDecoration: "line-through", color: "#8A8F98", fontSize: "11px" } }, (p.item.preisBrutto * p.item.menge).toFixed(2) + " \u20AC"),
+                                        (calc.zeilen[i] ? calc.zeilen[i].netto : p.item.preisBrutto * p.item.menge).toFixed(2),
                                         " \u20AC"),
+                                    React.createElement("td", { className: "px-3 py-2 text-right" },
+                                        React.createElement(RabattFeld, { wert: (rab.pos || {})[rabattPosKey(p)], onChange: (v) => rabAendern((r) => Object.assign({}, r, { pos: Object.assign({}, r.pos, { [rabattPosKey(p)]: v }) })), titel: "Rabatt auf diese Position" })),
                                     React.createElement("td", { className: "px-2 py-2 text-right whitespace-nowrap" },
                                         React.createElement("button", { onClick: () => { var _a; return onBearbeiten((_a = PRODUKT_LISTEN_KEYS.find((pl) => pl.key === p.produktKey)) === null || _a === void 0 ? void 0 : _a.produktRoute, p.item.id); }, className: "text-[#8A8F98] hover:text-[#1B1F24]", title: "Bearbeiten" },
                                             React.createElement(Pencil, { size: 14 })))));
                             })))),
-                    React.createElement("div", { className: "flex justify-end items-center gap-4 px-1" },
-                        React.createElement("span", { className: "text-[13px] text-[#5B6472]" },
-                            "EK gesamt: ",
-                            React.createElement("span", { className: "font-['IBM_Plex_Mono'] text-[#1B1F24]" },
-                                gesamtEk.toFixed(2),
-                                " \u20AC")),
-                        React.createElement("span", { className: "text-[13px] text-[#5B6472]" }, "Gesamt (brutto)"),
-                        React.createElement("span", { className: "text-[18px] font-['IBM_Plex_Mono'] font-semibold text-[#1B1F24]" },
-                            gesamtBrutto.toFixed(2),
-                            " \u20AC")),
+                    React.createElement(RabattSummen, { calc, rab, aendere: rabAendern, ek: gesamtEk }),
                     React.createElement("div", { className: "flex flex-wrap justify-end gap-2" },
                         React.createElement("button", { onClick: etikettenExportieren, className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[13px] font-semibold hover:border-[#E8963B] transition-colors" }, "Etiketten-CSV (Label LIVE)"),
                         React.createElement("button", { onClick: etikettenDrucken, className: "flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[13px] font-semibold hover:border-[#E8963B] transition-colors" }, "Etiketten drucken (70\u00D750)"),
@@ -7018,6 +7205,8 @@ function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, kundeDe
         setWarenkorb((prev) => nummeriereWarenkorb(prev.filter((p) => !(p.produktKey === produktKey && p.item.id === id))));
         await entfernePositionAusListe(produktKey, id);
     };
+    const [rab, rabAendern] = useRabatte(aktiverKunde);
+    const calc = rabattRechnen(warenkorb, rab);
     const warenkorbGesamtBrutto = warenkorb.reduce((s, p) => { var _a; return s + ((_a = p.item.preisBrutto) !== null && _a !== void 0 ? _a : 0) * p.item.menge; }, 0);
     const warenkorbProduktionDrucken = () => {
         druckeProduktionsliste(aktiverKunde, kundeDetails, warenkorb);
@@ -7063,7 +7252,7 @@ function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, kundeDe
                 warenkorbStatus === "laedt" && React.createElement("p", { className: "text-[13px] text-[#8A8F98] mt-2" }, "Lade Positionen…"),
                 warenkorbStatus === "fertig" && warenkorb.length === 0 && (React.createElement("p", { className: "text-[13px] text-[#8A8F98] mt-2" }, `Für ${aktiverKunde} sind noch keine Positionen angelegt. Wähle unten ein Produkt.`)),
                 warenkorb.length > 0 && (React.createElement(React.Fragment, null,
-                    React.createElement("div", { className: "flex flex-col gap-2 mt-3 mb-3" }, warenkorb.map((p) => (React.createElement("div", { key: `${p.produktKey}-${p.item.id}`, className: "flex items-center justify-between gap-2 border border-[#E2DFD3] rounded-lg px-3 py-2" },
+                    React.createElement("div", { className: "flex flex-col gap-2 mt-3 mb-3" }, warenkorb.map((p) => (React.createElement("div", { key: `${p.produktKey}-${p.item.id}`, className: "flex items-center justify-between gap-2 border border-[#E2DFD3] rounded-lg px-3 py-2", style: { flexWrap: "wrap" } },
                         React.createElement("div", { className: "flex items-center gap-3 min-w-0" },
                             React.createElement("div", { className: "shrink-0 rounded-md bg-[#1B1F24] text-white font-['IBM_Plex_Mono'] font-semibold text-center px-2.5 py-2", style: { minWidth: "54px" }, title: "Positionsnummer (Produktion)" },
                                 React.createElement("div", { style: { fontSize: "9px", fontFamily: "Inter, sans-serif", fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.6, marginBottom: "3px" } }, "Pos."), React.createElement("div", { style: { fontSize: "17px", lineHeight: 1 } }, p.posNr)),
@@ -7071,19 +7260,21 @@ function Hauptseite({ onSelect, onKunden, onEinstellungen, aktiverKunde, kundeDe
                                 React.createElement("div", { className: "text-[13.5px] font-medium text-[#1B1F24] truncate" }, p.produktLabel + (p.item.position ? ` — ${p.item.position}` : "")),
                                 React.createElement("div", { className: "text-[12px] text-[#8A8F98] truncate" }, positionKurzbeschreibung(p.produktKey, p.item)))),
                         React.createElement("div", { className: "flex items-center gap-2 shrink-0" },
-                            React.createElement("span", { className: "text-[13px] font-['IBM_Plex_Mono'] text-[#1B1F24]" }, `${(p.item.preisBrutto * p.item.menge).toFixed(2)} €`),
+                            React.createElement(RabattFeld, { wert: (rab.pos || {})[rabattPosKey(p)], onChange: (v) => rabAendern((r) => Object.assign({}, r, { pos: Object.assign({}, r.pos, { [rabattPosKey(p)]: v }) })), titel: "Rabatt auf diese Position" }),
+                            React.createElement("span", { className: "text-[13px] font-['IBM_Plex_Mono'] text-[#1B1F24] text-right", style: { minWidth: "78px" } },
+                                (() => { const z = calc.zeilen[warenkorb.indexOf(p)]; return z && z.rabatt > 0 ? React.createElement("span", { style: { display: "block", textDecoration: "line-through", color: "#8A8F98", fontSize: "11px" } }, z.brutto.toFixed(2) + " €") : null; })(),
+                                `${((calc.zeilen[warenkorb.indexOf(p)] || { netto: p.item.preisBrutto * p.item.menge }).netto).toFixed(2)} €`),
                             React.createElement("button", { onClick: () => { var _a; return onBearbeiten((_a = PRODUKT_LISTEN_KEYS.find((pl) => pl.key === p.produktKey)) === null || _a === void 0 ? void 0 : _a.produktRoute, p.item.id); }, className: "text-[#8A8F98] hover:text-[#1B1F24]", title: "Bearbeiten" },
                                 React.createElement(Pencil, { size: 14 })),
                             React.createElement("button", { onClick: () => warenkorbEntfernen(p.produktKey, p.item.id), className: "text-[#8A8F98] hover:text-[#C0392B]", title: "Entfernen" },
                                 React.createElement(X, { size: 14 }))))))),
-                    React.createElement("div", { className: "flex flex-wrap justify-end items-center gap-3 pt-2 border-t border-[#E2DFD3]" },
+                    React.createElement("div", { className: "flex flex-wrap justify-end items-center gap-3 pt-2 border-t border-[#E2DFD3]", style: { padding: "10px 12px", borderRadius: "8px", rowGap: "12px" } },
                         React.createElement("div", { className: "flex flex-wrap gap-2 mr-auto" },
                             React.createElement("button", { onClick: warenkorbProduktionDrucken, className: "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[12.5px] font-medium hover:border-[#E8963B] transition-colors" }, "Produktionsliste drucken"),
                             React.createElement("button", { onClick: warenkorbEtikettenExportieren, className: "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[12.5px] font-medium hover:border-[#E8963B] transition-colors" }, "Etiketten-CSV (Label LIVE)"),
                             React.createElement("button", { onClick: warenkorbEtikettenDrucken, className: "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[12.5px] font-medium hover:border-[#E8963B] transition-colors" }, "Etiketten drucken (70\u00D750)"),
                             React.createElement("button", { onClick: () => setSchnittOffen(true), className: "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-[#D8D4C8] bg-white text-[#1B1F24] text-[12.5px] font-medium hover:border-[#E8963B] transition-colors" }, "Schnittoptimierung")),
-                        React.createElement("span", { className: "text-[13px] text-[#5B6472]" }, "Gesamt (brutto)"),
-                        React.createElement("span", { className: "text-[17px] font-['IBM_Plex_Mono'] font-semibold text-[#1B1F24]" }, `${warenkorbGesamtBrutto.toFixed(2)} €`)))))),
+                        React.createElement(RabattSummen, { calc, rab, aendere: rabAendern, ek: null })))))),
             React.createElement("button", { onClick: onKunden, className: "w-full text-left border-2 border-[#1B1F24] rounded-xl bg-[#1B1F24] p-5 mb-6 hover:bg-[#333] transition-colors" },
                 React.createElement("span", { className: "text-[17px] font-oswald font-semibold text-white block mb-1" }, "\uD83D\uDC64 Kunden\u00FCbersicht"),
                 React.createElement("p", { className: "text-[13px] text-[#B8BEC7]" }, "Alle Positionen eines Kunden aus allen Produkten zusammen ansehen und drucken")),
